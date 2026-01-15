@@ -192,6 +192,135 @@ Following CLAUDE.md animation guidelines:
 
 ---
 
+## CURRENT IMPLEMENTATION STATUS
+
+> **Last Updated: January 2026**
+
+### What's Working ✅
+
+1. **Category Hub** → Click "Sheets" → **SourceBrowser** (direct navigation)
+2. **Connect a Google Sheet** - Persists to `data_sources` table
+3. **Load sheet tabs** - Fetches from Google Sheets API, shows in sub-tab bar
+4. **Tab Status System** - Change status, hide tabs, flag with notes
+5. **SmartMapper UI** - Shows columns, classification dropdowns (visual only)
+
+### What's TODO 🚧
+
+1. **Save column mappings** - SmartMapper doesn't persist to `column_mappings` yet
+2. **Show mapping progress** - Calculate % complete from actual DB data
+3. **Sync data** - Actually import data from sheets to entity tables
+4. **Multiple sources** - Test with 2+ connected sheets
+
+### Simplified Flow (Current)
+
+```
+Hub (category cards)
+  └── Click "Sheets"
+        └── SourceBrowser
+              ├── Empty state: "Connect a Google Sheet" button
+              ├── Source tabs (top row) - one per connected sheet
+              ├── Sheet tabs (sub-row) - tabs within active sheet
+              └── SmartMapper - column classification UI
+```
+
+**Note:** We removed the intermediate "SheetsOverview" layer. Hub goes directly to SourceBrowser for simplicity.
+
+---
+
+## TAB STATUS SYSTEM
+
+Tabs can have one of four statuses to help manage large spreadsheets:
+
+| Status | Icon | Color | Behavior |
+|--------|------|-------|----------|
+| **Active** | ✓ Check | Green | Normal - show in tab bar, map columns |
+| **Reference** | 📖 BookOpen | Blue | Visible but dimmed - for lookup/reference only |
+| **Hidden** | 👁‍🗨 EyeOff | Gray | Hidden from tab bar (toggle to reveal) |
+| **Flagged** | 🚩 Flag | Amber | Needs attention - shows badge, stores notes |
+
+### UI Interaction
+
+- **Hover on tab** → Three-dot menu appears
+- **Click menu** → Dropdown with status options
+- **Select "Flag"** → Modal prompts for notes
+- **Hidden tabs** → Counter shows "N hidden" with toggle button
+
+### Database
+
+```sql
+-- tab_mappings table
+status TEXT NOT NULL DEFAULT 'active'  -- 'active', 'reference', 'hidden', 'flagged'
+notes TEXT                              -- Notes for flagged tabs
+```
+
+### API
+
+```
+PATCH /api/tab-mappings/[id]/status
+Body: { status: 'flagged', notes: 'Need to review this with finance team' }
+```
+
+---
+
+## DATABASE SCHEMA (Current)
+
+### data_sources
+```sql
+id UUID PRIMARY KEY
+name TEXT NOT NULL
+type TEXT DEFAULT 'google_sheet'
+spreadsheet_id TEXT              -- Google Sheet ID
+spreadsheet_url TEXT             -- Original URL
+status TEXT DEFAULT 'active'
+connection_config JSONB          -- (legacy, nullable)
+created_at, updated_at TIMESTAMPTZ
+```
+
+### tab_mappings
+```sql
+id UUID PRIMARY KEY
+data_source_id UUID REFERENCES data_sources(id)
+tab_name TEXT NOT NULL
+header_row INT DEFAULT 0
+primary_entity TEXT              -- 'partners', 'staff', 'asins'
+status TEXT DEFAULT 'active'     -- 'active', 'reference', 'hidden', 'flagged'
+notes TEXT                       -- Notes for flagged tabs
+is_active BOOLEAN DEFAULT true   -- (legacy)
+created_at, updated_at TIMESTAMPTZ
+UNIQUE(data_source_id, tab_name)
+```
+
+### column_mappings
+```sql
+id UUID PRIMARY KEY
+tab_mapping_id UUID REFERENCES tab_mappings(id)
+source_column TEXT NOT NULL
+source_column_index INT
+category TEXT                    -- 'partner', 'staff', 'asin', 'weekly', 'computed', 'skip'
+target_field TEXT
+authority TEXT DEFAULT 'source_of_truth'  -- or 'reference'
+is_key BOOLEAN DEFAULT false
+transform_type TEXT DEFAULT 'none'
+created_at TIMESTAMPTZ
+UNIQUE(tab_mapping_id, source_column)
+```
+
+---
+
+## API ENDPOINTS
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/data-sources` | List all sources with stats |
+| POST | `/api/data-sources` | Create new data source |
+| GET | `/api/sheets/search` | Search Google Drive for sheets |
+| GET | `/api/sheets/preview?id=X` | Get sheet tabs and metadata |
+| GET | `/api/sheets/raw-rows?id=X&tab=Y` | Get raw data from a tab |
+| PATCH | `/api/tab-mappings/[id]/status` | Update tab status/notes |
+| POST | `/api/mappings/save` | Save column mappings (full payload) |
+
+---
+
 ## CRITICAL CONCEPT: Row Entity vs Column Entities
 
 **Real-world spreadsheets are messy.** A single tab often contains mixed data:
