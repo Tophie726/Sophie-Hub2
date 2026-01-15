@@ -1,8 +1,16 @@
-# Data Enrichment Wizard - Feature Context
+# Data Enrichment - Feature Context
+
+## Branch: dev/data-browser-ux
+
+**This branch experiments with a new "Data Browser" UX paradigm.**
+
+The previous approach used a step-by-step wizard. This new approach uses a **browser-tab metaphor** for more fluid, spatial navigation between data sources.
+
+---
 
 ## Purpose
 
-The Data Enrichment Wizard is the **control room** for bringing external data into Sophie Hub. It replaces the chaotic process of manually updating spreadsheets and running one-off scripts with a visual, guided interface.
+Data Enrichment is the **control room** for bringing external data into Sophie Hub. It replaces the chaotic process of manually updating spreadsheets and running one-off scripts with a visual, intuitive interface.
 
 **Only Admin users have access to this feature.**
 
@@ -19,15 +27,129 @@ Sophie Society's data is fragmented across:
 
 Previously, data was crawled sheet-by-sheet without understanding what the final tables should look like. This led to 100+ database tables and constant confusion about what's authoritative.
 
-## The New Approach
+## The New Approach: Data Browser
 
-**Entity-first thinking**: We know we have Partners and Staff. Everything maps to those. The wizard guides the admin through:
+**Entity-first thinking**: We know we have Partners and Staff. Everything maps to those.
 
-1. What is this data source?
-2. What fields does it contain?
-3. For each field: Is this core data? What entity does it belong to? Where should it live?
-4. Stage the data for review
-5. Commit when ready
+### Design Philosophy: Browser, Not Wizard
+
+The old approach was a step-by-step wizard:
+```
+Step 1: Pick source → Step 2: Pick tab → Step 3: Classify → Step 4: Review
+```
+
+The new approach is a **spatial data browser**:
+```
+See all sources → Flick between them → Map directly → Everything accessible
+```
+
+**Why this is better:**
+1. **No "going back"** - everything accessible in one view
+2. **Context switching is instant** - flick between sheets like browser tabs
+3. **Mental model is familiar** - everyone knows browser tabs
+4. **Progressive disclosure** - see all sources at a glance, depth on click
+
+---
+
+## UX Architecture: The Data Browser
+
+### Level 1: Category Hub (Landing Page)
+
+The Data Enrichment landing page shows **categories of data** as beautiful visual blocks:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  Data Enrichment                                        │
+│                                                         │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐     │
+│  │     📊      │  │     📝      │  │     📄      │     │
+│  │   Sheets    │  │    Forms    │  │    Docs     │     │
+│  │  3 sources  │  │   Coming    │  │   Coming    │     │
+│  │  12 tabs    │  │    Soon     │  │    Soon     │     │
+│  └─────────────┘  └─────────────┘  └─────────────┘     │
+│                                                         │
+│  Click any category to dive in                          │
+└─────────────────────────────────────────────────────────┘
+```
+
+**Design Notes:**
+- Large, clickable cards with icons
+- Show stats (source count, tab count, mapped fields)
+- "Coming Soon" state for future categories
+- Subtle hover animations (scale, shadow)
+
+### Level 2: Source Browser (Sheets View)
+
+Inside a category (e.g., Sheets), show all connected sources as **browser-style tabs**:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  ← Data Enrichment  /  Sheets                           │
+│                                                         │
+│  ┌──────────────┬───────────────┬──────────────┬──────┐│
+│  │ Master Client│ Pod Dashboard │ Brand Sheets │  +   ││
+│  └──────────────┴───────────────┴──────────────┴──────┘│
+│       ↑ Active tab                                      │
+│       │                                                 │
+│  ┌────┴─────────────────────────────────────────────────┐
+│  │  Sub-tabs (sheet tabs within this source):          │
+│  │  [ Partners ] [ ASINs ] [ Weekly ] [ Team ]         │
+│  │       ↑ Active sub-tab                              │
+│  ├──────────────────────────────────────────────────────┤
+│  │                                                      │
+│  │  Column List (ready to classify)                    │
+│  │  ┌──────────────────────────────────────────────┐   │
+│  │  │ Brand Name       [Partner ▼] [🔑 Key]        │   │
+│  │  │ → KING OF SCENTS                             │   │
+│  │  ├──────────────────────────────────────────────┤   │
+│  │  │ Account Manager  [Staff ▼]                   │   │
+│  │  │ → Sarah Johnson                              │   │
+│  │  └──────────────────────────────────────────────┘   │
+│  │                                                      │
+│  └──────────────────────────────────────────────────────┘
+└─────────────────────────────────────────────────────────┘
+```
+
+**Key UX Elements:**
+
+1. **Source Tabs (Top Row)**
+   - Each connected Google Sheet = one tab
+   - `+` button to add new source
+   - Active tab highlighted, others subtle
+   - Can reorder tabs via drag (future)
+
+2. **Sheet Sub-Tabs (Second Row)**
+   - Tabs within the active spreadsheet
+   - Shows only active/selected tabs from the source
+   - Click to switch instantly
+
+3. **Column List (Main Content)**
+   - Directly shows columns to classify
+   - No wizard steps - just start mapping
+   - Same Smart Mapper UI we built (unified dropdown, key management)
+
+### Motion & Animation
+
+Following CLAUDE.md animation guidelines:
+
+**Tab Switching:**
+- `ease-out` 200ms for tab activation
+- Content fades/slides smoothly
+- Active indicator slides along tab bar
+
+**Sub-Tab Switching:**
+- `ease-in-out` 150ms content morph
+- Column list fades out → in (not hard swap)
+- Staggered fade-in for column items
+
+**Hover States:**
+- Tabs: subtle background change, scale(1.02)
+- Cards: lift with shadow, scale(1.005)
+
+**Adding New Source:**
+- `+` button click → modal slides in
+- New tab animates in from right
+- Smooth insertion into tab bar
 
 ---
 
@@ -709,33 +831,62 @@ const handleKeyDown = (e: React.KeyboardEvent, items: any[], selectedIndex: numb
 
 ---
 
-## Component Structure
+## Component Structure (Data Browser Architecture)
 
 ```
 src/components/data-enrichment/
-├── wizard/
-│   ├── WizardShell.tsx         # Overall wizard container, step management
-│   ├── StepIndicator.tsx       # Progress bar showing current step
-│   ├── ConnectSourceStep.tsx   # Step 1
-│   ├── DiscoverFieldsStep.tsx  # Step 2
-│   ├── ClassifyFieldsStep.tsx  # Step 3
-│   ├── ReviewMappingsStep.tsx  # Step 4
-│   └── FieldClassifier.tsx     # The per-field classification UI
-├── staging/
-│   ├── StagingDashboard.tsx    # Overview of all staged changes
-│   ├── StagedChangesList.tsx   # List view of changes
-│   ├── StagedChangeCard.tsx    # Individual change with diff
-│   ├── ConflictResolver.tsx    # UI for resolving conflicts
-│   └── BatchActions.tsx        # Select all, approve all, etc.
-├── lineage/
-│   ├── LineageGraph.tsx        # Visual representation of data flow
-│   ├── FieldLineagePopover.tsx # Hover on field to see source
-│   └── SourceBadge.tsx         # Shows where value came from
-└── sources/
-    ├── SourceList.tsx          # All configured sources
-    ├── SourceCard.tsx          # Individual source with status
-    └── SyncScheduler.tsx       # Configure auto-sync
+├── browser/                     # NEW: Data Browser components
+│   ├── CategoryHub.tsx          # Level 1: Category cards (Sheets, Forms, Docs)
+│   ├── CategoryCard.tsx         # Individual category card with stats
+│   ├── SourceBrowser.tsx        # Level 2: Browser-tab interface
+│   ├── SourceTabBar.tsx         # Top row: source tabs
+│   ├── SheetTabBar.tsx          # Second row: sheet sub-tabs
+│   ├── AddSourceModal.tsx       # Modal for connecting new source
+│   └── BrowserShell.tsx         # Overall shell with breadcrumb nav
+├── smart-mapper/                # Column classification (existing)
+│   ├── SmartMapper.tsx          # Main classifier UI (unified dropdown)
+│   ├── ColumnCard.tsx           # Individual column with classification
+│   ├── KeyManagement.tsx        # Key confirmation and display
+│   └── FilterTabs.tsx           # Filter columns by category
+├── staging/                     # (unchanged)
+│   ├── StagingDashboard.tsx
+│   ├── StagedChangesList.tsx
+│   ├── StagedChangeCard.tsx
+│   ├── ConflictResolver.tsx
+│   └── BatchActions.tsx
+├── lineage/                     # (unchanged)
+│   ├── LineageGraph.tsx
+│   ├── FieldLineagePopover.tsx
+│   └── SourceBadge.tsx
+└── sources/                     # (unchanged)
+    ├── SourceList.tsx
+    ├── SourceCard.tsx
+    └── SyncScheduler.tsx
 ```
+
+### New Components to Build
+
+**CategoryHub.tsx**
+- Grid of category cards
+- Fetches stats from API
+- Handles navigation to category view
+
+**SourceBrowser.tsx**
+- Main browser interface
+- Manages active source tab
+- Manages active sheet sub-tab
+- Renders SmartMapper for column classification
+
+**SourceTabBar.tsx**
+- Horizontal tabs for data sources
+- Animated active indicator
+- Add source button (`+`)
+- Close tab button (if applicable)
+
+**SheetTabBar.tsx**
+- Sub-tabs for sheets within active source
+- Smaller, secondary styling
+- Shows tab completion status (dots/badges)
 
 ## API Routes
 
