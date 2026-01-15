@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -13,6 +13,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
+  DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu'
 import {
   ChevronUp,
   ChevronDown,
@@ -32,7 +42,6 @@ import {
   SkipForward,
   CheckCircle2,
   Package,
-  MoreHorizontal,
   Calculator,
   Database,
   Search,
@@ -84,6 +93,7 @@ interface ColumnClassification {
 
 interface SmartMapperProps {
   spreadsheetId: string
+  sheetName: string
   tabName: string
   onComplete: (mappings: {
     headerRow: number
@@ -186,13 +196,35 @@ const CATEGORY_CONFIG = {
   },
 }
 
-export function SmartMapper({ spreadsheetId, tabName, onComplete, onBack }: SmartMapperProps) {
+export function SmartMapper({ spreadsheetId, sheetName, tabName, onComplete, onBack }: SmartMapperProps) {
   // Simplified: just preview → classify → map
   const [phase, setPhase] = useState<'preview' | 'classify' | 'map'>('preview')
   const [isLoading, setIsLoading] = useState(true)
   const [rawData, setRawData] = useState<TabRawData | null>(null)
   const [headerRow, setHeaderRow] = useState(0)
   const [columns, setColumns] = useState<ColumnClassification[]>([])
+  const [columnsHistory, setColumnsHistory] = useState<ColumnClassification[][]>([])
+
+  // Undo handler
+  const handleUndo = useCallback(() => {
+    if (columnsHistory.length > 0) {
+      const previous = columnsHistory[columnsHistory.length - 1]
+      setColumnsHistory(prev => prev.slice(0, -1))
+      setColumns(previous)
+    }
+  }, [columnsHistory])
+
+  // Global Cmd/Ctrl+Z for undo
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault()
+        handleUndo()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [handleUndo])
 
   // Load raw data
   useEffect(() => {
@@ -246,6 +278,7 @@ export function SmartMapper({ spreadsheetId, tabName, onComplete, onBack }: Smar
 
   // Handlers
   const handleCategoryChange = (columnIndex: number, category: ColumnCategory) => {
+    setColumnsHistory(prev => [...prev.slice(-19), columns]) // Keep last 20 states
     setColumns(prev => prev.map((col, idx) => {
       if (idx !== columnIndex) return col
       // If changing category, reset isKey and computed config
@@ -254,6 +287,7 @@ export function SmartMapper({ spreadsheetId, tabName, onComplete, onBack }: Smar
   }
 
   const handleBulkCategoryChange = (indices: number[], category: ColumnCategory) => {
+    setColumnsHistory(prev => [...prev.slice(-19), columns]) // Keep last 20 states
     setColumns(prev => prev.map((col, idx) => {
       if (!indices.includes(idx)) return col
       return { ...col, category, isKey: false, targetField: null, computedConfig: undefined }
@@ -356,6 +390,8 @@ export function SmartMapper({ spreadsheetId, tabName, onComplete, onBack }: Smar
       {phase === 'classify' && (
         <ClassifyPhase
           key="classify"
+          sheetName={sheetName}
+          tabName={tabName}
           rawData={rawData}
           headerRow={headerRow}
           columns={columns}
@@ -563,6 +599,8 @@ function PreviewPhase({
 
 // ============ PHASE 2: CLASSIFY COLUMNS ============
 function ClassifyPhase({
+  sheetName,
+  tabName,
   rawData,
   headerRow,
   columns,
@@ -573,6 +611,8 @@ function ClassifyPhase({
   onConfirm,
   onBack,
 }: {
+  sheetName: string
+  tabName: string
   rawData: TabRawData
   headerRow: number
   columns: ColumnClassification[]
@@ -586,12 +626,22 @@ function ClassifyPhase({
   // State for computed field config modal
   const [configureComputedIndex, setConfigureComputedIndex] = useState<number | null>(null)
   const [selectedIndices, setSelectedIndices] = useState<number[]>([])
+  const [activeFilter, setActiveFilter] = useState<ColumnCategory | 'all' | 'unclassified'>('all')
   const containerRef = useRef<HTMLDivElement>(null)
   const hasInteracted = useRef(false)
   const [focusedIndex, setFocusedIndex] = useState(0)
 
   const sampleRows = rawData.rows.slice(headerRow + 1, headerRow + 2)
-  const validColumns = columns.filter(c => c.sourceColumn.trim())
+  const allValidColumns = columns.filter(c => c.sourceColumn.trim())
+
+  // Apply filter
+  const validColumns = activeFilter === 'all'
+    ? allValidColumns
+    : activeFilter === 'unclassified'
+    ? allValidColumns.filter(c => c.category === null)
+    : allValidColumns.filter(c => c.category === activeFilter)
+
+  const lastClickedIndex = useRef<number | null>(null)
 
   useEffect(() => {
     containerRef.current?.focus()
@@ -599,6 +649,38 @@ function ClassifyPhase({
 
   const getSample = (colIndex: number) => sampleRows[0]?.[colIndex] || ''
 
+  // Handle selection with Shift (range) and Cmd/Ctrl (toggle individual)
+  const handleSelectionClick = (idx: number, e: React.MouseEvent) => {
+    const visualIdx = validColumns.findIndex(c => c.sourceIndex === idx)
+
+    if (e.shiftKey && lastClickedIndex.current !== null) {
+      // Range selection
+      const start = Math.min(lastClickedIndex.current, visualIdx)
+      const end = Math.max(lastClickedIndex.current, visualIdx)
+      const rangeIndices = validColumns.slice(start, end + 1).map(c => c.sourceIndex)
+      setSelectedIndices(prev => {
+        const newSelection = new Set(prev)
+        rangeIndices.forEach(i => newSelection.add(i))
+        return Array.from(newSelection)
+      })
+    } else if (e.metaKey || e.ctrlKey) {
+      // Toggle individual (Cmd/Ctrl click)
+      setSelectedIndices(prev =>
+        prev.includes(idx) ? prev.filter(i => i !== idx) : [...prev, idx]
+      )
+      lastClickedIndex.current = visualIdx
+    } else {
+      // Regular click - select only this one (or deselect if already selected)
+      if (selectedIndices.length === 1 && selectedIndices[0] === idx) {
+        setSelectedIndices([])
+      } else {
+        setSelectedIndices([idx])
+      }
+      lastClickedIndex.current = visualIdx
+    }
+  }
+
+  // Simple toggle for keyboard
   const toggleSelection = (idx: number) => {
     setSelectedIndices(prev =>
       prev.includes(idx) ? prev.filter(i => i !== idx) : [...prev, idx]
@@ -612,23 +694,39 @@ function ClassifyPhase({
     }
   }
 
-  // Stats
+  // Stats (always based on all columns, not filtered)
   const stats = {
-    partner: columns.filter(c => c.category === 'partner').length,
-    staff: columns.filter(c => c.category === 'staff').length,
-    asin: columns.filter(c => c.category === 'asin').length,
-    weekly: columns.filter(c => c.category === 'weekly').length,
-    computed: columns.filter(c => c.category === 'computed').length,
-    skip: columns.filter(c => c.category === 'skip').length,
-    unclassified: columns.filter(c => c.category === null && c.sourceColumn.trim()).length,
+    partner: allValidColumns.filter(c => c.category === 'partner').length,
+    staff: allValidColumns.filter(c => c.category === 'staff').length,
+    asin: allValidColumns.filter(c => c.category === 'asin').length,
+    weekly: allValidColumns.filter(c => c.category === 'weekly').length,
+    computed: allValidColumns.filter(c => c.category === 'computed').length,
+    skip: allValidColumns.filter(c => c.category === 'skip').length,
+    unclassified: allValidColumns.filter(c => c.category === null).length,
   }
 
-  const partnerKey = columns.find(c => c.category === 'partner' && c.isKey)
-  const staffKey = columns.find(c => c.category === 'staff' && c.isKey)
-  const asinKey = columns.find(c => c.category === 'asin' && c.isKey)
+  const partnerKey = allValidColumns.find(c => c.category === 'partner' && c.isKey)
+  const staffKey = allValidColumns.find(c => c.category === 'staff' && c.isKey)
+  const asinKey = allValidColumns.find(c => c.category === 'asin' && c.isKey)
 
   const totalClassified = stats.partner + stats.staff + stats.asin + stats.weekly + stats.computed + stats.skip
-  const totalColumns = validColumns.length
+  const totalColumns = allValidColumns.length
+
+  // Progress milestone celebration
+  const progressPercent = totalColumns > 0 ? Math.round((totalClassified / totalColumns) * 100) : 0
+  const [lastMilestone, setLastMilestone] = useState(0)
+  const [showCelebration, setShowCelebration] = useState(false)
+
+  useEffect(() => {
+    const milestones = [25, 50, 75, 100]
+    const currentMilestone = milestones.filter(m => progressPercent >= m).pop() || 0
+
+    if (currentMilestone > lastMilestone && currentMilestone > 0) {
+      setLastMilestone(currentMilestone)
+      setShowCelebration(true)
+      setTimeout(() => setShowCelebration(false), 1500)
+    }
+  }, [progressPercent, lastMilestone])
 
   // Category shortcuts mapping
   const categoryShortcuts: Record<string, ColumnCategory> = {
@@ -689,11 +787,6 @@ function ClassifyPhase({
         hasInteracted.current = true
         setFocusedIndex(prev => Math.max(prev - 1, 0))
         break
-      case ' ':
-        e.preventDefault()
-        // Toggle selection on space
-        if (col) toggleSelection(col.sourceIndex)
-        break
       case 'k':
         e.preventDefault()
         // Toggle key status
@@ -731,6 +824,14 @@ function ClassifyPhase({
       >
       <Card className="max-w-4xl mx-auto">
         <CardHeader>
+          {/* Breadcrumb */}
+          <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+            <FileText className="h-3.5 w-3.5" />
+            <span className="truncate max-w-[200px]">{sheetName}</span>
+            <ChevronRight className="h-3 w-3 flex-shrink-0" />
+            <span className="font-medium text-foreground truncate">{tabName}</span>
+          </div>
+
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="flex items-center gap-2">
@@ -741,8 +842,25 @@ function ClassifyPhase({
                 Classify columns and mark which one is the <strong>key identifier</strong> for each entity type.
               </CardDescription>
             </div>
-            <div className="text-right">
-              <div className="text-2xl font-bold">{totalClassified}/{totalColumns}</div>
+            <div className="text-right relative">
+              <motion.div
+                animate={showCelebration ? { scale: [1, 1.1, 1] } : {}}
+                transition={{ duration: 0.3 }}
+                className="relative"
+              >
+                <div className="text-2xl font-bold">{totalClassified}/{totalColumns}</div>
+                {showCelebration && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    className="absolute -top-6 right-0 text-xs font-medium text-primary flex items-center gap-1"
+                  >
+                    <Sparkles className="h-3 w-3" />
+                    {lastMilestone}%!
+                  </motion.div>
+                )}
+              </motion.div>
               <div className="text-xs text-muted-foreground">classified</div>
             </div>
           </div>
@@ -828,7 +946,106 @@ function ClassifyPhase({
           )}
         </CardHeader>
         <CardContent className="space-y-4">
-          <ScrollArea className="h-[400px]">
+          {/* Subtle filter tabs */}
+          <div className="flex items-center gap-1 pb-2 border-b border-border/50">
+            <span className="text-xs text-muted-foreground mr-2">View:</span>
+            <button
+              onClick={() => setActiveFilter('all')}
+              className={`px-2 py-1 rounded text-xs transition-all ${
+                activeFilter === 'all'
+                  ? 'bg-foreground text-background font-medium'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+              }`}
+            >
+              All ({totalColumns})
+            </button>
+            {stats.unclassified > 0 && (
+              <button
+                onClick={() => setActiveFilter('unclassified')}
+                className={`px-2 py-1 rounded text-xs transition-all ${
+                  activeFilter === 'unclassified'
+                    ? 'bg-foreground text-background font-medium'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                }`}
+              >
+                Unclassified ({stats.unclassified})
+              </button>
+            )}
+            {stats.partner > 0 && (
+              <button
+                onClick={() => setActiveFilter('partner')}
+                className={`px-2 py-1 rounded text-xs transition-all ${
+                  activeFilter === 'partner'
+                    ? 'bg-blue-500 text-white font-medium'
+                    : 'text-blue-600 hover:bg-blue-500/10'
+                }`}
+              >
+                Partner ({stats.partner})
+              </button>
+            )}
+            {stats.staff > 0 && (
+              <button
+                onClick={() => setActiveFilter('staff')}
+                className={`px-2 py-1 rounded text-xs transition-all ${
+                  activeFilter === 'staff'
+                    ? 'bg-green-500 text-white font-medium'
+                    : 'text-green-600 hover:bg-green-500/10'
+                }`}
+              >
+                Staff ({stats.staff})
+              </button>
+            )}
+            {stats.asin > 0 && (
+              <button
+                onClick={() => setActiveFilter('asin')}
+                className={`px-2 py-1 rounded text-xs transition-all ${
+                  activeFilter === 'asin'
+                    ? 'bg-orange-500 text-white font-medium'
+                    : 'text-orange-600 hover:bg-orange-500/10'
+                }`}
+              >
+                ASIN ({stats.asin})
+              </button>
+            )}
+            {stats.weekly > 0 && (
+              <button
+                onClick={() => setActiveFilter('weekly')}
+                className={`px-2 py-1 rounded text-xs transition-all ${
+                  activeFilter === 'weekly'
+                    ? 'bg-purple-500 text-white font-medium'
+                    : 'text-purple-600 hover:bg-purple-500/10'
+                }`}
+              >
+                Weekly ({stats.weekly})
+              </button>
+            )}
+            {stats.computed > 0 && (
+              <button
+                onClick={() => setActiveFilter('computed')}
+                className={`px-2 py-1 rounded text-xs transition-all ${
+                  activeFilter === 'computed'
+                    ? 'bg-cyan-500 text-white font-medium'
+                    : 'text-cyan-600 hover:bg-cyan-500/10'
+                }`}
+              >
+                Computed ({stats.computed})
+              </button>
+            )}
+            {stats.skip > 0 && (
+              <button
+                onClick={() => setActiveFilter('skip')}
+                className={`px-2 py-1 rounded text-xs transition-all ${
+                  activeFilter === 'skip'
+                    ? 'bg-gray-500 text-white font-medium'
+                    : 'text-gray-500 hover:bg-gray-500/10'
+                }`}
+              >
+                Skip ({stats.skip})
+              </button>
+            )}
+          </div>
+
+          <ScrollArea className="h-[380px]">
             <div className="space-y-1 pr-3">
               {validColumns.map((col, visualIdx) => {
                 const idx = col.sourceIndex
@@ -860,7 +1077,7 @@ function ClassifyPhase({
                     )}
                     {/* Checkbox */}
                     <button
-                      onClick={() => toggleSelection(idx)}
+                      onClick={(e) => handleSelectionClick(idx, e)}
                       className={`w-5 h-5 rounded border flex items-center justify-center transition-all flex-shrink-0 ${
                         isSelected
                           ? 'bg-primary border-primary text-primary-foreground'
@@ -874,10 +1091,16 @@ function ClassifyPhase({
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="font-medium text-sm truncate">{col.sourceColumn}</span>
-                        {col.isKey && (
-                          <Badge className="bg-amber-500 text-white text-[10px] px-1.5 py-0">
+                        {col.isKey && col.category && (
+                          <Badge className={`text-white text-[10px] px-1.5 py-0 ${
+                            col.category === 'partner' ? 'bg-blue-500' :
+                            col.category === 'staff' ? 'bg-green-500' :
+                            col.category === 'asin' ? 'bg-orange-500' : 'bg-amber-500'
+                          }`}>
                             <Key className="h-3 w-3 mr-0.5" />
-                            Key
+                            {col.category === 'partner' ? 'Partner Key' :
+                             col.category === 'staff' ? 'Staff Key' :
+                             col.category === 'asin' ? 'ASIN Key' : 'Key'}
                           </Badge>
                         )}
                       </div>
@@ -896,63 +1119,266 @@ function ClassifyPhase({
                       </div>
                     )}
 
-                    {/* Category selector */}
-                    <Select
-                      value={col.category || '__none__'}
-                      onValueChange={(value) => onCategoryChange(idx, value === '__none__' ? null : value as ColumnCategory)}
-                    >
-                      <SelectTrigger className="w-[130px] h-8 text-xs">
-                        <SelectValue placeholder="Classify..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">
+                    {/* Category selector with integrated key management */}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className={`w-[130px] h-8 text-xs justify-between ${
+                            col.category === 'partner' ? 'border-blue-500/30 bg-blue-500/5' :
+                            col.category === 'staff' ? 'border-green-500/30 bg-green-500/5' :
+                            col.category === 'asin' ? 'border-orange-500/30 bg-orange-500/5' :
+                            col.category === 'weekly' ? 'border-purple-500/30 bg-purple-500/5' :
+                            col.category === 'computed' ? 'border-cyan-500/30 bg-cyan-500/5' :
+                            col.category === 'skip' ? 'border-gray-500/30 bg-gray-500/5' : ''
+                          }`}
+                        >
+                          <span className="flex items-center gap-1.5">
+                            {col.category === 'partner' && <Building2 className="h-3 w-3 text-blue-500" />}
+                            {col.category === 'staff' && <Users className="h-3 w-3 text-green-500" />}
+                            {col.category === 'asin' && <Package className="h-3 w-3 text-orange-500" />}
+                            {col.category === 'weekly' && <Calendar className="h-3 w-3 text-purple-500" />}
+                            {col.category === 'computed' && <Calculator className="h-3 w-3 text-cyan-500" />}
+                            {col.category === 'skip' && <SkipForward className="h-3 w-3 text-gray-500" />}
+                            {col.category ? (
+                              col.category.charAt(0).toUpperCase() + col.category.slice(1)
+                            ) : (
+                              <span className="text-muted-foreground">Classify...</span>
+                            )}
+                          </span>
+                          <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-[180px]">
+                        <DropdownMenuItem
+                          onClick={() => onCategoryChange(idx, null)}
+                          className="text-xs"
+                        >
                           <span className="text-muted-foreground">Unclassified</span>
-                        </SelectItem>
-                        <SelectItem value="partner">
-                          <span className="flex items-center gap-1">
-                            <Building2 className="h-3 w-3 text-blue-500" /> Partner
-                          </span>
-                        </SelectItem>
-                        <SelectItem value="staff">
-                          <span className="flex items-center gap-1">
-                            <Users className="h-3 w-3 text-green-500" /> Staff
-                          </span>
-                        </SelectItem>
-                        <SelectItem value="asin">
-                          <span className="flex items-center gap-1">
-                            <Package className="h-3 w-3 text-orange-500" /> ASIN
-                          </span>
-                        </SelectItem>
-                        <SelectItem value="weekly">
-                          <span className="flex items-center gap-1">
-                            <Calendar className="h-3 w-3 text-purple-500" /> Weekly
-                          </span>
-                        </SelectItem>
-                        <SelectItem value="computed">
-                          <span className="flex items-center gap-1">
-                            <Calculator className="h-3 w-3 text-cyan-500" /> Computed
-                          </span>
-                        </SelectItem>
-                        <SelectItem value="skip">
-                          <span className="flex items-center gap-1">
-                            <SkipForward className="h-3 w-3 text-gray-500" /> Skip
-                          </span>
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
+                          {!col.category && <Check className="h-3 w-3 ml-auto" />}
+                        </DropdownMenuItem>
 
-                    {/* Key toggle button */}
-                    {canBeKey && (
-                      <Button
-                        variant={col.isKey ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => onKeyToggle(idx)}
-                        className={`h-8 text-xs ${col.isKey ? 'bg-amber-500 hover:bg-amber-600' : ''}`}
-                      >
-                        <Key className="h-3 w-3 mr-1" />
-                        {col.isKey ? 'Key' : 'Set Key'}
-                      </Button>
-                    )}
+                        <DropdownMenuSeparator />
+
+                        {/* Partner with key submenu */}
+                        <DropdownMenuSub>
+                          <DropdownMenuSubTrigger className="text-xs">
+                            <Building2 className="h-3 w-3 mr-2 text-blue-500" />
+                            Partner
+                            {col.category === 'partner' && <Check className="h-3 w-3 ml-auto" />}
+                          </DropdownMenuSubTrigger>
+                          <DropdownMenuSubContent className="w-[200px]">
+                            {/* Always show current key info first */}
+                            {partnerKey && (
+                              <>
+                                <div className="px-2 py-1.5 text-[10px] text-muted-foreground border-b border-border/50 mb-1">
+                                  <Key className="h-3 w-3 inline mr-1 text-blue-500" />
+                                  Key: <span className="font-medium text-foreground">{partnerKey.sourceColumn}</span>
+                                </div>
+                              </>
+                            )}
+                            <DropdownMenuItem
+                              onClick={() => onCategoryChange(idx, 'partner')}
+                              className="text-xs"
+                            >
+                              <Building2 className="h-3 w-3 mr-2 text-blue-500" />
+                              Set as Partner
+                            </DropdownMenuItem>
+                            {partnerKey ? (
+                              <>
+                                {!col.isKey && (
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      onCategoryChange(idx, 'partner')
+                                      onKeyToggle(idx)
+                                    }}
+                                    className="text-xs"
+                                  >
+                                    <Key className="h-3 w-3 mr-2 text-amber-500" />
+                                    Make this the Key
+                                  </DropdownMenuItem>
+                                )}
+                                {col.isKey && col.category === 'partner' && (
+                                  <DropdownMenuItem
+                                    onClick={() => onKeyToggle(idx)}
+                                    className="text-xs text-destructive"
+                                  >
+                                    <X className="h-3 w-3 mr-2" />
+                                    Remove as Key
+                                  </DropdownMenuItem>
+                                )}
+                              </>
+                            ) : (
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  onCategoryChange(idx, 'partner')
+                                  onKeyToggle(idx)
+                                }}
+                                className="text-xs"
+                              >
+                                <Key className="h-3 w-3 mr-2 text-amber-500" />
+                                Set as Partner Key
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuSubContent>
+                        </DropdownMenuSub>
+
+                        {/* Staff with key submenu */}
+                        <DropdownMenuSub>
+                          <DropdownMenuSubTrigger className="text-xs">
+                            <Users className="h-3 w-3 mr-2 text-green-500" />
+                            Staff
+                            {col.category === 'staff' && <Check className="h-3 w-3 ml-auto" />}
+                          </DropdownMenuSubTrigger>
+                          <DropdownMenuSubContent className="w-[200px]">
+                            {/* Always show current key info first */}
+                            {staffKey && (
+                              <>
+                                <div className="px-2 py-1.5 text-[10px] text-muted-foreground border-b border-border/50 mb-1">
+                                  <Key className="h-3 w-3 inline mr-1 text-green-500" />
+                                  Key: <span className="font-medium text-foreground">{staffKey.sourceColumn}</span>
+                                </div>
+                              </>
+                            )}
+                            <DropdownMenuItem
+                              onClick={() => onCategoryChange(idx, 'staff')}
+                              className="text-xs"
+                            >
+                              <Users className="h-3 w-3 mr-2 text-green-500" />
+                              Set as Staff
+                            </DropdownMenuItem>
+                            {staffKey ? (
+                              <>
+                                {!col.isKey && (
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      onCategoryChange(idx, 'staff')
+                                      onKeyToggle(idx)
+                                    }}
+                                    className="text-xs"
+                                  >
+                                    <Key className="h-3 w-3 mr-2 text-amber-500" />
+                                    Make this the Key
+                                  </DropdownMenuItem>
+                                )}
+                                {col.isKey && col.category === 'staff' && (
+                                  <DropdownMenuItem
+                                    onClick={() => onKeyToggle(idx)}
+                                    className="text-xs text-destructive"
+                                  >
+                                    <X className="h-3 w-3 mr-2" />
+                                    Remove as Key
+                                  </DropdownMenuItem>
+                                )}
+                              </>
+                            ) : (
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  onCategoryChange(idx, 'staff')
+                                  onKeyToggle(idx)
+                                }}
+                                className="text-xs"
+                              >
+                                <Key className="h-3 w-3 mr-2 text-amber-500" />
+                                Set as Staff Key
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuSubContent>
+                        </DropdownMenuSub>
+
+                        {/* ASIN with key submenu */}
+                        <DropdownMenuSub>
+                          <DropdownMenuSubTrigger className="text-xs">
+                            <Package className="h-3 w-3 mr-2 text-orange-500" />
+                            ASIN
+                            {col.category === 'asin' && <Check className="h-3 w-3 ml-auto" />}
+                          </DropdownMenuSubTrigger>
+                          <DropdownMenuSubContent className="w-[200px]">
+                            {/* Always show current key info first */}
+                            {asinKey && (
+                              <>
+                                <div className="px-2 py-1.5 text-[10px] text-muted-foreground border-b border-border/50 mb-1">
+                                  <Key className="h-3 w-3 inline mr-1 text-orange-500" />
+                                  Key: <span className="font-medium text-foreground">{asinKey.sourceColumn}</span>
+                                </div>
+                              </>
+                            )}
+                            <DropdownMenuItem
+                              onClick={() => onCategoryChange(idx, 'asin')}
+                              className="text-xs"
+                            >
+                              <Package className="h-3 w-3 mr-2 text-orange-500" />
+                              Set as ASIN
+                            </DropdownMenuItem>
+                            {asinKey ? (
+                              <>
+                                {!col.isKey && (
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      onCategoryChange(idx, 'asin')
+                                      onKeyToggle(idx)
+                                    }}
+                                    className="text-xs"
+                                  >
+                                    <Key className="h-3 w-3 mr-2 text-amber-500" />
+                                    Make this the Key
+                                  </DropdownMenuItem>
+                                )}
+                                {col.isKey && col.category === 'asin' && (
+                                  <DropdownMenuItem
+                                    onClick={() => onKeyToggle(idx)}
+                                    className="text-xs text-destructive"
+                                  >
+                                    <X className="h-3 w-3 mr-2" />
+                                    Remove as Key
+                                  </DropdownMenuItem>
+                                )}
+                              </>
+                            ) : (
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  onCategoryChange(idx, 'asin')
+                                  onKeyToggle(idx)
+                                }}
+                                className="text-xs"
+                              >
+                                <Key className="h-3 w-3 mr-2 text-amber-500" />
+                                Set as ASIN Key
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuSubContent>
+                        </DropdownMenuSub>
+
+                        <DropdownMenuSeparator />
+
+                        {/* Simple categories without key options */}
+                        <DropdownMenuItem
+                          onClick={() => onCategoryChange(idx, 'weekly')}
+                          className="text-xs"
+                        >
+                          <Calendar className="h-3 w-3 mr-2 text-purple-500" />
+                          Weekly
+                          {col.category === 'weekly' && <Check className="h-3 w-3 ml-auto" />}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => onCategoryChange(idx, 'computed')}
+                          className="text-xs"
+                        >
+                          <Calculator className="h-3 w-3 mr-2 text-cyan-500" />
+                          Computed
+                          {col.category === 'computed' && <Check className="h-3 w-3 ml-auto" />}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => onCategoryChange(idx, 'skip')}
+                          className="text-xs"
+                        >
+                          <SkipForward className="h-3 w-3 mr-2 text-gray-500" />
+                          Skip
+                          {col.category === 'skip' && <Check className="h-3 w-3 ml-auto" />}
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
 
                     {/* Configure button for computed fields */}
                     {col.category === 'computed' && (
@@ -976,44 +1402,72 @@ function ClassifyPhase({
           <div className="p-3 rounded-lg bg-muted/50 border border-border/50">
             <p className="text-xs text-muted-foreground">
               <Key className="h-3 w-3 inline mr-1 text-amber-500" />
-              <strong>Key</strong> = The column that uniquely identifies each record (e.g., "Brand Name" for partners, "Email" for staff, "ASIN Code" for products)
+              <strong>Key</strong> = The column that uniquely identifies each record (e.g., <span className="text-blue-600">"Brand Name"</span> for partners, <span className="text-green-600">"Full Name"</span> for staff, <span className="text-orange-600">"ASIN Code"</span> for products)
             </p>
           </div>
 
           {/* Keyboard shortcuts legend */}
-          <div className="p-3 rounded-lg bg-gradient-to-r from-primary/5 to-transparent border border-primary/20">
-            <div className="flex items-center gap-2 mb-2">
-              <Sparkles className="h-3 w-3 text-primary" />
-              <span className="text-xs font-medium text-primary">Keyboard Shortcuts</span>
+          <div className="p-3 rounded-lg bg-muted/30 border border-border">
+            <div className="flex items-center gap-2 mb-3">
+              <Sparkles className="h-3.5 w-3.5 text-amber-500" />
+              <span className="text-xs font-semibold">Keyboard Shortcuts</span>
             </div>
-            <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs text-muted-foreground">
-              <div className="flex items-center gap-2">
-                <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono">1</kbd>
-                <span>Partner</span>
-                <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono ml-1">2</kbd>
-                <span>Staff</span>
-                <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono ml-1">3</kbd>
-                <span>ASIN</span>
+            <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-xs">
+              {/* Categories row 1 */}
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5">
+                  <kbd className="px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-600 text-[10px] font-mono font-medium">1</kbd>
+                  <span className="text-blue-600 font-medium">Partner</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <kbd className="px-1.5 py-0.5 rounded bg-green-500/20 text-green-600 text-[10px] font-mono font-medium">2</kbd>
+                  <span className="text-green-600 font-medium">Staff</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <kbd className="px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-600 text-[10px] font-mono font-medium">3</kbd>
+                  <span className="text-orange-600 font-medium">ASIN</span>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono">4</kbd>
-                <span>Weekly</span>
-                <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono ml-1">5</kbd>
-                <span>Computed</span>
-                <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono ml-1">6</kbd>
-                <span>Skip</span>
+              {/* Categories row 2 */}
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5">
+                  <kbd className="px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-600 text-[10px] font-mono font-medium">4</kbd>
+                  <span className="text-purple-600 font-medium">Weekly</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <kbd className="px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-600 text-[10px] font-mono font-medium">5</kbd>
+                  <span className="text-cyan-600 font-medium">Computed</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <kbd className="px-1.5 py-0.5 rounded bg-gray-500/20 text-gray-500 text-[10px] font-mono font-medium">6</kbd>
+                  <span className="text-gray-500 font-medium">Skip</span>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono">↑↓</kbd>
-                <span>Navigate</span>
-                <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono ml-1">Tab</kbd>
-                <span>Next unclassified</span>
+              {/* Navigation */}
+              <div className="flex items-center gap-3 text-muted-foreground">
+                <div className="flex items-center gap-1.5">
+                  <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono">↑↓</kbd>
+                  <span>Navigate</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono">Tab</kbd>
+                  <span>Next unclassified</span>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono">K</kbd>
-                <span>Set as Key</span>
-                <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono ml-1">Space</kbd>
-                <span>Multi-select</span>
+              {/* Actions */}
+              <div className="flex items-center gap-3 text-muted-foreground">
+                <div className="flex items-center gap-1.5">
+                  <kbd className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-600 text-[10px] font-mono">K</kbd>
+                  <span>Set as Key</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono">⇧+click</kbd>
+                  <span>Range</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono">⌘Z</kbd>
+                  <span>Undo</span>
+                </div>
               </div>
             </div>
           </div>

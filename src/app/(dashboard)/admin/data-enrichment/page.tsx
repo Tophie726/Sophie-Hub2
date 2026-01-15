@@ -280,6 +280,7 @@ export default function DataEnrichmentPage() {
             >
               <SmartMapper
                 spreadsheetId={selectedSheet.id}
+                sheetName={selectedSheet.name}
                 tabName={selectedTab}
                 onComplete={handleMappingComplete}
                 onBack={() => {
@@ -326,26 +327,61 @@ interface TableStats {
   staff: { count: number; fields: string[] }
 }
 
+interface ConnectedSource {
+  id: string
+  name: string
+  type: string
+  spreadsheet_id: string
+  spreadsheet_url: string
+  created_at: string
+  updated_at: string
+  tabCount: number
+  mappedFieldsCount: number
+  tabs: {
+    id: string
+    tab_name: string
+    primary_entity: string
+    header_row: number
+    columnCount: number
+  }[]
+}
+
 function OverviewView({ onSearchSheets }: { onSearchSheets: () => void }) {
   const [stats, setStats] = useState<TableStats | null>(null)
   const [isLoadingStats, setIsLoadingStats] = useState(true)
+  const [connectedSources, setConnectedSources] = useState<ConnectedSource[]>([])
+  const [isLoadingSources, setIsLoadingSources] = useState(true)
 
   useEffect(() => {
-    async function fetchStats() {
+    async function fetchData() {
       try {
-        const response = await fetch('/api/stats/tables')
-        if (response.ok) {
-          const data = await response.json()
+        const [statsRes, sourcesRes] = await Promise.all([
+          fetch('/api/stats/tables'),
+          fetch('/api/data-sources'),
+        ])
+
+        if (statsRes.ok) {
+          const data = await statsRes.json()
           setStats(data)
         }
+
+        if (sourcesRes.ok) {
+          const data = await sourcesRes.json()
+          setConnectedSources(data.sources || [])
+        }
       } catch (error) {
-        console.error('Error fetching stats:', error)
+        console.error('Error fetching data:', error)
       } finally {
         setIsLoadingStats(false)
+        setIsLoadingSources(false)
       }
     }
-    fetchStats()
+    fetchData()
   }, [])
+
+  const hasConnectedSources = connectedSources.length > 0
+  const totalTabs = connectedSources.reduce((sum, s) => sum + s.tabCount, 0)
+  const totalFields = connectedSources.reduce((sum, s) => sum + s.mappedFieldsCount, 0)
 
   return (
     <motion.div
@@ -355,21 +391,115 @@ function OverviewView({ onSearchSheets }: { onSearchSheets: () => void }) {
       transition={{ duration: 0.3, ease: easeOut }}
       className="space-y-8"
     >
-      <Card className="border-dashed">
-        <CardContent className="flex flex-col items-center justify-center py-16">
-          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-orange-500/10 mb-6">
-            <Database className="h-8 w-8 text-orange-500" />
+      {/* Connected Sources or Empty State */}
+      {isLoadingSources ? (
+        <Card className="border-dashed">
+          <CardContent className="flex flex-col items-center justify-center py-16">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          </CardContent>
+        </Card>
+      ) : hasConnectedSources ? (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-semibold">Connected Data Sources</h3>
+              <p className="text-sm text-muted-foreground">
+                {connectedSources.length} source{connectedSources.length !== 1 ? 's' : ''} · {totalTabs} tab{totalTabs !== 1 ? 's' : ''} mapped · {totalFields} field{totalFields !== 1 ? 's' : ''}
+              </p>
+            </div>
+            <Button onClick={onSearchSheets} className="gap-2">
+              <Search className="h-4 w-4" />
+              Connect Data Source
+            </Button>
           </div>
-          <h2 className="text-xl font-semibold mb-2">Start Data Enrichment</h2>
-          <p className="text-muted-foreground text-center max-w-md mb-6">
-            Connect a Google Sheet and map its columns to your Partner and Staff tables.
-          </p>
-          <Button onClick={onSearchSheets} className="gap-2">
-            <Search className="h-4 w-4" />
-            Search Google Sheets
-          </Button>
-        </CardContent>
-      </Card>
+
+          <div className="grid gap-4">
+            {connectedSources.map((source) => {
+              const partnerTabs = source.tabs.filter(t => t.primary_entity === 'partners')
+              const staffTabs = source.tabs.filter(t => t.primary_entity === 'staff')
+              const asinTabs = source.tabs.filter(t => t.primary_entity === 'asins')
+
+              return (
+                <Card key={source.id} className="overflow-hidden">
+                  <div className="flex items-start gap-4 p-4">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-green-500/10 flex-shrink-0">
+                      <FileSpreadsheet className="h-6 w-6 text-green-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h4 className="font-medium truncate">{source.name}</h4>
+                        <Badge variant="secondary" className="text-xs">
+                          {source.tabCount} tab{source.tabCount !== 1 ? 's' : ''}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground mb-3">
+                        {source.mappedFieldsCount} fields mapped · Last updated {new Date(source.updated_at).toLocaleDateString()}
+                      </p>
+
+                      {/* Tab breakdown by entity */}
+                      <div className="flex flex-wrap gap-2">
+                        {partnerTabs.length > 0 && (
+                          <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-blue-500/10 text-xs">
+                            <div className="h-2 w-2 rounded-full bg-blue-500" />
+                            <span className="text-blue-600 font-medium">{partnerTabs.length} Partner</span>
+                            <span className="text-muted-foreground">({partnerTabs.map(t => t.tab_name).join(', ')})</span>
+                          </div>
+                        )}
+                        {staffTabs.length > 0 && (
+                          <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-green-500/10 text-xs">
+                            <div className="h-2 w-2 rounded-full bg-green-500" />
+                            <span className="text-green-600 font-medium">{staffTabs.length} Staff</span>
+                            <span className="text-muted-foreground">({staffTabs.map(t => t.tab_name).join(', ')})</span>
+                          </div>
+                        )}
+                        {asinTabs.length > 0 && (
+                          <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-orange-500/10 text-xs">
+                            <div className="h-2 w-2 rounded-full bg-orange-500" />
+                            <span className="text-orange-600 font-medium">{asinTabs.length} ASIN</span>
+                            <span className="text-muted-foreground">({asinTabs.map(t => t.tab_name).join(', ')})</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      asChild
+                      className="flex-shrink-0"
+                    >
+                      <a
+                        href={source.spreadsheet_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="gap-1"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                      </a>
+                    </Button>
+                  </div>
+                </Card>
+              )
+            })}
+          </div>
+        </div>
+      ) : (
+        <Card className="border-dashed">
+          <CardContent className="flex flex-col items-center justify-center py-16">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-orange-500/10 mb-6">
+              <Database className="h-8 w-8 text-orange-500" />
+            </div>
+            <h2 className="text-xl font-semibold mb-2">Start Data Enrichment</h2>
+            <p className="text-muted-foreground text-center max-w-md mb-6">
+              Connect a Google Sheet and map its columns to your Partner and Staff tables.
+            </p>
+            <Button onClick={onSearchSheets} className="gap-2">
+              <Search className="h-4 w-4" />
+              Connect Data Source
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="space-y-4">
         <h3 className="text-lg font-semibold">How It Works</h3>
