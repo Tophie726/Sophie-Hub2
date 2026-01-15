@@ -6,7 +6,7 @@ import { useSession } from 'next-auth/react'
 import { PageHeader } from '@/components/layout/page-header'
 import { SheetSearchModal } from '@/components/data-enrichment/sheet-search-modal'
 import { SmartMapper } from '@/components/data-enrichment/smart-mapper'
-import { CategoryHub, SheetsOverview, SourceBrowser } from '@/components/data-enrichment/browser'
+import { CategoryHub, SourceBrowser } from '@/components/data-enrichment/browser'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -102,7 +102,6 @@ export default function DataEnrichmentPage() {
 
   // Legacy wizard state (kept for backward compatibility during migration)
   const [currentStep, setCurrentStep] = useState<WizardStep>('overview')
-  const [showSearchModal, setShowSearchModal] = useState(false)
 
   // Sheet state
   const [selectedSheet, setSelectedSheet] = useState<GoogleSheet | null>(null)
@@ -245,7 +244,9 @@ export default function DataEnrichmentPage() {
   // Handle category selection from the hub
   const handleSelectCategory = (category: 'sheets' | 'forms' | 'docs') => {
     if (category === 'sheets') {
-      setBrowserView('sheets-overview')
+      // Go directly to SourceBrowser - it has its own modal and handles everything
+      setSelectedSourceId(null)
+      setBrowserView('sheets-browser')
     } else {
       setBrowserView(category)
     }
@@ -284,22 +285,6 @@ export default function DataEnrichmentPage() {
             </motion.div>
           )}
 
-          {/* Sheets Overview View */}
-          {browserView === 'sheets-overview' && (
-            <motion.div
-              key="sheets-overview"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-            >
-              <SheetsOverview
-                onBack={() => setBrowserView('hub')}
-                onSelectSource={handleSelectSource}
-                onAddSource={() => setShowSearchModal(true)}
-              />
-            </motion.div>
-          )}
-
           {/* Sheets Browser View (tab mapping) */}
           {browserView === 'sheets-browser' && (
             <motion.div
@@ -309,7 +294,7 @@ export default function DataEnrichmentPage() {
               exit={{ opacity: 0 }}
             >
               <SourceBrowser
-                onBack={() => setBrowserView('sheets-overview')}
+                onBack={() => setBrowserView('hub')}
                 initialSourceId={selectedSourceId}
               />
             </motion.div>
@@ -349,17 +334,7 @@ export default function DataEnrichmentPage() {
         </AnimatePresence>
       </div>
 
-      {/* Sheet Search Modal - available from overview */}
-      <SheetSearchModal
-        open={showSearchModal}
-        onOpenChange={setShowSearchModal}
-        onSelectSheet={(sheet) => {
-          setShowSearchModal(false)
-          // Navigate to browser and let it handle the new sheet
-          setSelectedSourceId(null) // Will trigger add flow in SourceBrowser
-          setBrowserView('sheets-browser')
-        }}
-      />
+      {/* Note: Sheet search modal is handled by SourceBrowser directly */}
     </div>
   )
 }

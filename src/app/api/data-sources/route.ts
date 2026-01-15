@@ -41,6 +41,65 @@ export interface DataSourceWithStats {
   }[]
 }
 
+// POST - Create a new data source
+export async function POST(request: Request) {
+  try {
+    const body = await request.json()
+    const { name, spreadsheet_id, spreadsheet_url } = body
+
+    if (!name || !spreadsheet_id) {
+      return NextResponse.json(
+        { error: 'name and spreadsheet_id are required' },
+        { status: 400 }
+      )
+    }
+
+    // Check if this spreadsheet is already connected
+    const { data: existing } = await supabase
+      .from('data_sources')
+      .select('id')
+      .eq('spreadsheet_id', spreadsheet_id)
+      .single()
+
+    if (existing) {
+      return NextResponse.json(
+        { error: 'This spreadsheet is already connected', existingId: existing.id },
+        { status: 409 }
+      )
+    }
+
+    // Create the data source
+    const { data: source, error } = await supabase
+      .from('data_sources')
+      .insert({
+        name,
+        type: 'google_sheet',
+        spreadsheet_id,
+        spreadsheet_url: spreadsheet_url || null,
+        status: 'active',
+      })
+      .select()
+      .single()
+
+    if (error) {
+      console.error('Error creating data source:', error)
+      return NextResponse.json(
+        { error: error.message },
+        { status: 500 }
+      )
+    }
+
+    return NextResponse.json({ source })
+  } catch (error) {
+    console.error('Error in POST /api/data-sources:', error)
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    )
+  }
+}
+
+// GET - Fetch all data sources with stats
 export async function GET() {
   try {
     // Fetch all data sources

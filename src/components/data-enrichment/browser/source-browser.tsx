@@ -23,6 +23,8 @@ interface DataSource {
     primary_entity: 'partners' | 'staff' | 'asins'
     header_row: number
     columnCount: number
+    status?: 'active' | 'reference' | 'hidden' | 'flagged'
+    notes?: string | null
   }[]
 }
 
@@ -72,12 +74,18 @@ export function SourceBrowser({ onBack, initialSourceId }: SourceBrowserProps) {
 
           if (sourceToSelect) {
             setActiveSourceId(sourceToSelect.id)
-            // Auto-select first active tab of that source
-            const activeTabs = sourceToSelect.tabs.filter((t: { status?: string }) =>
-              !t.status || t.status === 'active' || t.status === 'flagged'
-            )
-            if (activeTabs.length > 0) {
-              setActiveTabId(activeTabs[0].id)
+
+            // If source has no tabs yet, load preview from Google Sheets
+            if (sourceToSelect.tabs.length === 0 && sourceToSelect.spreadsheet_id) {
+              loadPreviewForSource(sourceToSelect.id, sourceToSelect.spreadsheet_id)
+            } else {
+              // Auto-select first active tab of that source
+              const activeTabs = sourceToSelect.tabs.filter((t: { status?: string }) =>
+                !t.status || t.status === 'active' || t.status === 'flagged'
+              )
+              if (activeTabs.length > 0) {
+                setActiveTabId(activeTabs[0].id)
+              }
             }
           }
         }
@@ -89,6 +97,32 @@ export function SourceBrowser({ onBack, initialSourceId }: SourceBrowserProps) {
     }
     fetchSources()
   }, [initialSourceId])
+
+  // Load preview for a source that has no tabs yet
+  const loadPreviewForSource = async (sourceId: string, spreadsheetId: string) => {
+    setIsLoadingPreview(true)
+    try {
+      const response = await fetch(`/api/sheets/preview?id=${spreadsheetId}`)
+      if (response.ok) {
+        const data = await response.json()
+        const preview = data.preview as SheetPreview
+
+        setSheetPreviews(prev => ({
+          ...prev,
+          [sourceId]: preview,
+        }))
+
+        // Auto-select first tab
+        if (preview.tabs.length > 0) {
+          setActiveTabId(String(preview.tabs[0].sheetId))
+        }
+      }
+    } catch (error) {
+      console.error('Error loading preview:', error)
+    } finally {
+      setIsLoadingPreview(false)
+    }
+  }
 
   // Get active source and tab data
   const activeSource = sources.find(s => s.id === activeSourceId)
@@ -103,6 +137,8 @@ export function SourceBrowser({ onBack, initialSourceId }: SourceBrowserProps) {
         columnCount: t.columnCount,
         isMapped: true,
         primaryEntity: t.primary_entity,
+        status: t.status || 'active',
+        notes: t.notes,
       }))
     : activePreview
       ? activePreview.tabs.map(t => ({
@@ -112,10 +148,35 @@ export function SourceBrowser({ onBack, initialSourceId }: SourceBrowserProps) {
           columnCount: t.columnCount,
           isMapped: false,
           primaryEntity: null,
+          status: 'active' as const,
+          notes: null,
         }))
       : []
 
   const activeTab = sheetTabs.find(t => t.id === activeTabId)
+
+  // Handle tab status change
+  const handleTabStatusChange = async (tabId: string, status: string, notes?: string) => {
+    try {
+      const response = await fetch(`/api/tab-mappings/${tabId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status, notes }),
+      })
+
+      if (response.ok) {
+        // Update local state
+        setSources(prev => prev.map(source => ({
+          ...source,
+          tabs: source.tabs.map(tab =>
+            tab.id === tabId ? { ...tab, status: status as typeof tab.status, notes } : tab
+          ),
+        })))
+      }
+    } catch (error) {
+      console.error('Error updating tab status:', error)
+    }
+  }
 
   // Handle adding a new source via the sheet search modal
   const handleAddSource = () => {
@@ -123,45 +184,87 @@ export function SourceBrowser({ onBack, initialSourceId }: SourceBrowserProps) {
   }
 
   const handleSelectSheet = async (sheet: { id: string; name: string; url: string }) => {
+    console.log('handleSelectSheet called with:', sheet.name)
     setShowSearchModal(false)
     setIsLoadingPreview(true)
 
     try {
-      const response = await fetch(`/api/sheets/preview?id=${sheet.id}`)
-      if (response.ok) {
-        const data = await response.json()
-        const preview = data.preview as SheetPreview
+      // First, save the data source to the database
+      console.log('Creating data source...')
+      const createResponse = await fetch('/api/data-sources', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: sheet.name,
+          spreadsheet_id: sheet.id,
+          spreadsheet_url: sheet.url,
+        }),
+      })
 
-        // Store preview and create a temporary source entry
-        const tempId = `temp-${sheet.id}`
+      let sourceId: string
+
+      if (createResponse.status === 409) {
+        // Already exists - use existing ID
+        const data = await createResponse.json()
+        console.log('Source already exists, using ID:', data.existingId)
+        sourceId = data.existingId
+      } else if (createResponse.ok) {
+        const data = await createResponse.json()
+        console.log('Source created with ID:', data.source.id)
+        sourceId = data.source.id
+      } else {
+        const errorData = await createResponse.json()
+        console.error('Failed to create data source:', errorData)
+        setIsLoadingPreview(false)
+        return
+      }
+
+      // Now fetch the preview
+      console.log('Fetching preview for spreadsheet:', sheet.id)
+      const previewResponse = await fetch(`/api/sheets/preview?id=${sheet.id}`)
+      if (previewResponse.ok) {
+        const data = await previewResponse.json()
+        const preview = data.preview as SheetPreview
+        console.log('Preview loaded, tabs:', preview.tabs.length)
+
+        // Store preview
         setSheetPreviews(prev => ({
           ...prev,
-          [tempId]: preview,
+          [sourceId]: preview,
         }))
 
-        // Add to sources list as a temporary entry
-        setSources(prev => [
-          ...prev,
-          {
-            id: tempId,
-            name: sheet.name,
-            type: 'google_sheet',
-            spreadsheet_id: sheet.id,
-            spreadsheet_url: sheet.url,
-            tabCount: preview.tabs.length,
-            mappedFieldsCount: 0,
-            tabs: [],
-          },
-        ])
+        // Add to sources list (will be refreshed on next fetch, but show immediately)
+        setSources(prev => {
+          // Check if already in list
+          if (prev.some(s => s.id === sourceId)) {
+            return prev
+          }
+          return [
+            ...prev,
+            {
+              id: sourceId,
+              name: sheet.name,
+              type: 'google_sheet',
+              spreadsheet_id: sheet.id,
+              spreadsheet_url: sheet.url,
+              tabCount: preview.tabs.length,
+              mappedFieldsCount: 0,
+              tabs: [],
+            },
+          ]
+        })
 
-        // Select this new source
-        setActiveSourceId(tempId)
+        // Select this source
+        setActiveSourceId(sourceId)
         if (preview.tabs.length > 0) {
           setActiveTabId(String(preview.tabs[0].sheetId))
         }
+      } else {
+        const errorData = await previewResponse.json()
+        console.error('Failed to fetch preview:', errorData)
       }
     } catch (error) {
-      console.error('Error loading preview:', error)
+      console.error('Error adding source:', error)
     } finally {
       setIsLoadingPreview(false)
     }
@@ -293,6 +396,7 @@ export function SourceBrowser({ onBack, initialSourceId }: SourceBrowserProps) {
           tabs={sheetTabs}
           activeTabId={activeTabId}
           onSelectTab={handleSelectTab}
+          onStatusChange={handleTabStatusChange}
         />
       )}
 
