@@ -24,6 +24,14 @@ import {
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
   ChevronUp,
   ChevronDown,
   Check,
@@ -631,6 +639,16 @@ function ClassifyPhase({
   const hasInteracted = useRef(false)
   const [focusedIndex, setFocusedIndex] = useState(0)
 
+  // State for key confirmation dialog
+  const [keyConfirmation, setKeyConfirmation] = useState<{
+    open: boolean
+    columnIndex: number | null
+    columnName: string
+    category: ColumnCategory
+    currentKeyName: string | null
+    action: 'set' | 'change' | 'remove'
+  }>({ open: false, columnIndex: null, columnName: '', category: null, currentKeyName: null, action: 'set' })
+
   const sampleRows = rawData.rows.slice(headerRow + 1, headerRow + 2)
   const allValidColumns = columns.filter(c => c.sourceColumn.trim())
 
@@ -708,6 +726,35 @@ function ClassifyPhase({
   const partnerKey = allValidColumns.find(c => c.category === 'partner' && c.isKey)
   const staffKey = allValidColumns.find(c => c.category === 'staff' && c.isKey)
   const asinKey = allValidColumns.find(c => c.category === 'asin' && c.isKey)
+
+  // Helper to request key confirmation before setting
+  const requestKeyConfirmation = (
+    columnIndex: number,
+    columnName: string,
+    category: ColumnCategory,
+    isCurrentlyKey: boolean
+  ) => {
+    const currentKey = category === 'partner' ? partnerKey
+      : category === 'staff' ? staffKey
+      : category === 'asin' ? asinKey : null
+
+    setKeyConfirmation({
+      open: true,
+      columnIndex,
+      columnName,
+      category,
+      currentKeyName: currentKey && !isCurrentlyKey ? currentKey.sourceColumn : null,
+      action: isCurrentlyKey ? 'remove' : currentKey ? 'change' : 'set'
+    })
+  }
+
+  // Confirm key action
+  const confirmKeyAction = () => {
+    if (keyConfirmation.columnIndex !== null) {
+      onKeyToggle(keyConfirmation.columnIndex)
+    }
+    setKeyConfirmation({ open: false, columnIndex: null, columnName: '', category: null, currentKeyName: null, action: 'set' })
+  }
 
   const totalClassified = stats.partner + stats.staff + stats.asin + stats.weekly + stats.computed + stats.skip
   const totalColumns = allValidColumns.length
@@ -1055,6 +1102,11 @@ function ClassifyPhase({
                 const config = col.category ? CATEGORY_CONFIG[col.category] : null
                 const canBeKey = col.category && col.category !== 'skip' && col.category !== 'weekly'
 
+                // Get the actual sample values for each key (for showing linked relationship)
+                const partnerKeyValue = partnerKey ? getSample(partnerKey.sourceIndex) : null
+                const staffKeyValue = staffKey ? getSample(staffKey.sourceIndex) : null
+                const asinKeyValue = asinKey ? getSample(asinKey.sourceIndex) : null
+
                 return (
                   <motion.div
                     key={idx}
@@ -1169,14 +1221,19 @@ function ClassifyPhase({
                             {col.category === 'partner' && <Check className="h-3 w-3 ml-auto" />}
                           </DropdownMenuSubTrigger>
                           <DropdownMenuSubContent className="w-[200px]">
-                            {/* Always show current key info first */}
+                            {/* Always show current key info first with real value */}
                             {partnerKey && (
-                              <>
-                                <div className="px-2 py-1.5 text-[10px] text-muted-foreground border-b border-border/50 mb-1">
-                                  <Key className="h-3 w-3 inline mr-1 text-blue-500" />
-                                  Key: <span className="font-medium text-foreground">{partnerKey.sourceColumn}</span>
+                              <div className="px-2 py-1.5 text-[10px] border-b border-border/50 mb-1">
+                                <div className="flex items-center gap-1 text-muted-foreground">
+                                  <Key className="h-3 w-3 text-blue-500" />
+                                  <span>Key: {partnerKey.sourceColumn}</span>
                                 </div>
-                              </>
+                                {partnerKeyValue && (
+                                  <div className="mt-1 pl-4 font-medium text-blue-600 truncate">
+                                    → {partnerKeyValue}
+                                  </div>
+                                )}
+                              </div>
                             )}
                             <DropdownMenuItem
                               onClick={() => onCategoryChange(idx, 'partner')}
@@ -1191,7 +1248,7 @@ function ClassifyPhase({
                                   <DropdownMenuItem
                                     onClick={() => {
                                       onCategoryChange(idx, 'partner')
-                                      onKeyToggle(idx)
+                                      requestKeyConfirmation(idx, col.sourceColumn, 'partner', false)
                                     }}
                                     className="text-xs"
                                   >
@@ -1201,7 +1258,7 @@ function ClassifyPhase({
                                 )}
                                 {col.isKey && col.category === 'partner' && (
                                   <DropdownMenuItem
-                                    onClick={() => onKeyToggle(idx)}
+                                    onClick={() => requestKeyConfirmation(idx, col.sourceColumn, 'partner', true)}
                                     className="text-xs text-destructive"
                                   >
                                     <X className="h-3 w-3 mr-2" />
@@ -1213,7 +1270,7 @@ function ClassifyPhase({
                               <DropdownMenuItem
                                 onClick={() => {
                                   onCategoryChange(idx, 'partner')
-                                  onKeyToggle(idx)
+                                  requestKeyConfirmation(idx, col.sourceColumn, 'partner', false)
                                 }}
                                 className="text-xs"
                               >
@@ -1232,14 +1289,19 @@ function ClassifyPhase({
                             {col.category === 'staff' && <Check className="h-3 w-3 ml-auto" />}
                           </DropdownMenuSubTrigger>
                           <DropdownMenuSubContent className="w-[200px]">
-                            {/* Always show current key info first */}
+                            {/* Always show current key info first with real value */}
                             {staffKey && (
-                              <>
-                                <div className="px-2 py-1.5 text-[10px] text-muted-foreground border-b border-border/50 mb-1">
-                                  <Key className="h-3 w-3 inline mr-1 text-green-500" />
-                                  Key: <span className="font-medium text-foreground">{staffKey.sourceColumn}</span>
+                              <div className="px-2 py-1.5 text-[10px] border-b border-border/50 mb-1">
+                                <div className="flex items-center gap-1 text-muted-foreground">
+                                  <Key className="h-3 w-3 text-green-500" />
+                                  <span>Key: {staffKey.sourceColumn}</span>
                                 </div>
-                              </>
+                                {staffKeyValue && (
+                                  <div className="mt-1 pl-4 font-medium text-green-600 truncate">
+                                    → {staffKeyValue}
+                                  </div>
+                                )}
+                              </div>
                             )}
                             <DropdownMenuItem
                               onClick={() => onCategoryChange(idx, 'staff')}
@@ -1254,7 +1316,7 @@ function ClassifyPhase({
                                   <DropdownMenuItem
                                     onClick={() => {
                                       onCategoryChange(idx, 'staff')
-                                      onKeyToggle(idx)
+                                      requestKeyConfirmation(idx, col.sourceColumn, 'staff', false)
                                     }}
                                     className="text-xs"
                                   >
@@ -1264,7 +1326,7 @@ function ClassifyPhase({
                                 )}
                                 {col.isKey && col.category === 'staff' && (
                                   <DropdownMenuItem
-                                    onClick={() => onKeyToggle(idx)}
+                                    onClick={() => requestKeyConfirmation(idx, col.sourceColumn, 'staff', true)}
                                     className="text-xs text-destructive"
                                   >
                                     <X className="h-3 w-3 mr-2" />
@@ -1276,7 +1338,7 @@ function ClassifyPhase({
                               <DropdownMenuItem
                                 onClick={() => {
                                   onCategoryChange(idx, 'staff')
-                                  onKeyToggle(idx)
+                                  requestKeyConfirmation(idx, col.sourceColumn, 'staff', false)
                                 }}
                                 className="text-xs"
                               >
@@ -1295,14 +1357,19 @@ function ClassifyPhase({
                             {col.category === 'asin' && <Check className="h-3 w-3 ml-auto" />}
                           </DropdownMenuSubTrigger>
                           <DropdownMenuSubContent className="w-[200px]">
-                            {/* Always show current key info first */}
+                            {/* Always show current key info first with real value */}
                             {asinKey && (
-                              <>
-                                <div className="px-2 py-1.5 text-[10px] text-muted-foreground border-b border-border/50 mb-1">
-                                  <Key className="h-3 w-3 inline mr-1 text-orange-500" />
-                                  Key: <span className="font-medium text-foreground">{asinKey.sourceColumn}</span>
+                              <div className="px-2 py-1.5 text-[10px] border-b border-border/50 mb-1">
+                                <div className="flex items-center gap-1 text-muted-foreground">
+                                  <Key className="h-3 w-3 text-orange-500" />
+                                  <span>Key: {asinKey.sourceColumn}</span>
                                 </div>
-                              </>
+                                {asinKeyValue && (
+                                  <div className="mt-1 pl-4 font-medium text-orange-600 truncate">
+                                    → {asinKeyValue}
+                                  </div>
+                                )}
+                              </div>
                             )}
                             <DropdownMenuItem
                               onClick={() => onCategoryChange(idx, 'asin')}
@@ -1317,7 +1384,7 @@ function ClassifyPhase({
                                   <DropdownMenuItem
                                     onClick={() => {
                                       onCategoryChange(idx, 'asin')
-                                      onKeyToggle(idx)
+                                      requestKeyConfirmation(idx, col.sourceColumn, 'asin', false)
                                     }}
                                     className="text-xs"
                                   >
@@ -1327,7 +1394,7 @@ function ClassifyPhase({
                                 )}
                                 {col.isKey && col.category === 'asin' && (
                                   <DropdownMenuItem
-                                    onClick={() => onKeyToggle(idx)}
+                                    onClick={() => requestKeyConfirmation(idx, col.sourceColumn, 'asin', true)}
                                     className="text-xs text-destructive"
                                   >
                                     <X className="h-3 w-3 mr-2" />
@@ -1339,7 +1406,7 @@ function ClassifyPhase({
                               <DropdownMenuItem
                                 onClick={() => {
                                   onCategoryChange(idx, 'asin')
-                                  onKeyToggle(idx)
+                                  requestKeyConfirmation(idx, col.sourceColumn, 'asin', false)
                                 }}
                                 className="text-xs"
                               >
@@ -1501,6 +1568,81 @@ function ClassifyPhase({
           onClose={() => setConfigureComputedIndex(null)}
         />
       )}
+
+      {/* Key Confirmation Dialog */}
+      <Dialog
+        open={keyConfirmation.open}
+        onOpenChange={(open) => !open && setKeyConfirmation({ ...keyConfirmation, open: false })}
+      >
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Key className="h-5 w-5 text-amber-500" />
+              {keyConfirmation.action === 'set' && 'Set as Key?'}
+              {keyConfirmation.action === 'change' && 'Change Key?'}
+              {keyConfirmation.action === 'remove' && 'Remove Key?'}
+            </DialogTitle>
+            <DialogDescription className="pt-2">
+              {keyConfirmation.action === 'set' && (
+                <>
+                  Set <span className="font-medium text-foreground">"{keyConfirmation.columnName}"</span> as the{' '}
+                  <span className={`font-medium ${
+                    keyConfirmation.category === 'partner' ? 'text-blue-600' :
+                    keyConfirmation.category === 'staff' ? 'text-green-600' : 'text-orange-600'
+                  }`}>
+                    {keyConfirmation.category === 'partner' ? 'Partner' :
+                     keyConfirmation.category === 'staff' ? 'Staff' : 'ASIN'} Key
+                  </span>?
+                  <p className="mt-2 text-xs">This column will uniquely identify each record.</p>
+                </>
+              )}
+              {keyConfirmation.action === 'change' && (
+                <>
+                  Change the{' '}
+                  <span className={`font-medium ${
+                    keyConfirmation.category === 'partner' ? 'text-blue-600' :
+                    keyConfirmation.category === 'staff' ? 'text-green-600' : 'text-orange-600'
+                  }`}>
+                    {keyConfirmation.category === 'partner' ? 'Partner' :
+                     keyConfirmation.category === 'staff' ? 'Staff' : 'ASIN'} Key
+                  </span>{' '}
+                  from <span className="font-medium text-foreground">"{keyConfirmation.currentKeyName}"</span> to{' '}
+                  <span className="font-medium text-foreground">"{keyConfirmation.columnName}"</span>?
+                </>
+              )}
+              {keyConfirmation.action === 'remove' && (
+                <>
+                  Remove <span className="font-medium text-foreground">"{keyConfirmation.columnName}"</span> as the{' '}
+                  <span className={`font-medium ${
+                    keyConfirmation.category === 'partner' ? 'text-blue-600' :
+                    keyConfirmation.category === 'staff' ? 'text-green-600' : 'text-orange-600'
+                  }`}>
+                    {keyConfirmation.category === 'partner' ? 'Partner' :
+                     keyConfirmation.category === 'staff' ? 'Staff' : 'ASIN'} Key
+                  </span>?
+                  <p className="mt-2 text-xs text-amber-600">You'll need to set a new key before continuing.</p>
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => setKeyConfirmation({ ...keyConfirmation, open: false })}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={confirmKeyAction}
+              className={keyConfirmation.action === 'remove' ? 'bg-destructive hover:bg-destructive/90' : ''}
+            >
+              {keyConfirmation.action === 'set' && 'Set as Key'}
+              {keyConfirmation.action === 'change' && 'Change Key'}
+              {keyConfirmation.action === 'remove' && 'Remove Key'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       </div>
     </motion.div>
   )
