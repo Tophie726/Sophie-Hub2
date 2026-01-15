@@ -182,19 +182,31 @@ export function SmartMapper({ spreadsheetId, tabName, onComplete, onBack }: Smar
     loadData()
   }, [spreadsheetId, tabName])
 
-  // Initialize columns when header row changes
+  // Initialize columns when header row changes - with auto-detection
   useEffect(() => {
     if (!rawData || headerRow >= rawData.rows.length) return
 
     const headers = rawData.rows[headerRow]
-    const initialColumns: ColumnClassification[] = headers.map((header, idx) => ({
-      sourceIndex: idx,
-      sourceColumn: header || `Column ${idx + 1}`,
-      category: null,
-      targetField: null,
-      authority: 'source_of_truth',
-      isKey: false,
-    }))
+    const initialColumns: ColumnClassification[] = headers.map((header, idx) => {
+      const name = (header || '').toLowerCase()
+
+      // Auto-detect weekly columns (contains "weekly" or matches date patterns)
+      const isWeekly =
+        name.includes('weekly') ||
+        name.includes('week ') ||
+        name.match(/^w\d+\s/) || // W1, W2, etc.
+        name.match(/^\d{1,2}\/\d{1,2}/) || // 1/6, 12/25
+        name.match(/^\d{4}-\d{2}-\d{2}/) // 2024-01-06
+
+      return {
+        sourceIndex: idx,
+        sourceColumn: header || `Column ${idx + 1}`,
+        category: isWeekly ? 'weekly' : null,
+        targetField: null,
+        authority: 'source_of_truth',
+        isKey: false,
+      }
+    })
     setColumns(initialColumns)
   }, [rawData, headerRow])
 
