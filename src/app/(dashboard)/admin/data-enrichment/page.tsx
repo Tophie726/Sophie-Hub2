@@ -6,7 +6,7 @@ import { useSession } from 'next-auth/react'
 import { PageHeader } from '@/components/layout/page-header'
 import { SheetSearchModal } from '@/components/data-enrichment/sheet-search-modal'
 import { SmartMapper } from '@/components/data-enrichment/smart-mapper'
-import { CategoryHub, SourceBrowser } from '@/components/data-enrichment/browser'
+import { CategoryHub, SheetsOverview, SourceBrowser } from '@/components/data-enrichment/browser'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -89,7 +89,7 @@ interface TabMapping {
 }
 
 type WizardStep = 'overview' | 'select-sheet' | 'select-tab' | 'map-tab' | 'review' | 'complete'
-type DataBrowserView = 'hub' | 'sheets' | 'forms' | 'docs'
+type DataBrowserView = 'hub' | 'sheets-overview' | 'sheets-browser' | 'forms' | 'docs'
 
 const easeOut: [number, number, number, number] = [0.22, 1, 0.36, 1]
 
@@ -98,6 +98,7 @@ export default function DataEnrichmentPage() {
 
   // NEW: Data Browser view state
   const [browserView, setBrowserView] = useState<DataBrowserView>('hub')
+  const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null)
 
   // Legacy wizard state (kept for backward compatibility during migration)
   const [currentStep, setCurrentStep] = useState<WizardStep>('overview')
@@ -243,7 +244,17 @@ export default function DataEnrichmentPage() {
 
   // Handle category selection from the hub
   const handleSelectCategory = (category: 'sheets' | 'forms' | 'docs') => {
-    setBrowserView(category)
+    if (category === 'sheets') {
+      setBrowserView('sheets-overview')
+    } else {
+      setBrowserView(category)
+    }
+  }
+
+  // Handle source selection from sheets overview
+  const handleSelectSource = (sourceId: string) => {
+    setSelectedSourceId(sourceId)
+    setBrowserView('sheets-browser')
   }
 
   // NEW: Data Browser UI (primary)
@@ -273,15 +284,34 @@ export default function DataEnrichmentPage() {
             </motion.div>
           )}
 
-          {/* Sheets Browser View */}
-          {browserView === 'sheets' && (
+          {/* Sheets Overview View */}
+          {browserView === 'sheets-overview' && (
             <motion.div
-              key="sheets"
+              key="sheets-overview"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
             >
-              <SourceBrowser onBack={() => setBrowserView('hub')} />
+              <SheetsOverview
+                onBack={() => setBrowserView('hub')}
+                onSelectSource={handleSelectSource}
+                onAddSource={() => setShowSearchModal(true)}
+              />
+            </motion.div>
+          )}
+
+          {/* Sheets Browser View (tab mapping) */}
+          {browserView === 'sheets-browser' && (
+            <motion.div
+              key="sheets-browser"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            >
+              <SourceBrowser
+                onBack={() => setBrowserView('sheets-overview')}
+                initialSourceId={selectedSourceId}
+              />
             </motion.div>
           )}
 
@@ -318,6 +348,18 @@ export default function DataEnrichmentPage() {
           )}
         </AnimatePresence>
       </div>
+
+      {/* Sheet Search Modal - available from overview */}
+      <SheetSearchModal
+        open={showSearchModal}
+        onOpenChange={setShowSearchModal}
+        onSelectSheet={(sheet) => {
+          setShowSearchModal(false)
+          // Navigate to browser and let it handle the new sheet
+          setSelectedSourceId(null) // Will trigger add flow in SourceBrowser
+          setBrowserView('sheets-browser')
+        }}
+      />
     </div>
   )
 }

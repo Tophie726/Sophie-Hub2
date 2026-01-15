@@ -36,6 +36,8 @@ export interface DataSourceWithStats {
     header_row: number
     columnCount: number
     categoryStats: CategoryStats
+    status: 'active' | 'reference' | 'hidden' | 'flagged'
+    notes: string | null
   }[]
 }
 
@@ -56,12 +58,11 @@ export async function GET() {
     // For each source, get tab mappings with column counts
     const sourcesWithStats: DataSourceWithStats[] = await Promise.all(
       sources.map(async (source) => {
-        // Get tab mappings
+        // Get tab mappings (include all tabs, not just active - filter in UI)
         const { data: tabs, error: tabsError } = await supabase
           .from('tab_mappings')
-          .select('id, tab_name, primary_entity, header_row')
+          .select('id, tab_name, primary_entity, header_row, status, notes')
           .eq('data_source_id', source.id)
-          .eq('is_active', true)
           .order('tab_name')
 
         if (tabsError) {
@@ -138,6 +139,8 @@ export async function GET() {
               ...tab,
               columnCount,
               categoryStats: tabCategoryStats,
+              status: tab.status || 'active',
+              notes: tab.notes || null,
             }
           })
         )

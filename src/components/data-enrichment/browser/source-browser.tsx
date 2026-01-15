@@ -39,14 +39,15 @@ interface SheetPreview {
 
 interface SourceBrowserProps {
   onBack: () => void
+  initialSourceId?: string | null
 }
 
 const easeOut: [number, number, number, number] = [0.22, 1, 0.36, 1]
 
-export function SourceBrowser({ onBack }: SourceBrowserProps) {
+export function SourceBrowser({ onBack, initialSourceId }: SourceBrowserProps) {
   const [sources, setSources] = useState<DataSource[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [activeSourceId, setActiveSourceId] = useState<string | null>(null)
+  const [activeSourceId, setActiveSourceId] = useState<string | null>(initialSourceId || null)
   const [activeTabId, setActiveTabId] = useState<string | null>(null)
   const [showSearchModal, setShowSearchModal] = useState(false)
 
@@ -64,12 +65,19 @@ export function SourceBrowser({ onBack }: SourceBrowserProps) {
           const fetchedSources = data.sources || []
           setSources(fetchedSources)
 
-          // Auto-select first source if available
-          if (fetchedSources.length > 0) {
-            setActiveSourceId(fetchedSources[0].id)
-            // Auto-select first tab of that source
-            if (fetchedSources[0].tabs.length > 0) {
-              setActiveTabId(fetchedSources[0].tabs[0].id)
+          // Use initialSourceId if provided, otherwise auto-select first
+          const sourceToSelect = initialSourceId
+            ? fetchedSources.find((s: DataSource) => s.id === initialSourceId)
+            : fetchedSources[0]
+
+          if (sourceToSelect) {
+            setActiveSourceId(sourceToSelect.id)
+            // Auto-select first active tab of that source
+            const activeTabs = sourceToSelect.tabs.filter((t: { status?: string }) =>
+              !t.status || t.status === 'active' || t.status === 'flagged'
+            )
+            if (activeTabs.length > 0) {
+              setActiveTabId(activeTabs[0].id)
             }
           }
         }
@@ -80,7 +88,7 @@ export function SourceBrowser({ onBack }: SourceBrowserProps) {
       }
     }
     fetchSources()
-  }, [])
+  }, [initialSourceId])
 
   // Get active source and tab data
   const activeSource = sources.find(s => s.id === activeSourceId)
