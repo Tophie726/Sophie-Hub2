@@ -87,7 +87,8 @@ export function SourceBrowser({ onBack }: SourceBrowserProps) {
   const activePreview = activeSourceId ? sheetPreviews[activeSourceId] : null
 
   // Build tabs list for the active source
-  const sheetTabs = activeSource
+  // Check if activeSource has mapped tabs first, otherwise fall back to preview
+  const sheetTabs = activeSource?.tabs.length
     ? activeSource.tabs.map(t => ({
         id: t.id,
         name: t.tab_name,
