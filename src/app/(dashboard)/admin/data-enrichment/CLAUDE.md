@@ -14,6 +14,45 @@ Data Enrichment is the **control room** for bringing external data into Sophie H
 
 **Only Admin users have access to this feature.**
 
+---
+
+## CRITICAL PRINCIPLE: No Fake Data
+
+> **Every number, stat, and piece of information displayed in the UI MUST come from the database.**
+
+This is non-negotiable. The UI is a **window into the database**, not a separate thing to maintain.
+
+### What This Means
+
+**DO:**
+- Query `column_mappings` to count Partner columns
+- Derive progress % from actual mapped vs total columns
+- Let stats auto-update when mappings change (same source of truth)
+
+**DON'T:**
+- Hardcode numbers in components
+- Create separate "progress" fields to maintain
+- Display mock/placeholder data that isn't real
+
+### Why This Matters
+
+Without this principle, you end up playing **whack-a-mole** - updating the UI in multiple places when data changes. The database is the single source of truth. The UI reads from it. Period.
+
+### Example: Sheets Overview Stats
+
+```
+Correct:
+  SELECT category, COUNT(*) FROM column_mappings
+  WHERE tab_mapping_id IN (SELECT id FROM tab_mappings WHERE data_source_id = ?)
+  GROUP BY category
+  → UI displays: Partner: 24, Staff: 12, Unmapped: 120
+
+Wrong:
+  const stats = { partner: 24, staff: 12, unmapped: 120 } // hardcoded
+```
+
+---
+
 ## The Problem We're Solving
 
 Sophie Society's data is fragmented across:

@@ -91,6 +91,19 @@ Reference: animations.dev by Emil Kowalski
 
 ---
 
+## CRITICAL: No Fake Data
+
+> **Every number, stat, and piece of information in the UI MUST come from the database.**
+
+The UI is a **window into the database**, not a separate thing to maintain.
+
+- **DO**: Query tables, derive stats, let data auto-update from single source of truth
+- **DON'T**: Hardcode numbers, create separate progress fields, show mock data
+
+Without this, you play whack-a-mole updating UI in multiple places. Database = truth. UI = view.
+
+---
+
 ## The Core Philosophy
 
 ### Two Master Entities
