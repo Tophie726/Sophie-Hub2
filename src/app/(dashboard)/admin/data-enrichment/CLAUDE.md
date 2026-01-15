@@ -29,6 +29,132 @@ Previously, data was crawled sheet-by-sheet without understanding what the final
 4. Stage the data for review
 5. Commit when ready
 
+---
+
+## CRITICAL CONCEPT: Row Entity vs Column Entities
+
+**Real-world spreadsheets are messy.** A single tab often contains mixed data:
+- A "Master Client Sheet" has brand info + account manager names + finance contact info
+- A "Finance Sheet" has partner billing data + staff approver names
+- Each row might reference multiple entities
+
+### The Two-Level Entity Model
+
+1. **Row Entity (the anchor)**: What does each ROW represent?
+   - Example: Each row = one Partner
+   - The primary key column identifies this row entity
+
+2. **Column Entities (can vary)**: What entity does each COLUMN's data belong to?
+   - Can be the SAME as row entity (direct mapping)
+   - Can be a DIFFERENT entity (creates a relationship/lookup)
+
+### Example: Master Client Sheet
+
+| Brand Name | Tier | Account Manager | Finance Contact |
+|------------|------|-----------------|-----------------|
+| AIRONEX    | T1   | Sarah Johnson   | billing@x.com   |
+
+**Row Entity**: Partner (each row = one brand)
+**Primary Key**: Brand Name → `partners.brand_name`
+
+**Column Mappings**:
+- `Brand Name` → `partners.brand_name` (same entity)
+- `Tier` → `partners.tier` (same entity)
+- `Account Manager` → `staff.full_name` (DIFFERENT entity - creates assignment)
+- `Finance Contact` → `external_contacts.email` (DIFFERENT entity)
+
+---
+
+## CRITICAL CONCEPT: Source Authority (Two-Layer System)
+
+When data exists in multiple places (sheets now, app later), we need to know which source is authoritative.
+
+### Authority Levels
+
+Each mapped column has an **authority** setting:
+
+| Authority | Icon | Meaning | Behavior |
+|-----------|------|---------|----------|
+| **Source of Truth** | ⭐ | This sheet is THE authoritative source for this field | Data syncs INTO the database, can create/update records |
+| **Reference** | 📋 | This is a copy/lookup, not authoritative | Data used for matching/display only, never overwrites |
+
+### Example Scenario
+
+A "Master Client Sheet" has both authoritative data and lookups:
+
+| Column | Maps To | Authority | Why |
+|--------|---------|-----------|-----|
+| Brand Name | partners.brand_name | ⭐ Source | This IS where brand names are maintained |
+| Tier | partners.tier | ⭐ Source | Tier is set here first |
+| Account Manager | staff.full_name | 📋 Reference | Staff names come from Staff Master, this is just a lookup |
+| Finance Email | external_contacts.email | 📋 Reference | Just for display, actual contact lives elsewhere |
+
+### The Migration Path
+
+This system enables gradual migration from sheets to app:
+
+**Phase 1 (Now):** Most fields = Sheet as Source of Truth
+- App displays data from sheets (read-only in app)
+- Users get comfortable with the app interface
+
+**Phase 2 (Adoption):** Some fields become app-native
+- Admin flips specific fields to "app is source of truth"
+- Users start entering data directly in app
+- Sheets become reference for those fields
+
+**Phase 3 (Future):** App becomes primary
+- Most fields = App as Source of Truth
+- Sheets become reference/backup
+- Can optionally write BACK to sheets for legacy integrations
+
+### UI in Smart Mapper
+
+When mapping a column to a field, a toggle appears below the dropdown:
+
+```
+┌─────────────────────────────────────────────────┐
+│  Brand Name  →  partners.brand_name             │
+│                                                 │
+│  [⭐ Source] [📋 Reference]                     │
+│  └─ Toggles authority for this mapping         │
+└─────────────────────────────────────────────────┘
+```
+
+- Default is "Source of Truth" (assumes sheet is authoritative)
+- Toggle to "Reference" for lookup-only columns
+- Live preview shows icons next to column headers
+- Footer shows count: "5 mapped (3 source, 2 ref)"
+
+---
+
+### How Related Entity Columns Work
+
+When a column maps to a different entity than the row:
+
+1. **Lookup Match**: Try to find existing record by natural key
+   - "Sarah Johnson" → Find staff with `full_name = 'Sarah Johnson'`
+
+2. **Match Result Options**:
+   - **Found**: Link the row entity to this related record
+   - **Not Found**:
+     - Create new record (if allowed)
+     - Skip with warning
+     - Flag for manual review
+
+3. **Relationship Created**:
+   - Partner → Staff creates/updates `partner_assignments`
+   - Partner → External Contact creates link in `partners.finance_contact_id`
+
+### Import Order Considerations
+
+Related entities may need to be imported in dependency order:
+- Staff should exist before Partner assignments reference them
+- Partners should exist before ASINs reference them
+
+The system handles this by:
+1. First pass: Create/update primary row entities
+2. Second pass: Resolve relationships and create links
+
 ## Wizard Flow
 
 ### Step 1: Connect Source
@@ -294,6 +420,128 @@ CREATE TABLE field_lineage (
   UNIQUE(entity_type, entity_id, field_name)
 );
 ```
+
+---
+
+## UX/UI & Animation Guidelines (Smart Mapper)
+
+### The Design-Led 4-Phase Flow
+
+**Design Principles Applied:**
+- Progressive Disclosure: Simple first, complexity later
+- Human Language: "What identifies each row?" not "Primary Key"
+- Bulk Actions: Respect user's time with multi-select
+- Inference: Deduce entity type from user's choices
+
+---
+
+**Phase 1: Preview** — "We found your data!"
+- Show spreadsheet with detected header row highlighted
+- Allow header row adjustment (up/down arrows)
+- Rows before header fade to 50% opacity
+- Simple, reassuring, visual confirmation
+
+**Phase 2: Anchor Selection** — "What identifies each row?"
+- Show all columns as clickable cards with sample values
+- User clicks the column that NAMES each record
+- **Key Innovation**: Entity type is INFERRED from selection
+  - "Brand Name" → Partners
+  - "Full Name" / "Email" → Staff
+- Auto-classify other columns based on patterns after selection
+
+**Phase 3: Bulk Classification** — "Classify your columns"
+- All columns shown in a list with checkboxes
+- Each column has a dropdown: Partner / Staff / Weekly / Skip
+- **Multi-select + Bulk Action Bar**:
+  - Select multiple columns via checkboxes
+  - Apply category to all selected at once
+- Auto-detection patterns:
+  - Weekly: columns matching `week`, date patterns, `w/`, etc.
+  - Staff: columns matching `manager`, `email`, `slack`, etc.
+  - Partner: columns matching `brand`, `tier`, `fee`, etc.
+- Stats badges show classification breakdown
+- Anchor column locked with "Key" badge
+
+**Phase 4: Field Mapping** — "Map to database fields"
+- Organized by category (3-column layout):
+  - Partner columns → Partner field dropdowns
+  - Staff columns → Staff field dropdowns
+  - Weekly columns → Pivot explanation
+- Source/Reference toggle for each mapped field
+- Weekly columns explained: "Will be pivoted into weekly_statuses table"
+
+---
+
+### Column Categories
+
+| Category | Icon | Color | Behavior |
+|----------|------|-------|----------|
+| Partner | 🏢 Building2 | Blue | Maps to `partners` table fields |
+| Staff | 👥 Users | Green | Maps to `staff` table fields |
+| Weekly | 📅 Calendar | Purple | Pivoted to `weekly_statuses` table |
+| Skip | ⏭️ SkipForward | Gray | Not imported |
+
+### Animation Principles (Per Project CLAUDE.md)
+
+- **ease-out** for all user interactions: `cubic-bezier(0.22, 1, 0.36, 1)`
+- **Duration**: 200-300ms for UI transitions
+- **Hover effects**: Use scale(1.005) with container padding to prevent clipping
+- **Avoid AnimatePresence** on rapidly-updating content (use opacity toggle instead)
+- **Loading states**: Always-rendered with opacity toggle, not conditional render
+
+### Scroll Container Pattern
+
+When cards have hover effects inside ScrollArea:
+```tsx
+<ScrollArea className="h-[350px]">
+  <div className="space-y-2 px-1 py-1 -mx-1 pr-3">
+    {/* Cards with hover scale effects */}
+  </div>
+</ScrollArea>
+```
+- `px-1 py-1`: Padding for hover effects to breathe
+- `-mx-1`: Negative margin to maintain visual alignment
+- `pr-3`: Extra right padding for scrollbar
+
+### Keyboard Navigation Standard
+
+All selection interfaces (tabs, columns, options) should support keyboard navigation:
+
+**Arrow Keys:**
+- `↑` / `↓`: Navigate between items in vertical lists
+- `←` / `→`: Navigate between items in horizontal lists or adjust values
+- Focus should be visually indicated with a ring/outline
+
+**Enter/Space:**
+- `Enter`: Confirm/select the focused item
+- `Space`: Toggle selection or expand/collapse
+
+**Implementation Pattern:**
+```tsx
+const handleKeyDown = (e: React.KeyboardEvent, items: any[], selectedIndex: number) => {
+  switch (e.key) {
+    case 'ArrowDown':
+      e.preventDefault()
+      setSelected(Math.min(selectedIndex + 1, items.length - 1))
+      break
+    case 'ArrowUp':
+      e.preventDefault()
+      setSelected(Math.max(selectedIndex - 1, 0))
+      break
+    case 'Enter':
+      e.preventDefault()
+      confirmSelection(items[selectedIndex])
+      break
+  }
+}
+```
+
+**Focus Management:**
+- Use `tabIndex={0}` on container for keyboard focus
+- Use `useRef` + `scrollIntoView` to keep focused item visible
+- Visual focus indicator: `focus:ring-2 focus:ring-primary focus:ring-offset-2`
+
+---
 
 ## Component Structure
 

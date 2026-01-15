@@ -1,45 +1,138 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useSession } from 'next-auth/react'
 import { PageHeader } from '@/components/layout/page-header'
+import { SheetSearchModal } from '@/components/data-enrichment/sheet-search-modal'
+import { SmartMapper } from '@/components/data-enrichment/smart-mapper'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   Database,
-  Plus,
   FileSpreadsheet,
   ArrowRight,
+  ArrowLeft,
   CheckCircle2,
   Circle,
   Loader2,
   ExternalLink,
-  RefreshCw,
   Settings,
   Sparkles,
+  Search,
+  Table,
+  X,
+  Check,
+  ChevronRight,
 } from 'lucide-react'
 
-type WizardStep = 'overview' | 'connect' | 'discover' | 'classify' | 'review' | 'commit'
+// ============ TYPES ============
+interface GoogleSheet {
+  id: string
+  name: string
+  url: string
+  modifiedTime: string
+  owner?: string
+}
 
-const steps = [
-  { id: 'connect', label: 'Connect', description: 'Add data source' },
-  { id: 'discover', label: 'Discover', description: 'Find fields' },
-  { id: 'classify', label: 'Classify', description: 'Map fields' },
-  { id: 'review', label: 'Review', description: 'Stage changes' },
-  { id: 'commit', label: 'Commit', description: 'Apply data' },
-]
+interface SheetTab {
+  sheetId: number
+  title: string
+  rowCount: number
+  columnCount: number
+}
+
+interface SheetPreview {
+  spreadsheetId: string
+  title: string
+  tabs: SheetTab[]
+  preview: {
+    tabName: string
+    headers: string[]
+    rows: string[][]
+  }
+}
+
+interface ColumnClassification {
+  sourceIndex: number
+  sourceColumn: string
+  category: 'partner' | 'staff' | 'asin' | 'weekly' | 'skip' | null
+  targetField: string | null
+  authority: 'source_of_truth' | 'reference'
+  isKey: boolean
+}
+
+interface TabMapping {
+  tabName: string
+  headerRow: number
+  primaryEntity: 'partners' | 'staff' | 'asins'
+  columns: ColumnClassification[]
+}
+
+type WizardStep = 'overview' | 'select-sheet' | 'select-tab' | 'map-tab' | 'review' | 'complete'
+
+const easeOut = [0.22, 1, 0.36, 1]
 
 export default function DataEnrichmentPage() {
+  const { data: session } = useSession()
   const [currentStep, setCurrentStep] = useState<WizardStep>('overview')
-  const [isConnecting, setIsConnecting] = useState(false)
+  const [showSearchModal, setShowSearchModal] = useState(false)
 
-  const handleStartWizard = () => {
-    setCurrentStep('connect')
+  // Sheet state
+  const [selectedSheet, setSelectedSheet] = useState<GoogleSheet | null>(null)
+  const [sheetPreview, setSheetPreview] = useState<SheetPreview | null>(null)
+  const [isLoadingPreview, setIsLoadingPreview] = useState(false)
+
+  // Tab mapping state
+  const [selectedTab, setSelectedTab] = useState<string | null>(null)
+  const [completedMappings, setCompletedMappings] = useState<TabMapping[]>([])
+
+  const handleSelectSheet = async (sheet: GoogleSheet) => {
+    setSelectedSheet(sheet)
+    setCurrentStep('select-tab')
+    setIsLoadingPreview(true)
+
+    try {
+      const response = await fetch(`/api/sheets/preview?id=${sheet.id}`)
+      const data = await response.json()
+
+      if (response.ok) {
+        setSheetPreview(data.preview)
+      }
+    } catch (error) {
+      console.error('Error loading preview:', error)
+    } finally {
+      setIsLoadingPreview(false)
+    }
   }
 
-  const handleBack = () => {
+  const handleReset = () => {
     setCurrentStep('overview')
+    setSelectedSheet(null)
+    setSheetPreview(null)
+    setSelectedTab(null)
+    setCompletedMappings([])
+  }
+
+  const handleSelectTab = (tabName: string) => {
+    setSelectedTab(tabName)
+    setCurrentStep('map-tab')
+  }
+
+  const handleMappingComplete = (mapping: Omit<TabMapping, 'tabName'>) => {
+    const newMapping: TabMapping = {
+      tabName: selectedTab!,
+      ...mapping,
+    }
+    setCompletedMappings([...completedMappings, newMapping])
+    setSelectedTab(null)
+    setCurrentStep('select-tab')
+  }
+
+  const handleFinish = () => {
+    setCurrentStep('review')
   }
 
   return (
@@ -49,79 +142,141 @@ export default function DataEnrichmentPage() {
         description="Connect data sources and map fields to your master tables"
       >
         {currentStep !== 'overview' && (
-          <Button variant="outline" onClick={handleBack}>
-            Back to Overview
+          <Button variant="outline" onClick={handleReset}>
+            Start Over
           </Button>
         )}
       </PageHeader>
 
       <div className="p-8">
         <AnimatePresence mode="wait">
-          {currentStep === 'overview' ? (
-            <OverviewView key="overview" onStartWizard={handleStartWizard} />
-          ) : (
-            <WizardView
-              key="wizard"
-              currentStep={currentStep}
-              onStepChange={setCurrentStep}
+          {currentStep === 'overview' && (
+            <OverviewView
+              key="overview"
+              onSearchSheets={() => setShowSearchModal(true)}
+            />
+          )}
+
+          {currentStep === 'select-tab' && selectedSheet && (
+            <TabSelectionView
+              key="select-tab"
+              sheet={selectedSheet}
+              sheetPreview={sheetPreview}
+              isLoading={isLoadingPreview}
+              completedMappings={completedMappings}
+              onSelectTab={handleSelectTab}
+              onSearchAgain={() => setShowSearchModal(true)}
+              onFinish={handleFinish}
+              onBack={handleReset}
+            />
+          )}
+
+          {currentStep === 'map-tab' && selectedSheet && selectedTab && (
+            <motion.div
+              key="map-tab"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.3, ease: easeOut }}
+            >
+              <SmartMapper
+                spreadsheetId={selectedSheet.id}
+                tabName={selectedTab}
+                onComplete={handleMappingComplete}
+                onBack={() => {
+                  setSelectedTab(null)
+                  setCurrentStep('select-tab')
+                }}
+              />
+            </motion.div>
+          )}
+
+          {currentStep === 'review' && (
+            <ReviewView
+              key="review"
+              completedMappings={completedMappings}
+              onBack={() => setCurrentStep('select-tab')}
+              onCommit={() => setCurrentStep('complete')}
+            />
+          )}
+
+          {currentStep === 'complete' && (
+            <CompleteView
+              key="complete"
+              completedMappings={completedMappings}
+              onDone={handleReset}
             />
           )}
         </AnimatePresence>
       </div>
+
+      <SheetSearchModal
+        open={showSearchModal}
+        onOpenChange={setShowSearchModal}
+        onSelectSheet={handleSelectSheet}
+      />
     </div>
   )
 }
 
-function OverviewView({ onStartWizard }: { onStartWizard: () => void }) {
+// ============ OVERVIEW VIEW ============
+interface TableStats {
+  partners: { count: number; fields: string[] }
+  staff: { count: number; fields: string[] }
+}
+
+function OverviewView({ onSearchSheets }: { onSearchSheets: () => void }) {
+  const [stats, setStats] = useState<TableStats | null>(null)
+  const [isLoadingStats, setIsLoadingStats] = useState(true)
+
+  useEffect(() => {
+    async function fetchStats() {
+      try {
+        const response = await fetch('/api/stats/tables')
+        if (response.ok) {
+          const data = await response.json()
+          setStats(data)
+        }
+      } catch (error) {
+        console.error('Error fetching stats:', error)
+      } finally {
+        setIsLoadingStats(false)
+      }
+    }
+    fetchStats()
+  }, [])
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
-      transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
+      transition={{ duration: 0.3, ease: easeOut }}
       className="space-y-8"
     >
-      {/* Empty State / Getting Started */}
       <Card className="border-dashed">
         <CardContent className="flex flex-col items-center justify-center py-16">
           <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-orange-500/10 mb-6">
             <Database className="h-8 w-8 text-orange-500" />
           </div>
-          <h2 className="text-xl font-semibold mb-2">No data sources connected</h2>
+          <h2 className="text-xl font-semibold mb-2">Start Data Enrichment</h2>
           <p className="text-muted-foreground text-center max-w-md mb-6">
-            Connect your Google Sheets, forms, or other data sources to begin mapping
-            fields to your Partner and Staff tables.
+            Connect a Google Sheet and map its columns to your Partner and Staff tables.
           </p>
-          <Button onClick={onStartWizard} className="gap-2">
-            <Plus className="h-4 w-4" />
-            Add Data Source
+          <Button onClick={onSearchSheets} className="gap-2">
+            <Search className="h-4 w-4" />
+            Search Google Sheets
           </Button>
         </CardContent>
       </Card>
 
-      {/* How it Works */}
       <div className="space-y-4">
-        <h3 className="text-lg font-semibold">How Data Enrichment Works</h3>
+        <h3 className="text-lg font-semibold">How It Works</h3>
         <div className="grid gap-4 md:grid-cols-3">
           {[
-            {
-              step: 1,
-              title: 'Connect Sources',
-              description: 'Link your Google Sheets, forms, or APIs containing partner and staff data.',
-              icon: FileSpreadsheet,
-            },
-            {
-              step: 2,
-              title: 'Map Fields',
-              description: 'Walk through each field and map it to the right table and column.',
-              icon: Settings,
-            },
-            {
-              step: 3,
-              title: 'Review & Commit',
-              description: 'Preview changes in a staging area before committing to your master tables.',
-              icon: CheckCircle2,
-            },
+            { step: 1, title: 'Select a Tab', description: 'Choose a tab from your spreadsheet to map.', icon: Table },
+            { step: 2, title: 'Map Fields', description: 'Identify the primary key and map columns to fields.', icon: Settings },
+            { step: 3, title: 'Review & Import', description: 'Preview your data and import to Sophie Hub.', icon: CheckCircle2 },
           ].map((item) => {
             const Icon = item.icon
             return (
@@ -144,7 +299,6 @@ function OverviewView({ onStartWizard }: { onStartWizard: () => void }) {
         </div>
       </div>
 
-      {/* Target Tables Info */}
       <div className="space-y-4">
         <h3 className="text-lg font-semibold">Your Master Tables</h3>
         <div className="grid gap-4 md:grid-cols-2">
@@ -155,22 +309,22 @@ function OverviewView({ onStartWizard }: { onStartWizard: () => void }) {
                   <div className="h-3 w-3 rounded-full bg-blue-500" />
                   Partners
                 </CardTitle>
-                <Badge variant="secondary">0 records</Badge>
+                <Badge variant="secondary">
+                  {isLoadingStats ? '...' : `${stats?.partners.count ?? 0} records`}
+                </Badge>
               </div>
             </CardHeader>
             <CardContent>
               <p className="text-sm text-muted-foreground mb-3">
-                Client brands you manage. The core entity for all partner-related data.
+                Client brands you manage. Identified by brand name.
               </p>
               <div className="flex flex-wrap gap-1.5">
-                {['brand_name', 'client_name', 'status', 'tier', 'base_fee'].map((field) => (
-                  <Badge key={field} variant="outline" className="text-xs font-mono">
-                    {field}
-                  </Badge>
+                {(stats?.partners.fields.slice(0, 5) ?? ['brand_name', 'client_name', 'status', 'tier', 'base_fee']).map((field) => (
+                  <Badge key={field} variant="outline" className="text-xs font-mono">{field}</Badge>
                 ))}
-                <Badge variant="outline" className="text-xs text-muted-foreground">
-                  +12 more
-                </Badge>
+                {stats && stats.partners.fields.length > 5 && (
+                  <Badge variant="outline" className="text-xs text-muted-foreground">+{stats.partners.fields.length - 5} more</Badge>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -182,22 +336,22 @@ function OverviewView({ onStartWizard }: { onStartWizard: () => void }) {
                   <div className="h-3 w-3 rounded-full bg-green-500" />
                   Staff
                 </CardTitle>
-                <Badge variant="secondary">0 records</Badge>
+                <Badge variant="secondary">
+                  {isLoadingStats ? '...' : `${stats?.staff.count ?? 0} records`}
+                </Badge>
               </div>
             </CardHeader>
             <CardContent>
               <p className="text-sm text-muted-foreground mb-3">
-                Team members at Sophie Society. Source of truth for all staff data.
+                Team members. Identified by full name or email.
               </p>
               <div className="flex flex-wrap gap-1.5">
-                {['full_name', 'email', 'role', 'department', 'status'].map((field) => (
-                  <Badge key={field} variant="outline" className="text-xs font-mono">
-                    {field}
-                  </Badge>
+                {(stats?.staff.fields.slice(0, 5) ?? ['full_name', 'email', 'role', 'department', 'status']).map((field) => (
+                  <Badge key={field} variant="outline" className="text-xs font-mono">{field}</Badge>
                 ))}
-                <Badge variant="outline" className="text-xs text-muted-foreground">
-                  +10 more
-                </Badge>
+                {stats && stats.staff.fields.length > 5 && (
+                  <Badge variant="outline" className="text-xs text-muted-foreground">+{stats.staff.fields.length - 5} more</Badge>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -207,108 +361,394 @@ function OverviewView({ onStartWizard }: { onStartWizard: () => void }) {
   )
 }
 
-function WizardView({
-  currentStep,
-  onStepChange,
+// ============ TAB SELECTION VIEW ============
+function TabSelectionView({
+  sheet,
+  sheetPreview,
+  isLoading,
+  completedMappings,
+  onSelectTab,
+  onSearchAgain,
+  onFinish,
+  onBack,
 }: {
-  currentStep: WizardStep
-  onStepChange: (step: WizardStep) => void
+  sheet: GoogleSheet
+  sheetPreview: SheetPreview | null
+  isLoading: boolean
+  completedMappings: TabMapping[]
+  onSelectTab: (tabName: string) => void
+  onSearchAgain: () => void
+  onFinish: () => void
+  onBack: () => void
 }) {
-  const currentStepIndex = steps.findIndex((s) => s.id === currentStep)
+  const mappedTabs = new Set(completedMappings.map(m => m.tabName))
+  const [focusedIndex, setFocusedIndex] = useState(0)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const hasInteracted = useRef(false)
+
+  // Get available (unmapped) tabs
+  const availableTabs = sheetPreview?.tabs.filter(t => !mappedTabs.has(t.title)) || []
+
+  // Auto-focus container for keyboard nav
+  useEffect(() => {
+    if (containerRef.current && availableTabs.length > 0) {
+      containerRef.current.focus()
+    }
+  }, [availableTabs.length])
+
+  // Scroll focused item into view (only after user interaction)
+  useEffect(() => {
+    if (!hasInteracted.current) return
+    const focused = containerRef.current?.children[focusedIndex] as HTMLElement
+    focused?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  }, [focusedIndex])
+
+  // Keyboard navigation
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (!availableTabs.length) return
+
+    switch (e.key) {
+      case 'ArrowDown':
+      case 'j':
+        e.preventDefault()
+        hasInteracted.current = true
+        setFocusedIndex(prev => Math.min(prev + 1, availableTabs.length - 1))
+        break
+      case 'ArrowUp':
+      case 'k':
+        e.preventDefault()
+        hasInteracted.current = true
+        setFocusedIndex(prev => Math.max(prev - 1, 0))
+        break
+      case 'Enter':
+      case ' ':
+        e.preventDefault()
+        if (availableTabs[focusedIndex]) {
+          onSelectTab(availableTabs[focusedIndex].title)
+        }
+        break
+    }
+  }
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
-      transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
-      className="space-y-8"
+      transition={{ duration: 0.3, ease: easeOut }}
+      className="space-y-6"
     >
-      {/* Step Indicator */}
-      <div className="flex items-center justify-center">
-        <div className="flex items-center gap-2">
-          {steps.map((step, index) => {
-            const isActive = step.id === currentStep
-            const isCompleted = index < currentStepIndex
-
-            return (
-              <div key={step.id} className="flex items-center">
-                <button
-                  onClick={() => isCompleted && onStepChange(step.id as WizardStep)}
-                  disabled={!isCompleted}
-                  className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-all duration-200 ${
-                    isActive
-                      ? 'bg-primary text-primary-foreground'
-                      : isCompleted
-                      ? 'bg-green-500/10 text-green-600 hover:bg-green-500/20'
-                      : 'bg-muted text-muted-foreground'
-                  }`}
-                >
-                  {isCompleted ? (
-                    <CheckCircle2 className="h-4 w-4" />
-                  ) : isActive ? (
-                    <Circle className="h-4 w-4 fill-current" />
-                  ) : (
-                    <Circle className="h-4 w-4" />
-                  )}
-                  {step.label}
-                </button>
-                {index < steps.length - 1 && (
-                  <div className={`mx-2 h-px w-8 ${
-                    index < currentStepIndex ? 'bg-green-500' : 'bg-border'
-                  }`} />
-                )}
-              </div>
-            )
-          })}
-        </div>
-      </div>
-
-      {/* Step Content */}
-      <Card className="max-w-2xl mx-auto">
+      <Card className="max-w-4xl mx-auto">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-orange-500" />
-            Connect Data Source
+            <FileSpreadsheet className="h-5 w-5 text-green-600" />
+            {sheet.name}
           </CardTitle>
           <CardDescription>
-            Enter the URL of your Google Sheet to begin
+            Select a tab to begin mapping its columns.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Google Sheet URL</label>
-            <div className="flex gap-2">
-              <input
-                type="url"
-                placeholder="https://docs.google.com/spreadsheets/d/..."
-                className="flex-1 rounded-lg border border-input bg-background px-4 py-2.5 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              />
-              <Button className="shrink-0">
-                Connect
+          {/* Completed Mappings */}
+          {completedMappings.length > 0 && (
+            <div className="space-y-3">
+              <h4 className="text-sm font-medium text-green-600 flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4" />
+                Mapped Tabs ({completedMappings.length})
+              </h4>
+              <div className="grid gap-2">
+                {completedMappings.map((mapping) => {
+                  const entityLabel = mapping.primaryEntity === 'partners' ? 'Partners' : mapping.primaryEntity === 'staff' ? 'Staff' : 'ASINs'
+                  const entityColor = mapping.primaryEntity === 'partners' ? 'blue' : mapping.primaryEntity === 'staff' ? 'green' : 'orange'
+                  const mappedCount = mapping.columns.filter(c => c.targetField && c.category !== 'skip').length
+
+                  return (
+                    <div
+                      key={mapping.tabName}
+                      className="flex items-center gap-3 p-3 rounded-lg bg-green-500/5 border border-green-500/20"
+                    >
+                      <CheckCircle2 className="h-5 w-5 text-green-500" />
+                      <div className="flex-1">
+                        <p className="font-medium">{mapping.tabName}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {entityLabel} · {mappedCount} fields mapped
+                        </p>
+                      </div>
+                      <Badge variant="outline" className={`text-${entityColor}-600`}>
+                        {entityLabel}
+                      </Badge>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Available Tabs */}
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : sheetPreview ? (
+            <div className="space-y-3">
+              <h4 className="text-sm font-medium">
+                Available Tabs ({availableTabs.length} remaining)
+              </h4>
+              <div
+                ref={containerRef}
+                tabIndex={0}
+                onKeyDown={handleKeyDown}
+                className="max-h-[350px] overflow-y-auto scrollbar-hide space-y-2 focus:outline-none"
+              >
+                {availableTabs.map((tab, index) => {
+                  const isFocused = index === focusedIndex
+
+                  return (
+                    <button
+                      key={tab.sheetId}
+                      onClick={() => onSelectTab(tab.title)}
+                      className={`w-full flex items-center gap-3 p-4 rounded-lg border text-left transition-all ${
+                        isFocused
+                          ? 'border-primary bg-accent/50 ring-2 ring-primary/20'
+                          : 'hover:border-primary/50 hover:bg-accent/50'
+                      }`}
+                    >
+                      <Table className="h-5 w-5 text-muted-foreground" />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium truncate">{tab.title}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {tab.rowCount.toLocaleString()} rows · {tab.columnCount} columns
+                        </p>
+                      </div>
+                      <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          ) : null}
+
+          <div className="flex items-center justify-between pt-4 border-t">
+            <div className="flex items-center gap-2">
+              <Button variant="outline" onClick={onBack}>
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Back
+              </Button>
+              <Button variant="outline" onClick={onSearchAgain}>
+                Different Sheet
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Make sure the sheet is shared with your service account or set to &quot;Anyone with the link can view&quot;
-            </p>
+            {completedMappings.length > 0 && (
+              <Button onClick={onFinish} className="gap-2">
+                Review & Import
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    </motion.div>
+  )
+}
+
+// ============ REVIEW VIEW ============
+interface ColumnClassification {
+  sourceIndex: number
+  sourceColumn: string
+  category: 'partner' | 'staff' | 'asin' | 'weekly' | 'skip' | null
+  targetField: string | null
+  authority: 'source_of_truth' | 'reference'
+  isKey: boolean
+}
+
+interface TabMapping {
+  tabName: string
+  headerRow: number
+  primaryEntity: 'partners' | 'staff' | 'asins'
+  columns: ColumnClassification[]
+}
+
+function ReviewView({
+  completedMappings,
+  onBack,
+  onCommit,
+}: {
+  completedMappings: TabMapping[]
+  onBack: () => void
+  onCommit: () => void
+}) {
+  const partnerMappings = completedMappings.filter(m => m.primaryEntity === 'partners')
+  const staffMappings = completedMappings.filter(m => m.primaryEntity === 'staff')
+  const asinMappings = completedMappings.filter(m => m.primaryEntity === 'asins')
+
+  const countMappedFields = (mapping: TabMapping) =>
+    mapping.columns.filter(c => c.targetField && c.category !== 'skip').length
+
+  const totalPartnerFields = partnerMappings.reduce((sum, m) => sum + countMappedFields(m), 0)
+  const totalStaffFields = staffMappings.reduce((sum, m) => sum + countMappedFields(m), 0)
+  const totalAsinFields = asinMappings.reduce((sum, m) => sum + countMappedFields(m), 0)
+
+  const getEntityColor = (entity: string) => {
+    switch (entity) {
+      case 'partners': return 'blue'
+      case 'staff': return 'green'
+      case 'asins': return 'orange'
+      default: return 'gray'
+    }
+  }
+
+  const getEntityLabel = (entity: string) => {
+    switch (entity) {
+      case 'partners': return 'Partners'
+      case 'staff': return 'Staff'
+      case 'asins': return 'ASINs'
+      default: return entity
+    }
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      transition={{ duration: 0.3, ease: easeOut }}
+      className="space-y-6"
+    >
+      <Card className="max-w-4xl mx-auto">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <CheckCircle2 className="h-5 w-5 text-orange-500" />
+            Review Your Mappings
+          </CardTitle>
+          <CardDescription>
+            You've configured {completedMappings.length} tab{completedMappings.length > 1 ? 's' : ''} for import
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {/* Summary Stats */}
+          <div className="grid grid-cols-3 gap-4">
+            <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
+              <p className="text-2xl font-bold text-blue-600">{partnerMappings.length}</p>
+              <p className="text-sm text-muted-foreground">Partner tabs · {totalPartnerFields} fields</p>
+            </div>
+            <div className="p-4 rounded-lg bg-green-500/10 border border-green-500/20">
+              <p className="text-2xl font-bold text-green-600">{staffMappings.length}</p>
+              <p className="text-sm text-muted-foreground">Staff tabs · {totalStaffFields} fields</p>
+            </div>
+            <div className="p-4 rounded-lg bg-orange-500/10 border border-orange-500/20">
+              <p className="text-2xl font-bold text-orange-600">{asinMappings.length}</p>
+              <p className="text-sm text-muted-foreground">ASIN tabs · {totalAsinFields} fields</p>
+            </div>
           </div>
 
-          <div className="rounded-lg border border-dashed border-border p-8 text-center">
-            <FileSpreadsheet className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
-            <p className="text-sm text-muted-foreground">
-              Paste a Google Sheet URL above to preview its contents
-            </p>
+          {/* Mapping Details */}
+          <div className="space-y-4">
+            {completedMappings.map((mapping) => {
+              const color = getEntityColor(mapping.primaryEntity)
+              const keyColumn = mapping.columns.find(c => c.isKey)
+              const mappedColumns = mapping.columns.filter(c => c.targetField && c.category !== 'skip')
+
+              return (
+                <div key={mapping.tabName} className="rounded-lg border p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Badge className={`bg-${color}-500`}>
+                      {getEntityLabel(mapping.primaryEntity)}
+                    </Badge>
+                    <span className="font-medium">{mapping.tabName}</span>
+                    {keyColumn && (
+                      <span className="text-xs text-muted-foreground">
+                        (Key: {keyColumn.sourceColumn})
+                      </span>
+                    )}
+                  </div>
+                  <div className="grid gap-1 text-sm">
+                    {mappedColumns.map((col) => (
+                      <div key={col.sourceIndex} className="flex items-center gap-2 text-muted-foreground">
+                        <span className="font-mono text-xs">{col.sourceColumn}</span>
+                        <ArrowRight className="h-3 w-3" />
+                        <span className={`font-mono text-xs text-${color}-600`}>
+                          {col.targetField}
+                        </span>
+                        {col.authority === 'reference' && (
+                          <Badge variant="outline" className="text-[10px] px-1 py-0">ref</Badge>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
           </div>
 
           <div className="flex items-center justify-between pt-4 border-t">
-            <Button variant="outline" onClick={() => onStepChange('overview')}>
-              Cancel
+            <Button variant="outline" onClick={onBack} className="gap-2">
+              <ArrowLeft className="h-4 w-4" />
+              Add More Tabs
             </Button>
-            <Button disabled className="gap-2">
-              Continue
-              <ArrowRight className="h-4 w-4" />
+            <Button onClick={onCommit} className="gap-2">
+              <Sparkles className="h-4 w-4" />
+              Import Data
             </Button>
           </div>
+        </CardContent>
+      </Card>
+    </motion.div>
+  )
+}
+
+// ============ COMPLETE VIEW ============
+function CompleteView({
+  completedMappings,
+  onDone,
+}: {
+  completedMappings: TabMapping[]
+  onDone: () => void
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      transition={{ duration: 0.3, ease: easeOut }}
+      className="space-y-6"
+    >
+      <Card className="max-w-2xl mx-auto">
+        <CardContent className="flex flex-col items-center justify-center py-16">
+          <motion.div
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            transition={{ duration: 0.4, ease: easeOut, delay: 0.1 }}
+            className="flex h-20 w-20 items-center justify-center rounded-2xl bg-green-500/10 mb-6"
+          >
+            <CheckCircle2 className="h-10 w-10 text-green-500" />
+          </motion.div>
+          <motion.h2
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, delay: 0.2 }}
+            className="text-xl font-semibold mb-2"
+          >
+            Mappings Configured!
+          </motion.h2>
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.3, delay: 0.3 }}
+            className="text-muted-foreground text-center max-w-md mb-6"
+          >
+            Your {completedMappings.length} tab mapping{completedMappings.length > 1 ? 's have' : ' has'} been saved.
+            The actual data import will be built in the next phase.
+          </motion.p>
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, delay: 0.4 }}
+          >
+            <Button onClick={onDone} className="gap-2">
+              Done
+              <Check className="h-4 w-4" />
+            </Button>
+          </motion.div>
         </CardContent>
       </Card>
     </motion.div>

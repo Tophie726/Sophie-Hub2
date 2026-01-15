@@ -174,9 +174,13 @@ The heart of this rebuild. A visual interface that:
 1. Connects to data sources (Google Sheets first, forms later)
 2. Discovers fields/columns automatically
 3. Guides admin through classifying each field
-4. Maps fields to target tables
+4. Maps fields to target tables with **authority levels**:
+   - **Source of Truth** (⭐): This sheet is authoritative for this field
+   - **Reference** (📋): Read-only lookup, doesn't update master record
 5. Stages changes for review before committing
 6. Tracks lineage (where did this value come from?)
+
+**Two-Layer Data System**: Sheets feed database initially, but individual fields can be migrated to "app-native" over time as adoption grows. See `/src/app/(dashboard)/admin/data-enrichment/CLAUDE.md` for full details.
 
 ### Partner Management
 - View all partners with search/filter
