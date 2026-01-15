@@ -109,6 +109,8 @@ interface SmartMapperProps {
     primaryEntity: EntityType
   }) => void
   onBack: () => void
+  /** When true, renders in a more compact mode for embedding in browser shell */
+  embedded?: boolean
 }
 
 // Field definitions per entity type
@@ -204,7 +206,7 @@ const CATEGORY_CONFIG = {
   },
 }
 
-export function SmartMapper({ spreadsheetId, sheetName, tabName, onComplete, onBack }: SmartMapperProps) {
+export function SmartMapper({ spreadsheetId, sheetName, tabName, onComplete, onBack, embedded = false }: SmartMapperProps) {
   // Simplified: just preview → classify → map
   const [phase, setPhase] = useState<'preview' | 'classify' | 'map'>('preview')
   const [isLoading, setIsLoading] = useState(true)
@@ -393,6 +395,8 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, onComplete, onB
           onHeaderRowChange={setHeaderRow}
           onConfirm={() => setPhase('classify')}
           onBack={onBack}
+          embedded={embedded}
+          tabName={tabName}
         />
       )}
       {phase === 'classify' && (
@@ -409,6 +413,7 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, onComplete, onB
           onComputedConfigChange={handleComputedConfigChange}
           onConfirm={() => setPhase('map')}
           onBack={() => setPhase('preview')}
+          embedded={embedded}
         />
       )}
       {phase === 'map' && (
@@ -421,6 +426,7 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, onComplete, onB
           onAuthorityChange={handleAuthorityChange}
           onConfirm={handleComplete}
           onBack={() => setPhase('classify')}
+          embedded={embedded}
         />
       )}
     </AnimatePresence>
@@ -434,12 +440,16 @@ function PreviewPhase({
   onHeaderRowChange,
   onConfirm,
   onBack,
+  embedded = false,
+  tabName,
 }: {
   rawData: TabRawData
   headerRow: number
   onHeaderRowChange: (row: number) => void
   onConfirm: () => void
   onBack: () => void
+  embedded?: boolean
+  tabName?: string
 }) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -489,16 +499,16 @@ function PreviewPhase({
         onKeyDown={handleKeyDown}
         className="focus:outline-none"
       >
-      <Card className="max-w-5xl mx-auto">
-        <CardHeader>
+      <Card className={embedded ? '' : 'max-w-5xl mx-auto'}>
+        <CardHeader className={embedded ? 'pb-4' : ''}>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="flex items-center gap-2">
-                <Sparkles className="h-5 w-5 text-orange-500" />
-                We found your data!
+              <CardTitle className={`flex items-center gap-2 ${embedded ? 'text-base' : ''}`}>
+                <Sparkles className={`${embedded ? 'h-4 w-4' : 'h-5 w-5'} text-orange-500`} />
+                {embedded ? `Preview: ${tabName}` : 'We found your data!'}
               </CardTitle>
               <CardDescription>
-                Confirm where your column headers are. Use arrow keys to navigate.
+                {embedded ? 'Confirm header row, then continue to classify columns.' : 'Confirm where your column headers are. Use arrow keys to navigate.'}
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">
@@ -618,6 +628,7 @@ function ClassifyPhase({
   onComputedConfigChange,
   onConfirm,
   onBack,
+  embedded = false,
 }: {
   sheetName: string
   tabName: string
@@ -630,6 +641,7 @@ function ClassifyPhase({
   onComputedConfigChange: (index: number, config: ComputedFieldConfig) => void
   onConfirm: () => void
   onBack: () => void
+  embedded?: boolean
 }) {
   // State for computed field config modal
   const [configureComputedIndex, setConfigureComputedIndex] = useState<number | null>(null)
@@ -869,24 +881,26 @@ function ClassifyPhase({
         onKeyDown={handleKeyDown}
         className="focus:outline-none"
       >
-      <Card className="max-w-4xl mx-auto">
-        <CardHeader>
-          {/* Breadcrumb */}
-          <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
-            <FileText className="h-3.5 w-3.5" />
-            <span className="truncate max-w-[200px]">{sheetName}</span>
-            <ChevronRight className="h-3 w-3 flex-shrink-0" />
-            <span className="font-medium text-foreground truncate">{tabName}</span>
-          </div>
+      <Card className={embedded ? '' : 'max-w-4xl mx-auto'}>
+        <CardHeader className={embedded ? 'pb-3' : ''}>
+          {/* Breadcrumb - hide in embedded mode since tabs show context */}
+          {!embedded && (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+              <FileText className="h-3.5 w-3.5" />
+              <span className="truncate max-w-[200px]">{sheetName}</span>
+              <ChevronRight className="h-3 w-3 flex-shrink-0" />
+              <span className="font-medium text-foreground truncate">{tabName}</span>
+            </div>
+          )}
 
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="flex items-center gap-2">
-                <Table className="h-5 w-5 text-orange-500" />
-                What's in each column?
+              <CardTitle className={`flex items-center gap-2 ${embedded ? 'text-base' : ''}`}>
+                <Table className={`${embedded ? 'h-4 w-4' : 'h-5 w-5'} text-orange-500`} />
+                {embedded ? 'Classify Columns' : "What's in each column?"}
               </CardTitle>
               <CardDescription>
-                Classify columns and mark which one is the <strong>key identifier</strong> for each entity type.
+                {embedded ? 'Set keys and categories for each column.' : <>Classify columns and mark which one is the <strong>key identifier</strong> for each entity type.</>}
               </CardDescription>
             </div>
             <div className="text-right relative">
@@ -2037,6 +2051,7 @@ function MapPhase({
   onAuthorityChange,
   onConfirm,
   onBack,
+  embedded = false,
 }: {
   rawData: TabRawData
   headerRow: number
@@ -2045,6 +2060,7 @@ function MapPhase({
   onAuthorityChange: (index: number, authority: SourceAuthority) => void
   onConfirm: () => void
   onBack: () => void
+  embedded?: boolean
 }) {
   const sampleRows = rawData.rows.slice(headerRow + 1, headerRow + 4)
 
@@ -2124,14 +2140,14 @@ function MapPhase({
 
   return (
     <motion.div {...fadeInUp} className="space-y-6">
-      <Card className="max-w-5xl mx-auto">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Link2 className="h-5 w-5 text-orange-500" />
-            Map to database fields
+      <Card className={embedded ? '' : 'max-w-5xl mx-auto'}>
+        <CardHeader className={embedded ? 'pb-3' : ''}>
+          <CardTitle className={`flex items-center gap-2 ${embedded ? 'text-base' : ''}`}>
+            <Link2 className={`${embedded ? 'h-4 w-4' : 'h-5 w-5'} text-orange-500`} />
+            {embedded ? 'Map Fields' : 'Map to database fields'}
           </CardTitle>
           <CardDescription>
-            Connect your classified columns to specific fields. Set each as Source of Truth or Reference.
+            {embedded ? 'Connect columns to database fields.' : 'Connect your classified columns to specific fields. Set each as Source of Truth or Reference.'}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">

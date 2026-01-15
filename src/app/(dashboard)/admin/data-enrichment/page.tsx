@@ -6,6 +6,7 @@ import { useSession } from 'next-auth/react'
 import { PageHeader } from '@/components/layout/page-header'
 import { SheetSearchModal } from '@/components/data-enrichment/sheet-search-modal'
 import { SmartMapper } from '@/components/data-enrichment/smart-mapper'
+import { CategoryHub, SourceBrowser } from '@/components/data-enrichment/browser'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -88,11 +89,17 @@ interface TabMapping {
 }
 
 type WizardStep = 'overview' | 'select-sheet' | 'select-tab' | 'map-tab' | 'review' | 'complete'
+type DataBrowserView = 'hub' | 'sheets' | 'forms' | 'docs'
 
 const easeOut: [number, number, number, number] = [0.22, 1, 0.36, 1]
 
 export default function DataEnrichmentPage() {
   const { data: session } = useSession()
+
+  // NEW: Data Browser view state
+  const [browserView, setBrowserView] = useState<DataBrowserView>('hub')
+
+  // Legacy wizard state (kept for backward compatibility during migration)
   const [currentStep, setCurrentStep] = useState<WizardStep>('overview')
   const [showSearchModal, setShowSearchModal] = useState(false)
 
@@ -234,89 +241,83 @@ export default function DataEnrichmentPage() {
     }
   }
 
+  // Handle category selection from the hub
+  const handleSelectCategory = (category: 'sheets' | 'forms' | 'docs') => {
+    setBrowserView(category)
+  }
+
+  // NEW: Data Browser UI (primary)
   return (
     <div className="min-h-screen">
-      <PageHeader
-        title="Data Enrichment"
-        description="Connect data sources and map fields to your master tables"
-      >
-        {currentStep !== 'overview' && (
-          <Button variant="outline" onClick={handleReset}>
-            Start Over
-          </Button>
-        )}
-      </PageHeader>
+      {/* Minimal header for browser views - hide description to save space */}
+      {browserView !== 'hub' ? (
+        <div className="border-b" /> // Just a divider, no header content
+      ) : (
+        <PageHeader
+          title="Data Enrichment"
+          description="Connect and map your data sources to Sophie Hub"
+        />
+      )}
 
-      <div className="p-8">
+      <div className={browserView === 'hub' ? 'p-8' : ''}>
         <AnimatePresence mode="wait">
-          {currentStep === 'overview' && (
-            <OverviewView
-              key="overview"
-              onSearchSheets={() => setShowSearchModal(true)}
-            />
-          )}
-
-          {currentStep === 'select-tab' && selectedSheet && (
-            <TabSelectionView
-              key="select-tab"
-              sheet={selectedSheet}
-              sheetPreview={sheetPreview}
-              isLoading={isLoadingPreview}
-              completedMappings={completedMappings}
-              onSelectTab={handleSelectTab}
-              onSearchAgain={() => setShowSearchModal(true)}
-              onFinish={handleFinish}
-              onBack={handleReset}
-            />
-          )}
-
-          {currentStep === 'map-tab' && selectedSheet && selectedTab && (
+          {/* Hub View - Category selection */}
+          {browserView === 'hub' && (
             <motion.div
-              key="map-tab"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.3, ease: easeOut }}
+              key="hub"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
             >
-              <SmartMapper
-                spreadsheetId={selectedSheet.id}
-                sheetName={selectedSheet.name}
-                tabName={selectedTab}
-                onComplete={handleMappingComplete}
-                onBack={() => {
-                  setSelectedTab(null)
-                  setCurrentStep('select-tab')
-                }}
-              />
+              <CategoryHub onSelectCategory={handleSelectCategory} />
             </motion.div>
           )}
 
-          {currentStep === 'review' && (
-            <ReviewView
-              key="review"
-              completedMappings={completedMappings}
-              onBack={() => setCurrentStep('select-tab')}
-              onCommit={handleCommit}
-              isSaving={isSaving}
-              saveError={saveError}
-            />
+          {/* Sheets Browser View */}
+          {browserView === 'sheets' && (
+            <motion.div
+              key="sheets"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            >
+              <SourceBrowser onBack={() => setBrowserView('hub')} />
+            </motion.div>
           )}
 
-          {currentStep === 'complete' && (
-            <CompleteView
-              key="complete"
-              completedMappings={completedMappings}
-              onDone={handleReset}
-            />
+          {/* Forms View - Coming Soon */}
+          {browserView === 'forms' && (
+            <motion.div
+              key="forms"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="p-8 text-center"
+            >
+              <p className="text-muted-foreground">Forms integration coming soon</p>
+              <Button variant="outline" onClick={() => setBrowserView('hub')} className="mt-4">
+                Back to Hub
+              </Button>
+            </motion.div>
+          )}
+
+          {/* Docs View - Coming Soon */}
+          {browserView === 'docs' && (
+            <motion.div
+              key="docs"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="p-8 text-center"
+            >
+              <p className="text-muted-foreground">Documents integration coming soon</p>
+              <Button variant="outline" onClick={() => setBrowserView('hub')} className="mt-4">
+                Back to Hub
+              </Button>
+            </motion.div>
           )}
         </AnimatePresence>
       </div>
-
-      <SheetSearchModal
-        open={showSearchModal}
-        onOpenChange={setShowSearchModal}
-        onSelectSheet={handleSelectSheet}
-      />
     </div>
   )
 }
