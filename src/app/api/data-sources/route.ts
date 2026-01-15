@@ -7,6 +7,16 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
+export interface CategoryStats {
+  partner: number
+  staff: number
+  asin: number
+  weekly: number
+  computed: number
+  skip: number
+  unmapped: number
+}
+
 export interface DataSourceWithStats {
   id: string
   name: string
@@ -16,13 +26,16 @@ export interface DataSourceWithStats {
   created_at: string
   updated_at: string
   tabCount: number
+  totalColumns: number
   mappedFieldsCount: number
+  categoryStats: CategoryStats
   tabs: {
     id: string
     tab_name: string
     primary_entity: string
     header_row: number
     columnCount: number
+    categoryStats: CategoryStats
   }[]
 }
 
@@ -56,26 +69,75 @@ export async function GET() {
           return {
             ...source,
             tabCount: 0,
+            totalColumns: 0,
             mappedFieldsCount: 0,
+            categoryStats: { partner: 0, staff: 0, asin: 0, weekly: 0, computed: 0, skip: 0, unmapped: 0 },
             tabs: [],
           }
         }
 
-        // Get total column mappings across all tabs
+        // Get column mappings with category breakdown for each tab
+        let totalColumns = 0
         let mappedFieldsCount = 0
+        const sourceCategoryStats: CategoryStats = {
+          partner: 0,
+          staff: 0,
+          asin: 0,
+          weekly: 0,
+          computed: 0,
+          skip: 0,
+          unmapped: 0,
+        }
+
         const tabsWithCounts = await Promise.all(
           (tabs || []).map(async (tab) => {
-            const { count } = await supabase
+            // Get all column mappings for this tab with their categories
+            const { data: columns, error: columnsError } = await supabase
               .from('column_mappings')
-              .select('*', { count: 'exact', head: true })
+              .select('category')
               .eq('tab_mapping_id', tab.id)
 
-            const columnCount = count || 0
-            mappedFieldsCount += columnCount
+            if (columnsError) {
+              console.error('Error fetching columns:', columnsError)
+              return {
+                ...tab,
+                columnCount: 0,
+                categoryStats: { partner: 0, staff: 0, asin: 0, weekly: 0, computed: 0, skip: 0, unmapped: 0 },
+              }
+            }
+
+            // Count categories for this tab
+            const tabCategoryStats: CategoryStats = {
+              partner: 0,
+              staff: 0,
+              asin: 0,
+              weekly: 0,
+              computed: 0,
+              skip: 0,
+              unmapped: 0,
+            }
+
+            const columnCount = columns?.length || 0
+            totalColumns += columnCount
+
+            columns?.forEach((col) => {
+              const cat = col.category as keyof CategoryStats
+              if (cat && cat in tabCategoryStats) {
+                tabCategoryStats[cat]++
+                sourceCategoryStats[cat]++
+                if (cat !== 'skip') {
+                  mappedFieldsCount++
+                }
+              } else {
+                tabCategoryStats.unmapped++
+                sourceCategoryStats.unmapped++
+              }
+            })
 
             return {
               ...tab,
               columnCount,
+              categoryStats: tabCategoryStats,
             }
           })
         )
@@ -83,7 +145,9 @@ export async function GET() {
         return {
           ...source,
           tabCount: tabs?.length || 0,
+          totalColumns,
           mappedFieldsCount,
+          categoryStats: sourceCategoryStats,
           tabs: tabsWithCounts,
         }
       })
