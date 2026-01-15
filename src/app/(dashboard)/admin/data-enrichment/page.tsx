@@ -55,13 +55,29 @@ interface SheetPreview {
   }
 }
 
+interface ComputedFieldConfig {
+  computationType: 'formula' | 'aggregation' | 'lookup' | 'custom'
+  targetTable: 'partners' | 'staff' | 'asins'
+  targetField: string
+  displayName: string
+  description?: string
+  dependsOn?: string[]
+  formula?: string
+  sourceTable?: string
+  aggregation?: string
+  lookupSource?: string
+  matchField?: string
+  lookupField?: string
+}
+
 interface ColumnClassification {
   sourceIndex: number
   sourceColumn: string
-  category: 'partner' | 'staff' | 'asin' | 'weekly' | 'skip' | null
+  category: 'partner' | 'staff' | 'asin' | 'weekly' | 'computed' | 'skip' | null
   targetField: string | null
   authority: 'source_of_truth' | 'reference'
   isKey: boolean
+  computedConfig?: ComputedFieldConfig
 }
 
 interface TabMapping {
@@ -73,7 +89,7 @@ interface TabMapping {
 
 type WizardStep = 'overview' | 'select-sheet' | 'select-tab' | 'map-tab' | 'review' | 'complete'
 
-const easeOut = [0.22, 1, 0.36, 1]
+const easeOut: [number, number, number, number] = [0.22, 1, 0.36, 1]
 
 export default function DataEnrichmentPage() {
   const { data: session } = useSession()
@@ -133,6 +149,89 @@ export default function DataEnrichmentPage() {
 
   const handleFinish = () => {
     setCurrentStep('review')
+  }
+
+  const [isSaving, setIsSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+
+  const handleCommit = async () => {
+    if (!selectedSheet) return
+
+    setIsSaving(true)
+    setSaveError(null)
+
+    try {
+      // Save each tab mapping
+      for (const mapping of completedMappings) {
+        const response = await fetch('/api/mappings/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            dataSource: {
+              name: selectedSheet.name,
+              spreadsheet_id: selectedSheet.id,
+              spreadsheet_url: selectedSheet.url,
+            },
+            tabMapping: {
+              tab_name: mapping.tabName,
+              header_row: mapping.headerRow,
+              primary_entity: mapping.primaryEntity,
+            },
+            columnMappings: mapping.columns.map(col => ({
+              source_column: col.sourceColumn,
+              source_column_index: col.sourceIndex,
+              category: col.category || 'skip',
+              target_field: col.targetField,
+              authority: col.authority,
+              is_key: col.isKey,
+            })),
+            // Use default weekly pattern for any weekly columns
+            weeklyPattern: mapping.columns.some(c => c.category === 'weekly')
+              ? {
+                  pattern_name: 'Weekly Status Columns',
+                  match_config: {
+                    contains: ['weekly'],
+                    matches_date: true,
+                  },
+                }
+              : undefined,
+            // Include computed fields with their configuration
+            computedFields: mapping.columns
+              .filter(c => c.category === 'computed' && c.computedConfig)
+              .map(col => ({
+                source_column: col.sourceColumn,
+                source_column_index: col.sourceIndex,
+                target_table: col.computedConfig!.targetTable,
+                target_field: col.computedConfig!.targetField,
+                display_name: col.computedConfig!.displayName,
+                computation_type: col.computedConfig!.computationType,
+                config: {
+                  depends_on: col.computedConfig!.dependsOn,
+                  formula: col.computedConfig!.formula,
+                  source_table: col.computedConfig!.sourceTable,
+                  aggregation: col.computedConfig!.aggregation,
+                  lookup_source: col.computedConfig!.lookupSource,
+                  match_field: col.computedConfig!.matchField,
+                  lookup_field: col.computedConfig!.lookupField,
+                },
+                description: col.computedConfig!.description,
+              })),
+          }),
+        })
+
+        if (!response.ok) {
+          const data = await response.json()
+          throw new Error(data.error || 'Failed to save mapping')
+        }
+      }
+
+      setCurrentStep('complete')
+    } catch (error) {
+      console.error('Error saving mappings:', error)
+      setSaveError(error instanceof Error ? error.message : 'Failed to save mappings')
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   return (
@@ -196,7 +295,9 @@ export default function DataEnrichmentPage() {
               key="review"
               completedMappings={completedMappings}
               onBack={() => setCurrentStep('select-tab')}
-              onCommit={() => setCurrentStep('complete')}
+              onCommit={handleCommit}
+              isSaving={isSaving}
+              saveError={saveError}
             />
           )}
 
@@ -552,30 +653,20 @@ function TabSelectionView({
 }
 
 // ============ REVIEW VIEW ============
-interface ColumnClassification {
-  sourceIndex: number
-  sourceColumn: string
-  category: 'partner' | 'staff' | 'asin' | 'weekly' | 'skip' | null
-  targetField: string | null
-  authority: 'source_of_truth' | 'reference'
-  isKey: boolean
-}
-
-interface TabMapping {
-  tabName: string
-  headerRow: number
-  primaryEntity: 'partners' | 'staff' | 'asins'
-  columns: ColumnClassification[]
-}
+// Note: Using ColumnClassification and TabMapping interfaces defined at top of file
 
 function ReviewView({
   completedMappings,
   onBack,
   onCommit,
+  isSaving,
+  saveError,
 }: {
   completedMappings: TabMapping[]
   onBack: () => void
   onCommit: () => void
+  isSaving: boolean
+  saveError: string | null
 }) {
   const partnerMappings = completedMappings.filter(m => m.primaryEntity === 'partners')
   const staffMappings = completedMappings.filter(m => m.primaryEntity === 'staff')
@@ -680,14 +771,24 @@ function ReviewView({
             })}
           </div>
 
+          {saveError && (
+            <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-600 text-sm">
+              {saveError}
+            </div>
+          )}
+
           <div className="flex items-center justify-between pt-4 border-t">
-            <Button variant="outline" onClick={onBack} className="gap-2">
+            <Button variant="outline" onClick={onBack} disabled={isSaving} className="gap-2">
               <ArrowLeft className="h-4 w-4" />
               Add More Tabs
             </Button>
-            <Button onClick={onCommit} className="gap-2">
-              <Sparkles className="h-4 w-4" />
-              Import Data
+            <Button onClick={onCommit} disabled={isSaving} className="gap-2">
+              {isSaving ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="h-4 w-4" />
+              )}
+              {isSaving ? 'Saving...' : 'Save Mappings'}
             </Button>
           </div>
         </CardContent>
@@ -728,7 +829,7 @@ function CompleteView({
             transition={{ duration: 0.3, delay: 0.2 }}
             className="text-xl font-semibold mb-2"
           >
-            Mappings Configured!
+            Mappings Saved!
           </motion.h2>
           <motion.p
             initial={{ opacity: 0 }}
@@ -736,8 +837,8 @@ function CompleteView({
             transition={{ duration: 0.3, delay: 0.3 }}
             className="text-muted-foreground text-center max-w-md mb-6"
           >
-            Your {completedMappings.length} tab mapping{completedMappings.length > 1 ? 's have' : ' has'} been saved.
-            The actual data import will be built in the next phase.
+            Your {completedMappings.length} tab mapping{completedMappings.length > 1 ? 's have' : ' has'} been saved to the database.
+            Weekly columns will be automatically detected using pattern matching.
           </motion.p>
           <motion.div
             initial={{ opacity: 0, y: 10 }}

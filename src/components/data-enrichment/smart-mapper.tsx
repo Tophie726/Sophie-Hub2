@@ -33,6 +33,12 @@ import {
   CheckCircle2,
   Package,
   MoreHorizontal,
+  Calculator,
+  Database,
+  Search,
+  MessageSquare,
+  X,
+  ChevronRight,
 } from 'lucide-react'
 
 // ============ TYPES ============
@@ -43,7 +49,27 @@ interface TabRawData {
 }
 
 type EntityType = 'partners' | 'staff' | 'asins'
-type ColumnCategory = 'partner' | 'staff' | 'asin' | 'weekly' | 'skip' | null
+type ColumnCategory = 'partner' | 'staff' | 'asin' | 'weekly' | 'computed' | 'skip' | null
+type ComputationType = 'formula' | 'aggregation' | 'lookup' | 'custom'
+type EntityType_Computed = 'partners' | 'staff' | 'asins'
+
+interface ComputedFieldConfig {
+  computationType: ComputationType
+  targetTable: EntityType_Computed
+  targetField: string
+  displayName: string
+  description?: string
+  // For formulas
+  dependsOn?: string[]
+  formula?: string
+  // For aggregation
+  sourceTable?: string
+  aggregation?: string
+  // For lookup
+  lookupSource?: string
+  matchField?: string
+  lookupField?: string
+}
 type SourceAuthority = 'source_of_truth' | 'reference'
 
 interface ColumnClassification {
@@ -53,6 +79,7 @@ interface ColumnClassification {
   targetField: string | null
   authority: SourceAuthority
   isKey: boolean // This column is the identifier/key for its entity type
+  computedConfig?: ComputedFieldConfig // For computed fields
 }
 
 interface SmartMapperProps {
@@ -143,6 +170,13 @@ const CATEGORY_CONFIG = {
     bgClass: 'bg-purple-500/10 border-purple-500/30 text-purple-600',
     badgeClass: 'bg-purple-500',
   },
+  computed: {
+    label: 'Computed',
+    color: 'cyan',
+    icon: Calculator,
+    bgClass: 'bg-cyan-500/10 border-cyan-500/30 text-cyan-600',
+    badgeClass: 'bg-cyan-500',
+  },
   skip: {
     label: 'Skip',
     color: 'gray',
@@ -214,16 +248,22 @@ export function SmartMapper({ spreadsheetId, tabName, onComplete, onBack }: Smar
   const handleCategoryChange = (columnIndex: number, category: ColumnCategory) => {
     setColumns(prev => prev.map((col, idx) => {
       if (idx !== columnIndex) return col
-      // If changing category, reset isKey
-      return { ...col, category, isKey: false, targetField: null }
+      // If changing category, reset isKey and computed config
+      return { ...col, category, isKey: false, targetField: null, computedConfig: undefined }
     }))
   }
 
   const handleBulkCategoryChange = (indices: number[], category: ColumnCategory) => {
     setColumns(prev => prev.map((col, idx) => {
       if (!indices.includes(idx)) return col
-      return { ...col, category, isKey: false, targetField: null }
+      return { ...col, category, isKey: false, targetField: null, computedConfig: undefined }
     }))
+  }
+
+  const handleComputedConfigChange = (columnIndex: number, config: ComputedFieldConfig) => {
+    setColumns(prev => prev.map((col, idx) =>
+      idx === columnIndex ? { ...col, computedConfig: config } : col
+    ))
   }
 
   const handleKeyToggle = (columnIndex: number) => {
@@ -322,6 +362,7 @@ export function SmartMapper({ spreadsheetId, tabName, onComplete, onBack }: Smar
           onCategoryChange={handleCategoryChange}
           onBulkCategoryChange={handleBulkCategoryChange}
           onKeyToggle={handleKeyToggle}
+          onComputedConfigChange={handleComputedConfigChange}
           onConfirm={() => setPhase('map')}
           onBack={() => setPhase('preview')}
         />
@@ -528,6 +569,7 @@ function ClassifyPhase({
   onCategoryChange,
   onBulkCategoryChange,
   onKeyToggle,
+  onComputedConfigChange,
   onConfirm,
   onBack,
 }: {
@@ -537,9 +579,12 @@ function ClassifyPhase({
   onCategoryChange: (index: number, category: ColumnCategory) => void
   onBulkCategoryChange: (indices: number[], category: ColumnCategory) => void
   onKeyToggle: (index: number) => void
+  onComputedConfigChange: (index: number, config: ComputedFieldConfig) => void
   onConfirm: () => void
   onBack: () => void
 }) {
+  // State for computed field config modal
+  const [configureComputedIndex, setConfigureComputedIndex] = useState<number | null>(null)
   const [selectedIndices, setSelectedIndices] = useState<number[]>([])
   const containerRef = useRef<HTMLDivElement>(null)
   const hasInteracted = useRef(false)
@@ -573,6 +618,7 @@ function ClassifyPhase({
     staff: columns.filter(c => c.category === 'staff').length,
     asin: columns.filter(c => c.category === 'asin').length,
     weekly: columns.filter(c => c.category === 'weekly').length,
+    computed: columns.filter(c => c.category === 'computed').length,
     skip: columns.filter(c => c.category === 'skip').length,
     unclassified: columns.filter(c => c.category === null && c.sourceColumn.trim()).length,
   }
@@ -581,7 +627,7 @@ function ClassifyPhase({
   const staffKey = columns.find(c => c.category === 'staff' && c.isKey)
   const asinKey = columns.find(c => c.category === 'asin' && c.isKey)
 
-  const totalClassified = stats.partner + stats.staff + stats.asin + stats.weekly + stats.skip
+  const totalClassified = stats.partner + stats.staff + stats.asin + stats.weekly + stats.computed + stats.skip
   const totalColumns = validColumns.length
 
   // Keyboard navigation
@@ -666,6 +712,12 @@ function ClassifyPhase({
                 {stats.weekly} Weekly
               </Badge>
             )}
+            {stats.computed > 0 && (
+              <Badge variant="outline" className="bg-cyan-500/10 text-cyan-600 border-cyan-500/30">
+                <Calculator className="h-3 w-3 mr-1" />
+                {stats.computed} Computed
+              </Badge>
+            )}
             {stats.skip > 0 && (
               <Badge variant="outline" className="bg-gray-500/10 text-gray-600 border-gray-500/30">
                 <SkipForward className="h-3 w-3 mr-1" />
@@ -698,6 +750,9 @@ function ClassifyPhase({
               </Button>
               <Button size="sm" variant="outline" onClick={() => applyBulkCategory('weekly')} className="h-7 text-xs">
                 <Calendar className="h-3 w-3 mr-1" /> Weekly
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => applyBulkCategory('computed')} className="h-7 text-xs">
+                <Calculator className="h-3 w-3 mr-1" /> Computed
               </Button>
               <Button size="sm" variant="outline" onClick={() => applyBulkCategory('skip')} className="h-7 text-xs">
                 <SkipForward className="h-3 w-3 mr-1" /> Skip
@@ -793,6 +848,11 @@ function ClassifyPhase({
                             <Calendar className="h-3 w-3 text-purple-500" /> Weekly
                           </span>
                         </SelectItem>
+                        <SelectItem value="computed">
+                          <span className="flex items-center gap-1">
+                            <Calculator className="h-3 w-3 text-cyan-500" /> Computed
+                          </span>
+                        </SelectItem>
                         <SelectItem value="skip">
                           <span className="flex items-center gap-1">
                             <SkipForward className="h-3 w-3 text-gray-500" /> Skip
@@ -811,6 +871,19 @@ function ClassifyPhase({
                       >
                         <Key className="h-3 w-3 mr-1" />
                         {col.isKey ? 'Key' : 'Set Key'}
+                      </Button>
+                    )}
+
+                    {/* Configure button for computed fields */}
+                    {col.category === 'computed' && (
+                      <Button
+                        variant={col.computedConfig ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setConfigureComputedIndex(idx)}
+                        className={`h-8 text-xs ${col.computedConfig ? 'bg-cyan-500 hover:bg-cyan-600' : ''}`}
+                      >
+                        <Calculator className="h-3 w-3 mr-1" />
+                        {col.computedConfig ? 'Edit' : 'Configure'}
                       </Button>
                     )}
                   </motion.div>
@@ -843,8 +916,401 @@ function ClassifyPhase({
           </div>
         </CardContent>
       </Card>
+
+      {/* Computed Field Configuration Modal */}
+      {configureComputedIndex !== null && (
+        <ComputedFieldConfigModal
+          column={columns[configureComputedIndex]}
+          allColumns={columns}
+          onSave={(config) => {
+            onComputedConfigChange(configureComputedIndex, config)
+            setConfigureComputedIndex(null)
+          }}
+          onClose={() => setConfigureComputedIndex(null)}
+        />
+      )}
       </div>
     </motion.div>
+  )
+}
+
+// ============ COMPUTED FIELD CONFIG MODAL ============
+function ComputedFieldConfigModal({
+  column,
+  allColumns,
+  onSave,
+  onClose,
+}: {
+  column: ColumnClassification
+  allColumns: ColumnClassification[]
+  onSave: (config: ComputedFieldConfig) => void
+  onClose: () => void
+}) {
+  const [computationType, setComputationType] = useState<ComputationType>(
+    column.computedConfig?.computationType || 'formula'
+  )
+  const [targetTable, setTargetTable] = useState<EntityType_Computed>(
+    column.computedConfig?.targetTable || 'partners'
+  )
+  const [targetField, setTargetField] = useState(
+    column.computedConfig?.targetField || column.sourceColumn.toLowerCase().replace(/\s+/g, '_')
+  )
+  const [displayName, setDisplayName] = useState(
+    column.computedConfig?.displayName || column.sourceColumn
+  )
+  const [description, setDescription] = useState(
+    column.computedConfig?.description || ''
+  )
+  // Formula specific
+  const [dependsOn, setDependsOn] = useState<string>(
+    column.computedConfig?.dependsOn?.join(', ') || ''
+  )
+  const [formula, setFormula] = useState(
+    column.computedConfig?.formula || 'timezone_to_current_time'
+  )
+  // Aggregation specific
+  const [sourceTable, setSourceTable] = useState(
+    column.computedConfig?.sourceTable || 'weekly_statuses'
+  )
+  const [aggregation, setAggregation] = useState(
+    column.computedConfig?.aggregation || 'latest'
+  )
+  // Lookup specific
+  const [lookupSource, setLookupSource] = useState(
+    column.computedConfig?.lookupSource || 'zoho'
+  )
+  const [matchField, setMatchField] = useState(
+    column.computedConfig?.matchField || 'email'
+  )
+  const [lookupField, setLookupField] = useState(
+    column.computedConfig?.lookupField || ''
+  )
+
+  const handleSave = () => {
+    const config: ComputedFieldConfig = {
+      computationType,
+      targetTable,
+      targetField,
+      displayName,
+      description: description || undefined,
+    }
+
+    // Add type-specific config
+    if (computationType === 'formula') {
+      config.dependsOn = dependsOn.split(',').map(s => s.trim()).filter(Boolean)
+      config.formula = formula
+    } else if (computationType === 'aggregation') {
+      config.sourceTable = sourceTable
+      config.aggregation = aggregation
+    } else if (computationType === 'lookup') {
+      config.lookupSource = lookupSource
+      config.matchField = matchField
+      config.lookupField = lookupField
+    }
+
+    onSave(config)
+  }
+
+  // Get available columns for formula dependencies
+  const availableDependencies = allColumns
+    .filter(c => c.category !== 'computed' && c.category !== 'skip' && c.category !== 'weekly')
+    .map(c => c.sourceColumn)
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        className="bg-background rounded-xl shadow-xl max-w-lg w-full mx-4 max-h-[90vh] overflow-hidden"
+      >
+        <div className="p-4 border-b flex items-center justify-between">
+          <div>
+            <h3 className="font-semibold flex items-center gap-2">
+              <Calculator className="h-4 w-4 text-cyan-500" />
+              Configure Computed Field
+            </h3>
+            <p className="text-sm text-muted-foreground">"{column.sourceColumn}"</p>
+          </div>
+          <Button variant="ghost" size="icon" onClick={onClose}>
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+
+        <ScrollArea className="max-h-[60vh]">
+          <div className="p-4 space-y-4">
+            {/* Computation Type */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">How is this computed?</label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => setComputationType('formula')}
+                  className={`p-3 rounded-lg border text-left transition-all ${
+                    computationType === 'formula'
+                      ? 'border-cyan-500 bg-cyan-500/10'
+                      : 'border-border hover:border-cyan-500/50'
+                  }`}
+                >
+                  <Calculator className="h-4 w-4 text-cyan-500 mb-1" />
+                  <div className="text-sm font-medium">Formula</div>
+                  <div className="text-xs text-muted-foreground">From other fields</div>
+                </button>
+                <button
+                  onClick={() => setComputationType('aggregation')}
+                  className={`p-3 rounded-lg border text-left transition-all ${
+                    computationType === 'aggregation'
+                      ? 'border-cyan-500 bg-cyan-500/10'
+                      : 'border-border hover:border-cyan-500/50'
+                  }`}
+                >
+                  <Database className="h-4 w-4 text-purple-500 mb-1" />
+                  <div className="text-sm font-medium">From History</div>
+                  <div className="text-xs text-muted-foreground">Aggregated data</div>
+                </button>
+                <button
+                  onClick={() => setComputationType('lookup')}
+                  className={`p-3 rounded-lg border text-left transition-all ${
+                    computationType === 'lookup'
+                      ? 'border-cyan-500 bg-cyan-500/10'
+                      : 'border-border hover:border-cyan-500/50'
+                  }`}
+                >
+                  <Search className="h-4 w-4 text-orange-500 mb-1" />
+                  <div className="text-sm font-medium">External Lookup</div>
+                  <div className="text-xs text-muted-foreground">Zoho, Xero, Slack...</div>
+                </button>
+                <button
+                  onClick={() => setComputationType('custom')}
+                  className={`p-3 rounded-lg border text-left transition-all ${
+                    computationType === 'custom'
+                      ? 'border-cyan-500 bg-cyan-500/10'
+                      : 'border-border hover:border-cyan-500/50'
+                  }`}
+                >
+                  <MessageSquare className="h-4 w-4 text-green-500 mb-1" />
+                  <div className="text-sm font-medium">Custom Logic</div>
+                  <div className="text-xs text-muted-foreground">Describe it</div>
+                </button>
+              </div>
+            </div>
+
+            {/* Target Entity */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Which entity does this belong to?</label>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setTargetTable('partners')}
+                  className={`flex-1 p-2 rounded-lg border text-sm transition-all ${
+                    targetTable === 'partners'
+                      ? 'border-blue-500 bg-blue-500/10 text-blue-600'
+                      : 'border-border hover:border-blue-500/50'
+                  }`}
+                >
+                  <Building2 className="h-4 w-4 mx-auto mb-1" />
+                  Partner
+                </button>
+                <button
+                  onClick={() => setTargetTable('staff')}
+                  className={`flex-1 p-2 rounded-lg border text-sm transition-all ${
+                    targetTable === 'staff'
+                      ? 'border-green-500 bg-green-500/10 text-green-600'
+                      : 'border-border hover:border-green-500/50'
+                  }`}
+                >
+                  <Users className="h-4 w-4 mx-auto mb-1" />
+                  Staff
+                </button>
+                <button
+                  onClick={() => setTargetTable('asins')}
+                  className={`flex-1 p-2 rounded-lg border text-sm transition-all ${
+                    targetTable === 'asins'
+                      ? 'border-orange-500 bg-orange-500/10 text-orange-600'
+                      : 'border-border hover:border-orange-500/50'
+                  }`}
+                >
+                  <Package className="h-4 w-4 mx-auto mb-1" />
+                  ASIN
+                </button>
+              </div>
+            </div>
+
+            {/* Field Name */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Display Name</label>
+                <input
+                  type="text"
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border bg-background text-sm"
+                  placeholder="Current Time"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Field Name</label>
+                <input
+                  type="text"
+                  value={targetField}
+                  onChange={(e) => setTargetField(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border bg-background text-sm font-mono"
+                  placeholder="current_time"
+                />
+              </div>
+            </div>
+
+            {/* Type-specific options */}
+            {computationType === 'formula' && (
+              <div className="space-y-3 p-3 rounded-lg bg-cyan-500/5 border border-cyan-500/20">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Depends on columns</label>
+                  <input
+                    type="text"
+                    value={dependsOn}
+                    onChange={(e) => setDependsOn(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border bg-background text-sm"
+                    placeholder="Time Zone, Start Date"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Available: {availableDependencies.slice(0, 5).join(', ')}
+                    {availableDependencies.length > 5 && '...'}
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Formula</label>
+                  <Select value={formula} onValueChange={setFormula}>
+                    <SelectTrigger className="text-sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="timezone_to_current_time">Timezone → Current Time</SelectItem>
+                      <SelectItem value="days_since">Days Since Date</SelectItem>
+                      <SelectItem value="months_between">Months Between Dates</SelectItem>
+                      <SelectItem value="custom">Custom (describe below)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
+
+            {computationType === 'aggregation' && (
+              <div className="space-y-3 p-3 rounded-lg bg-purple-500/5 border border-purple-500/20">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Source Table</label>
+                    <Select value={sourceTable} onValueChange={setSourceTable}>
+                      <SelectTrigger className="text-sm">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="weekly_statuses">Weekly Statuses</SelectItem>
+                        <SelectItem value="partner_assignments">Partner Assignments</SelectItem>
+                        <SelectItem value="sync_runs">Sync History</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Aggregation</label>
+                    <Select value={aggregation} onValueChange={setAggregation}>
+                      <SelectTrigger className="text-sm">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="latest">Latest Value</SelectItem>
+                        <SelectItem value="earliest">Earliest Value</SelectItem>
+                        <SelectItem value="count">Count</SelectItem>
+                        <SelectItem value="count_distinct">Count Distinct</SelectItem>
+                        <SelectItem value="sum">Sum</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {computationType === 'lookup' && (
+              <div className="space-y-3 p-3 rounded-lg bg-orange-500/5 border border-orange-500/20">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">External System</label>
+                  <Select value={lookupSource} onValueChange={setLookupSource}>
+                    <SelectTrigger className="text-sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="zoho">Zoho (Invoicing)</SelectItem>
+                      <SelectItem value="xero">Xero (Accounting)</SelectItem>
+                      <SelectItem value="slack">Slack (Profiles)</SelectItem>
+                      <SelectItem value="close">Close (CRM)</SelectItem>
+                      <SelectItem value="amazon">Amazon SP-API</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Match on</label>
+                    <input
+                      type="text"
+                      value={matchField}
+                      onChange={(e) => setMatchField(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border bg-background text-sm"
+                      placeholder="email"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Get field</label>
+                    <input
+                      type="text"
+                      value={lookupField}
+                      onChange={(e) => setLookupField(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border bg-background text-sm"
+                      placeholder="payment_status"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Description (always shown, required for custom) */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
+                Description {computationType === 'custom' && <span className="text-red-500">*</span>}
+              </label>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg border bg-background text-sm min-h-[80px] resize-none"
+                placeholder={
+                  computationType === 'custom'
+                    ? "Describe how this field should be computed..."
+                    : "Optional: Add notes about this computed field..."
+                }
+              />
+            </div>
+
+            {/* Future source hot-swap hint */}
+            <div className="p-3 rounded-lg bg-muted/50 border border-dashed">
+              <p className="text-xs text-muted-foreground">
+                <Sparkles className="h-3 w-3 inline mr-1 text-amber-500" />
+                <strong>Future:</strong> You'll be able to hot-swap data sources later (e.g., get timezone from Slack instead of this sheet)
+              </p>
+            </div>
+          </div>
+        </ScrollArea>
+
+        <div className="p-4 border-t flex justify-end gap-2">
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSave}
+            disabled={computationType === 'custom' && !description.trim()}
+            className="bg-cyan-500 hover:bg-cyan-600"
+          >
+            <Check className="h-4 w-4 mr-1" />
+            Save Configuration
+          </Button>
+        </div>
+      </motion.div>
+    </div>
   )
 }
 

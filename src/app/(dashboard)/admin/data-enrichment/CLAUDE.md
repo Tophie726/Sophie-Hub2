@@ -478,8 +478,174 @@ CREATE TABLE field_lineage (
 |----------|------|-------|----------|
 | Partner | 🏢 Building2 | Blue | Maps to `partners` table fields |
 | Staff | 👥 Users | Green | Maps to `staff` table fields |
+| ASIN | 📦 Package | Orange | Maps to `asins` table fields |
 | Weekly | 📅 Calendar | Purple | Pivoted to `weekly_statuses` table |
+| Computed | 🔢 Calculator | Cyan | Stored in computed_fields registry, not synced directly |
 | Skip | ⏭️ SkipForward | Gray | Not imported |
+
+---
+
+## CRITICAL CONCEPT: Computed Fields
+
+Some columns in spreadsheets aren't simple data - they're **computed values** that depend on:
+- Other columns (formulas)
+- Historical/time-series data (aggregations)
+- External systems (lookups)
+- Complex business logic (custom)
+
+### Why Computed Fields Matter
+
+**Example: "Current Time" column**
+- The sheet has a "Time Zone" column (e.g., "America/New_York")
+- The "Current Time" column shows the current time in that timezone
+- This is calculated by a Google Apps Script - we shouldn't store the value directly
+
+**Instead, we should:**
+1. Store the source field (timezone)
+2. Compute the derived field on-demand or on schedule
+3. Enable hot-swapping the source (e.g., get timezone from Slack later)
+
+### Computation Types
+
+| Type | Icon | Description | Example |
+|------|------|-------------|---------|
+| **Formula** | 🔢 Calculator | Depends on other fields | Timezone → Current Time |
+| **Aggregation** | 🗄️ Database | From time-series data | Latest weekly status, Months subscribed |
+| **Lookup** | 🔍 Search | From external system | Payment status from Zoho/Xero |
+| **Custom** | 💬 MessageSquare | Complex logic | Needs manual implementation |
+
+### Computed Field Configuration Modal
+
+When marking a column as "Computed", a configuration modal appears:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Configure Computed Field                                   │
+│  "Current Time"                                             │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  How is this computed?                                      │
+│  ┌───────────────┐  ┌───────────────┐                      │
+│  │ 🔢 Formula    │  │ 🗄️ From History │                    │
+│  │ From other    │  │ Aggregated     │                     │
+│  │ fields        │  │ data           │                     │
+│  └───────────────┘  └───────────────┘                      │
+│  ┌───────────────┐  ┌───────────────┐                      │
+│  │ 🔍 External   │  │ 💬 Custom      │                     │
+│  │ Lookup        │  │ Logic          │                     │
+│  │ Zoho, Slack...│  │ Describe it    │                     │
+│  └───────────────┘  └───────────────┘                      │
+│                                                             │
+│  Which entity does this belong to?                          │
+│  [Partner] [Staff] [ASIN]                                   │
+│                                                             │
+│  [Formula-specific options when selected]                   │
+│  Depends on: [Time Zone________________]                    │
+│  Formula:    [Timezone → Current Time ▼]                    │
+│                                                             │
+│  💡 Future: You'll be able to hot-swap data sources later  │
+│                                                             │
+│  [Cancel]                        [Save Configuration]       │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Source Priority (Hot-Swapping)
+
+Each computed field can have multiple potential sources with priorities:
+
+```typescript
+source_priority: [
+  { source: 'sheet', source_ref: 'Master Client Sheet → Time Zone', priority: 1 },
+  { source: 'slack', source_ref: 'Slack profile timezone', priority: 2 }
+]
+```
+
+**Benefits:**
+- Primary source (sheet) is used by default
+- If unavailable/stale, fall back to secondary (Slack)
+- Future: Admin can flip priorities without code changes
+
+### Database Schema: computed_fields
+
+```sql
+CREATE TABLE computed_fields (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+  -- Target location
+  target_table TEXT NOT NULL,             -- 'partners', 'staff', 'asins'
+  target_field TEXT NOT NULL,             -- Database column name
+  display_name TEXT NOT NULL,             -- Human-friendly name
+
+  -- Computation definition
+  computation_type TEXT NOT NULL,         -- 'formula', 'aggregation', 'lookup', 'custom'
+  config JSONB NOT NULL DEFAULT '{}',     -- Type-specific configuration
+
+  -- Discovery context
+  discovered_in_source_id UUID REFERENCES data_sources(id),
+  discovered_in_tab TEXT,
+  discovered_in_column TEXT,
+
+  -- Source priority for hot-swapping
+  source_priority JSONB NOT NULL DEFAULT '[]',
+
+  -- Implementation status
+  description TEXT,
+  implementation_notes TEXT,
+  is_implemented BOOLEAN NOT NULL DEFAULT false,
+
+  UNIQUE(target_table, target_field)
+);
+```
+
+### Config Examples
+
+**Formula (Current Time from Timezone):**
+```json
+{
+  "depends_on": ["timezone"],
+  "formula": "timezone_to_current_time"
+}
+```
+
+**Aggregation (Latest Status):**
+```json
+{
+  "source_table": "weekly_statuses",
+  "aggregation": "latest",
+  "field": "status",
+  "order_by": "week_date"
+}
+```
+
+**Lookup (Payment Status from Zoho):**
+```json
+{
+  "source": "zoho",
+  "match_field": "email",
+  "lookup_field": "payment_status"
+}
+```
+
+### Workflow for Computed Fields
+
+1. **Discovery**: Admin marks column as "Computed" in SmartMapper
+2. **Configuration**: Admin defines computation type and config
+3. **Registry**: Saved to `computed_fields` table
+4. **Implementation**: Developer implements the computation logic
+5. **Execution**: Computed fields run on schedule or on-demand
+6. **Hot-Swap**: Admin can later change source priorities
+
+### Built-in Formulas
+
+| Formula | Description | Depends On | Output |
+|---------|-------------|------------|--------|
+| `timezone_to_current_time` | Current time in timezone | timezone | Time |
+| `days_since` | Days since a date | date | Number |
+| `months_between` | Months between dates | start_date, end_date | Number |
+
+New formulas can be added as needed by implementing them in `src/lib/enrichment/computed.ts`.
+
+---
 
 ### Animation Principles (Per Project CLAUDE.md)
 
