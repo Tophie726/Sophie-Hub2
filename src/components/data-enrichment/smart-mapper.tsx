@@ -132,7 +132,7 @@ const ASIN_FIELDS: FieldDef[] = [
 ]
 
 // Animation
-const easeOut = [0.22, 1, 0.36, 1]
+const easeOut: [number, number, number, number] = [0.22, 1, 0.36, 1]
 const fadeInUp = {
   initial: { opacity: 0, y: 20 },
   animate: { opacity: 1, y: 0 },
@@ -630,8 +630,53 @@ function ClassifyPhase({
   const totalClassified = stats.partner + stats.staff + stats.asin + stats.weekly + stats.computed + stats.skip
   const totalColumns = validColumns.length
 
+  // Category shortcuts mapping
+  const categoryShortcuts: Record<string, ColumnCategory> = {
+    '1': 'partner',
+    '2': 'staff',
+    '3': 'asin',
+    '4': 'weekly',
+    '5': 'computed',
+    '6': 'skip',
+    'p': 'partner',
+    's': 'staff',
+    'a': 'asin',
+    'w': 'weekly',
+    'c': 'computed',
+    'x': 'skip',
+  }
+
+  // Find next unclassified column index
+  const findNextUnclassified = (startIndex: number): number => {
+    // Look forward from current position
+    for (let i = startIndex + 1; i < validColumns.length; i++) {
+      if (validColumns[i].category === null) return i
+    }
+    // Wrap around and look from beginning
+    for (let i = 0; i < startIndex; i++) {
+      if (validColumns[i].category === null) return i
+    }
+    // No unclassified found, stay at current
+    return startIndex
+  }
+
   // Keyboard navigation
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    const col = validColumns[focusedIndex]
+
+    // Number keys 1-6 or letter shortcuts for quick classification
+    if (categoryShortcuts[e.key]) {
+      e.preventDefault()
+      hasInteracted.current = true
+      if (col) {
+        onCategoryChange(col.sourceIndex, categoryShortcuts[e.key])
+        // Auto-advance to next unclassified column
+        const nextIndex = findNextUnclassified(focusedIndex)
+        setFocusedIndex(nextIndex)
+      }
+      return
+    }
+
     switch (e.key) {
       case 'ArrowDown':
       case 'j':
@@ -640,7 +685,6 @@ function ClassifyPhase({
         setFocusedIndex(prev => Math.min(prev + 1, validColumns.length - 1))
         break
       case 'ArrowUp':
-      case 'k':
         e.preventDefault()
         hasInteracted.current = true
         setFocusedIndex(prev => Math.max(prev - 1, 0))
@@ -648,8 +692,28 @@ function ClassifyPhase({
       case ' ':
         e.preventDefault()
         // Toggle selection on space
-        const col = validColumns[focusedIndex]
         if (col) toggleSelection(col.sourceIndex)
+        break
+      case 'k':
+        e.preventDefault()
+        // Toggle key status
+        if (col && col.category && col.category !== 'skip' && col.category !== 'weekly' && col.category !== 'computed') {
+          onKeyToggle(col.sourceIndex)
+        }
+        break
+      case 'Enter':
+        e.preventDefault()
+        // If computed, open config modal
+        if (col && col.category === 'computed') {
+          setConfigureComputedIndex(col.sourceIndex)
+        }
+        break
+      case 'Tab':
+        e.preventDefault()
+        hasInteracted.current = true
+        // Tab jumps to next unclassified
+        const nextUnclassified = findNextUnclassified(focusedIndex)
+        setFocusedIndex(nextUnclassified)
         break
     }
   }
@@ -778,18 +842,22 @@ function ClassifyPhase({
                   <motion.div
                     key={idx}
                     layout
-                    className={`flex items-center gap-3 p-3 rounded-lg border transition-all ${
+                    className={`flex items-center gap-3 p-3 rounded-lg border transition-all relative ${
                       col.isKey
                         ? 'bg-amber-500/5 border-amber-500/30'
                         : isSelected
                         ? 'bg-accent border-primary/50'
                         : isFocused
-                        ? 'bg-accent/50 border-primary/30'
+                        ? 'bg-accent/50 border-primary ring-2 ring-primary/30 ring-offset-1'
                         : col.category
                         ? 'bg-muted/30 border-border'
                         : 'border-border hover:bg-accent/50'
                     }`}
                   >
+                    {/* Focused row indicator */}
+                    {isFocused && (
+                      <div className="absolute -left-1 top-1/2 -translate-y-1/2 w-1 h-8 rounded-full bg-primary" />
+                    )}
                     {/* Checkbox */}
                     <button
                       onClick={() => toggleSelection(idx)}
@@ -815,6 +883,18 @@ function ClassifyPhase({
                       </div>
                       <p className="text-xs text-muted-foreground truncate">{sample || '(empty)'}</p>
                     </div>
+
+                    {/* Quick shortcuts hint when focused and unclassified */}
+                    {isFocused && !col.category && (
+                      <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                        <kbd className="px-1 py-0.5 rounded bg-blue-500/20 text-blue-600 font-mono">1</kbd>
+                        <kbd className="px-1 py-0.5 rounded bg-green-500/20 text-green-600 font-mono">2</kbd>
+                        <kbd className="px-1 py-0.5 rounded bg-orange-500/20 text-orange-600 font-mono">3</kbd>
+                        <kbd className="px-1 py-0.5 rounded bg-purple-500/20 text-purple-600 font-mono">4</kbd>
+                        <kbd className="px-1 py-0.5 rounded bg-cyan-500/20 text-cyan-600 font-mono">5</kbd>
+                        <kbd className="px-1 py-0.5 rounded bg-gray-500/20 text-gray-600 font-mono">6</kbd>
+                      </div>
+                    )}
 
                     {/* Category selector */}
                     <Select
@@ -898,6 +978,44 @@ function ClassifyPhase({
               <Key className="h-3 w-3 inline mr-1 text-amber-500" />
               <strong>Key</strong> = The column that uniquely identifies each record (e.g., "Brand Name" for partners, "Email" for staff, "ASIN Code" for products)
             </p>
+          </div>
+
+          {/* Keyboard shortcuts legend */}
+          <div className="p-3 rounded-lg bg-gradient-to-r from-primary/5 to-transparent border border-primary/20">
+            <div className="flex items-center gap-2 mb-2">
+              <Sparkles className="h-3 w-3 text-primary" />
+              <span className="text-xs font-medium text-primary">Keyboard Shortcuts</span>
+            </div>
+            <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs text-muted-foreground">
+              <div className="flex items-center gap-2">
+                <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono">1</kbd>
+                <span>Partner</span>
+                <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono ml-1">2</kbd>
+                <span>Staff</span>
+                <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono ml-1">3</kbd>
+                <span>ASIN</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono">4</kbd>
+                <span>Weekly</span>
+                <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono ml-1">5</kbd>
+                <span>Computed</span>
+                <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono ml-1">6</kbd>
+                <span>Skip</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono">↑↓</kbd>
+                <span>Navigate</span>
+                <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono ml-1">Tab</kbd>
+                <span>Next unclassified</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono">K</kbd>
+                <span>Set as Key</span>
+                <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono ml-1">Space</kbd>
+                <span>Multi-select</span>
+              </div>
+            </div>
           </div>
 
           <div className="flex items-center justify-between pt-4 border-t">
