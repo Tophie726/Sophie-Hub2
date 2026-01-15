@@ -367,10 +367,51 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, onComplete, onB
 
   if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center py-24">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground mb-4" />
-        <p className="text-muted-foreground">Loading spreadsheet data...</p>
-      </div>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="space-y-4"
+      >
+        {/* Skeleton card mimicking preview structure */}
+        <div className="rounded-xl border bg-card overflow-hidden">
+          {/* Header skeleton */}
+          <div className="p-5 border-b">
+            <div className="flex items-center justify-between">
+              <div className="space-y-2">
+                <div className="h-5 w-40 bg-gradient-to-r from-muted/60 via-muted/30 to-muted/60 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite] rounded" />
+                <div className="h-4 w-64 bg-gradient-to-r from-muted/40 via-muted/20 to-muted/40 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite] rounded" style={{ animationDelay: '100ms' }} />
+              </div>
+              <div className="h-9 w-28 bg-gradient-to-r from-muted/50 via-muted/25 to-muted/50 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite] rounded-lg" />
+            </div>
+          </div>
+
+          {/* Table skeleton */}
+          <div className="p-4">
+            {/* Header row */}
+            <div className="flex gap-3 pb-3 border-b mb-3">
+              <div className="h-8 w-10 bg-muted/30 rounded" />
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-8 flex-1 bg-gradient-to-r from-muted/50 via-muted/25 to-muted/50 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite] rounded" style={{ animationDelay: `${i * 50}ms` }} />
+              ))}
+            </div>
+            {/* Data rows */}
+            {[0, 1, 2, 3, 4].map((i) => (
+              <div key={i} className="flex gap-3 py-2">
+                <div className="h-8 w-10 bg-muted/20 rounded flex items-center justify-center text-xs text-muted-foreground">{i + 1}</div>
+                {[1, 2, 3].map((j) => (
+                  <div key={j} className="h-8 flex-1 bg-gradient-to-r from-muted/30 via-muted/15 to-muted/30 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite] rounded" style={{ animationDelay: `${(i * 3 + j) * 40}ms` }} />
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Loading indicator */}
+        <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <span>Fetching spreadsheet data...</span>
+        </div>
+      </motion.div>
     )
   }
 

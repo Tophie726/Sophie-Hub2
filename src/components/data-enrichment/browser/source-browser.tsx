@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, Loader2, Search } from 'lucide-react'
+import { ArrowLeft, Loader2, Search, Table, ChevronUp } from 'lucide-react'
 import { SourceTabBar } from './source-tab-bar'
 import { SheetTabBar } from './sheet-tab-bar'
 import { SmartMapper } from '../smart-mapper'
@@ -75,11 +75,13 @@ export function SourceBrowser({ onBack, initialSourceId }: SourceBrowserProps) {
           if (sourceToSelect) {
             setActiveSourceId(sourceToSelect.id)
 
-            // If source has no tabs yet, load preview from Google Sheets
-            if (sourceToSelect.tabs.length === 0 && sourceToSelect.spreadsheet_id) {
+            // Always load preview from Google Sheets to get full tab list
+            if (sourceToSelect.spreadsheet_id) {
               loadPreviewForSource(sourceToSelect.id, sourceToSelect.spreadsheet_id)
-            } else {
-              // Auto-select first active tab of that source
+            }
+
+            // Auto-select first active tab if we have tabs in the database
+            if (sourceToSelect.tabs.length > 0) {
               const activeTabs = sourceToSelect.tabs.filter((t: { status?: string }) =>
                 !t.status || t.status === 'active' || t.status === 'flagged'
               )
@@ -129,36 +131,101 @@ export function SourceBrowser({ onBack, initialSourceId }: SourceBrowserProps) {
   const activePreview = activeSourceId ? sheetPreviews[activeSourceId] : null
 
   // Build tabs list for the active source
-  // Check if activeSource has mapped tabs first, otherwise fall back to preview
-  const sheetTabs = activeSource?.tabs.length
-    ? activeSource.tabs.map(t => ({
-        id: t.id,
-        name: t.tab_name,
-        columnCount: t.columnCount,
-        isMapped: true,
-        primaryEntity: t.primary_entity,
-        status: t.status || 'active',
-        notes: t.notes,
-      }))
-    : activePreview
-      ? activePreview.tabs.map(t => ({
-          id: String(t.sheetId),
-          name: t.title,
-          rowCount: t.rowCount,
-          columnCount: t.columnCount,
-          isMapped: false,
-          primaryEntity: null,
-          status: 'active' as const,
-          notes: null,
-        }))
-      : []
+  // Merge database tabs with preview tabs - database tabs take precedence
+  const sheetTabs = (() => {
+    const dbTabs = (activeSource?.tabs || []).map(t => ({
+      id: t.id,
+      name: t.tab_name,
+      columnCount: t.columnCount,
+      isMapped: true,
+      primaryEntity: t.primary_entity,
+      status: t.status || 'active',
+      notes: t.notes,
+    }))
+
+    const previewTabs = (activePreview?.tabs || []).map(t => ({
+      id: String(t.sheetId),
+      name: t.title,
+      rowCount: t.rowCount,
+      columnCount: t.columnCount,
+      isMapped: false,
+      primaryEntity: null as 'partners' | 'staff' | 'asins' | null,
+      status: 'active' as const,
+      notes: null as string | null,
+    }))
+
+    // If no preview tabs, just return db tabs
+    if (previewTabs.length === 0) return dbTabs
+
+    // Merge: use db tab if it exists for that name, otherwise use preview tab
+    const dbTabsByName = new Map(dbTabs.map(t => [t.name, t]))
+
+    return previewTabs.map(previewTab => {
+      const dbTab = dbTabsByName.get(previewTab.name)
+      return dbTab || previewTab
+    })
+  })()
 
   const activeTab = sheetTabs.find(t => t.id === activeTabId)
 
   // Handle tab status change
   const handleTabStatusChange = async (tabId: string, status: string, notes?: string) => {
     try {
-      const response = await fetch(`/api/tab-mappings/${tabId}/status`, {
+      // Check if this is a UUID (mapped tab) or a Google Sheet ID (unmapped tab)
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(tabId)
+
+      let actualTabId = tabId
+
+      if (!isUUID && activeSource) {
+        // This is an unmapped tab - need to create a tab_mapping first
+        const tab = sheetTabs.find(t => t.id === tabId)
+        if (!tab) {
+          console.error('Tab not found:', tabId)
+          return
+        }
+
+        // Create a minimal tab_mapping record
+        const createResponse = await fetch('/api/tab-mappings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            data_source_id: activeSource.id,
+            tab_name: tab.name,
+            status,
+            notes,
+          }),
+        })
+
+        if (createResponse.ok) {
+          const data = await createResponse.json()
+          actualTabId = data.tabMapping.id
+
+          // Refresh sources to get the new tab mapping
+          const sourcesResponse = await fetch('/api/data-sources')
+          if (sourcesResponse.ok) {
+            const sourcesData = await sourcesResponse.json()
+            setSources(sourcesData.sources || [])
+          }
+
+          // If hiding the currently selected tab, select another visible one
+          if (status === 'hidden' && activeTabId === tabId) {
+            const visibleTabs = sheetTabs.filter(t => t.id !== tabId && t.status !== 'hidden')
+            if (visibleTabs.length > 0) {
+              setActiveTabId(visibleTabs[0].id)
+            } else {
+              setActiveTabId(null)
+            }
+          }
+          return
+        } else {
+          const error = await createResponse.json()
+          console.error('Failed to create tab mapping:', error)
+          return
+        }
+      }
+
+      // Update existing tab mapping
+      const response = await fetch(`/api/tab-mappings/${actualTabId}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status, notes }),
@@ -169,9 +236,19 @@ export function SourceBrowser({ onBack, initialSourceId }: SourceBrowserProps) {
         setSources(prev => prev.map(source => ({
           ...source,
           tabs: source.tabs.map(tab =>
-            tab.id === tabId ? { ...tab, status: status as typeof tab.status, notes } : tab
+            tab.id === actualTabId ? { ...tab, status: status as typeof tab.status, notes } : tab
           ),
         })))
+
+        // If hiding the currently selected tab, select another visible one
+        if (status === 'hidden' && activeTabId === actualTabId) {
+          const visibleTabs = sheetTabs.filter(t => t.id !== actualTabId && t.status !== 'hidden')
+          if (visibleTabs.length > 0) {
+            setActiveTabId(visibleTabs[0].id)
+          } else {
+            setActiveTabId(null)
+          }
+        }
       }
     } catch (error) {
       console.error('Error updating tab status:', error)
@@ -274,10 +351,15 @@ export function SourceBrowser({ onBack, initialSourceId }: SourceBrowserProps) {
   const handleSelectSource = (sourceId: string) => {
     setActiveSourceId(sourceId)
 
-    // Auto-select first tab of the new source
     const source = sources.find(s => s.id === sourceId)
     const preview = sheetPreviews[sourceId]
 
+    // Load preview if we don't have it yet
+    if (!preview && source?.spreadsheet_id) {
+      loadPreviewForSource(sourceId, source.spreadsheet_id)
+    }
+
+    // Auto-select first tab of the new source
     if (source?.tabs.length) {
       setActiveTabId(source.tabs[0].id)
     } else if (preview?.tabs.length) {
@@ -293,20 +375,165 @@ export function SourceBrowser({ onBack, initialSourceId }: SourceBrowserProps) {
   }
 
   // Handle mapping completion for a tab
-  const handleMappingComplete = () => {
-    // Refresh sources to get updated mapping data
-    fetch('/api/data-sources')
-      .then(res => res.json())
-      .then(data => {
-        setSources(data.sources || [])
+  const handleMappingComplete = async (mappings: {
+    headerRow: number
+    columns: {
+      sourceIndex: number
+      sourceColumn: string
+      category: 'partner' | 'staff' | 'asin' | 'weekly' | 'computed' | 'skip' | null
+      targetField: string | null
+      authority: 'source_of_truth' | 'reference'
+      isKey: boolean
+      computedConfig?: {
+        computationType: 'formula' | 'aggregation' | 'lookup' | 'custom'
+        targetTable: 'partners' | 'staff' | 'asins'
+        targetField: string
+        displayName: string
+        description?: string
+        dependsOn?: string[]
+        formula?: string
+        sourceTable?: string
+        aggregation?: string
+        lookupSource?: string
+        matchField?: string
+        lookupField?: string
+      }
+    }[]
+    primaryEntity: 'partners' | 'staff' | 'asins'
+  }) => {
+    if (!activeSource || !activeTab) {
+      console.error('No active source or tab')
+      return
+    }
+
+    try {
+      // Build the save request payload
+      const savePayload = {
+        dataSource: {
+          name: activeSource.name,
+          spreadsheet_id: activeSource.spreadsheet_id,
+          spreadsheet_url: activeSource.spreadsheet_url,
+        },
+        tabMapping: {
+          tab_name: activeTab.name,
+          header_row: mappings.headerRow,
+          primary_entity: mappings.primaryEntity,
+        },
+        columnMappings: mappings.columns
+          .filter(col => col.category !== null && col.category !== 'weekly' && col.category !== 'computed')
+          .map(col => ({
+            source_column: col.sourceColumn,
+            source_column_index: col.sourceIndex,
+            category: col.category as 'partner' | 'staff' | 'asin' | 'skip',
+            target_field: col.targetField,
+            authority: col.authority,
+            is_key: col.isKey,
+          })),
+        // Include weekly pattern if there are weekly columns
+        weeklyPattern: mappings.columns.some(col => col.category === 'weekly')
+          ? {
+              pattern_name: 'Weekly Status Columns',
+              match_config: { matches_date: true },
+            }
+          : undefined,
+        // Include computed fields
+        computedFields: mappings.columns
+          .filter(col => col.category === 'computed' && col.computedConfig)
+          .map(col => ({
+            source_column: col.sourceColumn,
+            source_column_index: col.sourceIndex,
+            target_table: col.computedConfig!.targetTable,
+            target_field: col.computedConfig!.targetField,
+            display_name: col.computedConfig!.displayName,
+            computation_type: col.computedConfig!.computationType,
+            config: {
+              dependsOn: col.computedConfig!.dependsOn,
+              formula: col.computedConfig!.formula,
+              sourceTable: col.computedConfig!.sourceTable,
+              aggregation: col.computedConfig!.aggregation,
+              lookupSource: col.computedConfig!.lookupSource,
+              matchField: col.computedConfig!.matchField,
+              lookupField: col.computedConfig!.lookupField,
+            },
+            description: col.computedConfig!.description,
+          })),
+      }
+
+      console.log('Saving mappings:', savePayload)
+
+      const response = await fetch('/api/mappings/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(savePayload),
       })
+
+      if (response.ok) {
+        const result = await response.json()
+        console.log('Mappings saved:', result)
+
+        // Refresh sources to get updated mapping data
+        const sourcesResponse = await fetch('/api/data-sources')
+        if (sourcesResponse.ok) {
+          const data = await sourcesResponse.json()
+          setSources(data.sources || [])
+
+          // Update activeTabId to the new tab mapping ID if available
+          if (result.tab_mapping_id) {
+            setActiveTabId(result.tab_mapping_id)
+          }
+        }
+      } else {
+        const error = await response.json()
+        console.error('Failed to save mappings:', error)
+      }
+    } catch (error) {
+      console.error('Error saving mappings:', error)
+    }
   }
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-32">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="space-y-0"
+      >
+        {/* Header - same as loaded state */}
+        <div className="flex items-center gap-4 p-4 border-b">
+          <Button variant="ghost" size="icon" onClick={onBack}>
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div className="flex-1">
+            <h2 className="text-lg font-semibold">Google Sheets</h2>
+            <p className="text-xs text-muted-foreground">Loading sources...</p>
+          </div>
+        </div>
+
+        {/* Skeleton source tabs */}
+        <div className="flex items-center gap-2 px-4 py-3 border-b bg-muted/30">
+          {[120, 100, 90].map((w, i) => (
+            <div
+              key={i}
+              className="h-10 rounded-lg bg-gradient-to-r from-muted/60 via-muted/30 to-muted/60 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite]"
+              style={{ width: w, animationDelay: `${i * 100}ms` }}
+            />
+          ))}
+        </div>
+
+        {/* Skeleton content */}
+        <div className="p-6">
+          <div className="rounded-xl border bg-card p-6 space-y-4">
+            <div className="h-5 w-48 bg-gradient-to-r from-muted/50 via-muted/25 to-muted/50 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite] rounded" />
+            <div className="space-y-3 pt-2">
+              {[0, 1, 2, 3].map((i) => (
+                <div key={i} className="flex gap-4">
+                  <div className="h-10 flex-1 bg-gradient-to-r from-muted/40 via-muted/20 to-muted/40 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite] rounded" style={{ animationDelay: `${i * 75}ms` }} />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </motion.div>
     )
   }
 
@@ -402,15 +629,57 @@ export function SourceBrowser({ onBack, initialSourceId }: SourceBrowserProps) {
 
       {/* Content Area */}
       <AnimatePresence mode="wait">
-        {isLoadingPreview ? (
+        {isLoadingPreview && sheetTabs.length === 0 ? (
+          /* Elegant skeleton loader - only show when we have NO tabs yet */
           <motion.div
             key="loading"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="flex items-center justify-center py-32"
+            className="p-6 space-y-6"
           >
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            {/* Skeleton tab bar */}
+            <div className="flex gap-2">
+              {[80, 100, 90, 85, 75].map((width, i) => (
+                <div
+                  key={i}
+                  className="h-9 rounded-lg bg-gradient-to-r from-muted/60 via-muted/30 to-muted/60 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite]"
+                  style={{ width: `${width}px`, animationDelay: `${i * 100}ms` }}
+                />
+              ))}
+            </div>
+
+            {/* Skeleton content card */}
+            <div className="rounded-xl border bg-card overflow-hidden">
+              {/* Header */}
+              <div className="p-5 border-b bg-muted/5">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-2.5">
+                    <div className="h-6 w-56 bg-gradient-to-r from-muted/60 via-muted/30 to-muted/60 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite] rounded" />
+                    <div className="h-4 w-80 bg-gradient-to-r from-muted/40 via-muted/20 to-muted/40 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite] rounded" style={{ animationDelay: '150ms' }} />
+                  </div>
+                  <div className="h-10 w-36 bg-gradient-to-r from-muted/50 via-muted/25 to-muted/50 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite] rounded-lg" />
+                </div>
+              </div>
+
+              {/* Table skeleton */}
+              <div className="p-5 space-y-3">
+                {[0, 1, 2, 3, 4, 5].map((i) => (
+                  <div key={i} className="flex items-center gap-4" style={{ animationDelay: `${i * 75}ms` }}>
+                    <div className="h-10 w-12 bg-gradient-to-r from-muted/50 via-muted/25 to-muted/50 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite] rounded" />
+                    <div className="h-10 flex-[2] bg-gradient-to-r from-muted/40 via-muted/20 to-muted/40 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite] rounded" style={{ animationDelay: `${i * 75 + 50}ms` }} />
+                    <div className="h-10 flex-[3] bg-gradient-to-r from-muted/35 via-muted/15 to-muted/35 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite] rounded" style={{ animationDelay: `${i * 75 + 100}ms` }} />
+                    <div className="h-10 w-28 bg-gradient-to-r from-muted/30 via-muted/15 to-muted/30 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite] rounded" style={{ animationDelay: `${i * 75 + 150}ms` }} />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Loading message */}
+            <div className="flex items-center justify-center gap-3 text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span className="text-sm">Connecting to Google Sheets...</span>
+            </div>
           </motion.div>
         ) : activeSourceId && activeTabId && activeTab ? (
           <motion.div
@@ -439,6 +708,42 @@ export function SourceBrowser({ onBack, initialSourceId }: SourceBrowserProps) {
             className="flex items-center justify-center py-32 text-muted-foreground"
           >
             No tabs available in this source
+          </motion.div>
+        ) : activeSourceId && sheetTabs.length > 0 && !activeTabId ? (
+          /* Empty state - tabs exist but none selected */
+          <motion.div
+            key="select-tab"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3, ease: easeOut }}
+            className="flex flex-col items-center justify-center py-24 px-4"
+          >
+            <div className="max-w-sm text-center space-y-4">
+              {/* Decorative icon */}
+              <div className="relative mx-auto w-16 h-16">
+                <div className="absolute inset-0 bg-gradient-to-br from-green-500/20 to-emerald-500/20 rounded-2xl rotate-6" />
+                <div className="absolute inset-0 bg-gradient-to-br from-green-500/10 to-emerald-500/10 rounded-2xl -rotate-3" />
+                <div className="relative flex items-center justify-center w-full h-full bg-card border rounded-2xl shadow-sm">
+                  <Table className="h-7 w-7 text-green-600" />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <h3 className="font-semibold text-foreground">Select a tab to begin</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Choose a sheet tab above to preview its columns and start mapping data to your database.
+                </p>
+              </div>
+
+              {/* Visual hint pointing up */}
+              <div className="flex justify-center pt-2">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground/70">
+                  <ChevronUp className="h-4 w-4 animate-bounce" />
+                  <span>{sheetTabs.length} tabs available</span>
+                </div>
+              </div>
+            </div>
           </motion.div>
         ) : null}
       </AnimatePresence>

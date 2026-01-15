@@ -283,12 +283,14 @@ export function SheetTabBar({
           {/* Hidden tabs toggle */}
           {hiddenCount > 0 && (
             <Button
-              variant="ghost"
+              variant={showHidden ? "secondary" : "outline"}
               size="sm"
               onClick={() => setShowHidden(!showHidden)}
               className={cn(
-                'ml-2 h-8 px-3 text-xs gap-1.5',
-                showHidden ? 'text-foreground' : 'text-muted-foreground'
+                'ml-3 h-8 px-3 text-xs gap-1.5 border-dashed',
+                showHidden
+                  ? 'bg-muted text-foreground border-solid'
+                  : 'text-muted-foreground hover:text-foreground hover:border-foreground/30'
               )}
             >
               {showHidden ? (
