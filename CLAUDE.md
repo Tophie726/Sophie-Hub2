@@ -4,6 +4,93 @@
 
 Sophie Hub v2 is the internal operations platform for Sophie Society, an Amazon brand management agency with 120+ staff members managing 700+ partner brands. This is a **fresh rebuild** designed entity-first, replacing a fragmented system of Google Sheets, forms, and a previous attempt (SophieHub v1) that had 100+ database tables due to a source-centric rather than entity-centric approach.
 
+---
+
+## DESIGN PHILOSOPHY (READ THIS FIRST)
+
+**This is a design-led project.** Every feature, every component, every interaction must be crafted with care. The goal is not just functionality—it's creating an experience that users genuinely enjoy.
+
+### The Golden Rule
+> "Build interfaces with uncommon care." — interfacecraft.dev
+
+### Design Principles (Non-Negotiable)
+
+1. **Delight Over Function**
+   - A functional but ugly tool is a failure
+   - Every screen should make users want to use the tool
+   - Beauty and usability are not trade-offs—they reinforce each other
+
+2. **Progressive Disclosure**
+   - Show the simple path first
+   - Reveal complexity only when requested
+   - Never overwhelm on first view
+   - Depth should be available, not mandatory
+
+3. **Instant Feedback**
+   - Every click, every action gets immediate visual response
+   - Loading states must be elegant (subtle spinners, skeleton loaders)
+   - Success/error states should be clear but not jarring
+   - Micro-interactions matter (button press scales, hover states, focus rings)
+
+4. **Motion With Purpose**
+   - Animations guide attention, not distract
+   - Use motion to show relationships (what came from where)
+   - Transitions should feel natural, not flashy
+   - See Animation Guidelines below
+
+5. **Data Feels Solid**
+   - Information density done right (not cramped, not sparse)
+   - Clear visual hierarchy (what's important stands out)
+   - Trust through consistency (same patterns everywhere)
+   - Lineage/source visible on demand (where did this data come from?)
+
+### Animation Guidelines (The Easing Blueprint)
+
+Reference: animations.dev by Emil Kowalski
+
+**Use These:**
+- **ease-out** `cubic-bezier(0.25, 0.46, 0.45, 0.94)`: PRIMARY choice
+  - All user-initiated interactions (clicks, opens, closes)
+  - Dropdowns, modals, tooltips, menus
+  - Enter animations on marketing/welcome screens
+  - Makes UI feel responsive and snappy
+
+- **ease-in-out** `cubic-bezier(0.45, 0, 0.55, 1)`: For morphing
+  - Elements already on screen changing position/size
+  - Accordion expansions, tab switches
+  - Layout shifts
+
+- **linear**: Only for:
+  - Progress bars
+  - Marquees/tickers
+  - Time-based visualizations
+
+**Never Use:**
+- **ease-in**: Makes UI feel sluggish and unresponsive. Avoid completely.
+
+**Custom Curves for Polish:**
+```css
+--ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);      /* Snappier ease-out */
+--ease-out-back: cubic-bezier(0.34, 1.56, 0.64, 1); /* Slight overshoot */
+```
+
+**Duration Guidelines:**
+- Micro-interactions (button press): 100-150ms
+- UI transitions (dropdowns, modals): 200-300ms
+- Page transitions: 300-400ms
+- Complex animations: 400-600ms
+
+### Visual Design Rules
+
+1. **Spacing**: Use consistent spacing scale (4, 8, 12, 16, 24, 32, 48, 64px)
+2. **Typography**: Clear hierarchy, max 2-3 font sizes per view
+3. **Color**: Purposeful use of accent colors (orange = action/priority, green = success, blue = info)
+4. **Borders**: Subtle (border-border/40), not heavy
+5. **Shadows**: Sparingly, for elevation (hover states, modals)
+6. **Empty States**: Never just "No data"—always guide next action
+
+---
+
 ## The Core Philosophy
 
 ### Two Master Entities
@@ -15,21 +102,6 @@ All other data is either:
 - A **subtable** of these entities (ASINs belong to Partners, Training belongs to Staff)
 - A **relationship** between them (Partner Assignments connect Staff to Partners)
 - **Reference data** (settings, templates, external contacts)
-
-### Design-Led Development
-This tool must be **beautiful, pleasant, and professional**. Users should feel delighted using it. Key principles:
-- **Progressive disclosure**: Simple by default, depth available on demand
-- **Instant feedback**: Every action shows immediate visual result
-- **Motion with purpose**: Use ease-out for responsiveness, subtle animations for state changes
-- **Solid and trustworthy**: Data accuracy is paramount - the UI should feel reliable
-
-### UX Animation Guidelines
-Reference: animations.dev "The Easing Blueprint"
-- **ease-out**: Primary choice for user-initiated interactions (dropdowns, modals, buttons)
-- **ease-in-out**: For elements morphing/moving on screen
-- **linear**: Only for constant animations (progress bars, marquees)
-- **Avoid ease-in**: Makes UI feel sluggish
-- Custom curves for extra polish when needed
 
 ## Tech Stack
 
