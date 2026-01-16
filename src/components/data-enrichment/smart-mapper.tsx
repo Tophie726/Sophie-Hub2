@@ -41,6 +41,7 @@ import {
   Sparkles,
   Table,
   Key,
+  Lock,
   Link2,
   Star,
   FileText,
@@ -103,6 +104,8 @@ interface SmartMapperProps {
   spreadsheetId: string
   sheetName: string
   tabName: string
+  /** Data source ID for database persistence (optional, falls back to localStorage only) */
+  dataSourceId?: string
   onComplete: (mappings: {
     headerRow: number
     columns: ColumnClassification[]
@@ -160,53 +163,19 @@ const fadeInUp = {
   transition: { duration: 0.3, ease: easeOut }
 }
 
-// Category config
-const CATEGORY_CONFIG = {
-  partner: {
-    label: 'Partner',
-    color: 'blue',
-    icon: Building2,
-    bgClass: 'bg-blue-500/10 border-blue-500/30 text-blue-600',
-    badgeClass: 'bg-blue-500',
-  },
-  staff: {
-    label: 'Staff',
-    color: 'green',
-    icon: Users,
-    bgClass: 'bg-green-500/10 border-green-500/30 text-green-600',
-    badgeClass: 'bg-green-500',
-  },
-  asin: {
-    label: 'ASIN',
-    color: 'orange',
-    icon: Package,
-    bgClass: 'bg-orange-500/10 border-orange-500/30 text-orange-600',
-    badgeClass: 'bg-orange-500',
-  },
-  weekly: {
-    label: 'Weekly',
-    color: 'purple',
-    icon: Calendar,
-    bgClass: 'bg-purple-500/10 border-purple-500/30 text-purple-600',
-    badgeClass: 'bg-purple-500',
-  },
-  computed: {
-    label: 'Computed',
-    color: 'cyan',
-    icon: Calculator,
-    bgClass: 'bg-cyan-500/10 border-cyan-500/30 text-cyan-600',
-    badgeClass: 'bg-cyan-500',
-  },
-  skip: {
-    label: 'Skip',
-    color: 'gray',
-    icon: SkipForward,
-    bgClass: 'bg-gray-500/10 border-gray-500/30 text-gray-500',
-    badgeClass: 'bg-gray-500',
-  },
+
+// LocalStorage key for draft persistence (fallback when DB not available)
+const getDraftKey = (spreadsheetId: string, tabName: string) =>
+  `smartmapper-draft-${spreadsheetId}-${tabName}`
+
+interface DraftState {
+  phase: 'preview' | 'classify' | 'map'
+  headerRow: number
+  columns: ColumnClassification[]
+  timestamp: number
 }
 
-export function SmartMapper({ spreadsheetId, sheetName, tabName, onComplete, onBack, embedded = false }: SmartMapperProps) {
+export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, onComplete, onBack, embedded = false }: SmartMapperProps) {
   // Simplified: just preview → classify → map
   const [phase, setPhase] = useState<'preview' | 'classify' | 'map'>('preview')
   const [isLoading, setIsLoading] = useState(true)
@@ -214,6 +183,133 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, onComplete, onB
   const [headerRow, setHeaderRow] = useState(0)
   const [columns, setColumns] = useState<ColumnClassification[]>([])
   const [columnsHistory, setColumnsHistory] = useState<ColumnClassification[][]>([])
+  const [draftRestored, setDraftRestored] = useState(false)
+  const [_isSavingDraft, setIsSavingDraft] = useState(false) // TODO: Show saving indicator
+  const draftKey = getDraftKey(spreadsheetId, tabName)
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Save draft to DB (debounced) and localStorage (immediate backup)
+  useEffect(() => {
+    // Don't save until we've loaded data and possibly restored a draft
+    if (isLoading || columns.length === 0) return
+
+    const draft: DraftState = {
+      phase,
+      headerRow,
+      columns,
+      timestamp: Date.now(),
+    }
+
+    // Always save to localStorage immediately (offline resilience)
+    localStorage.setItem(draftKey, JSON.stringify(draft))
+
+    // Debounce DB save (500ms) to avoid hammering the server
+    if (dataSourceId) {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current)
+      }
+      saveTimeoutRef.current = setTimeout(async () => {
+        try {
+          setIsSavingDraft(true)
+          await fetch('/api/tab-mappings/draft', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              data_source_id: dataSourceId,
+              tab_name: tabName,
+              draft_state: draft,
+            }),
+          })
+        } catch (e) {
+          console.warn('Failed to save draft to DB:', e)
+        } finally {
+          setIsSavingDraft(false)
+        }
+      }, 500)
+    }
+
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current)
+      }
+    }
+  }, [phase, headerRow, columns, draftKey, isLoading, dataSourceId, tabName])
+
+  // Restore draft: try DB first, then localStorage fallback
+  useEffect(() => {
+    if (!rawData || draftRestored) return
+
+    async function restoreDraft() {
+      // Try DB first if we have a dataSourceId
+      if (dataSourceId) {
+        try {
+          const response = await fetch(
+            `/api/tab-mappings/draft?data_source_id=${dataSourceId}&tab_name=${encodeURIComponent(tabName)}`
+          )
+          const data = await response.json()
+          if (data.draft && data.draft.columns?.length > 0) {
+            // Only restore if draft is less than 7 days old
+            const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
+            if (data.draft.timestamp > sevenDaysAgo) {
+              setPhase(data.draft.phase)
+              setHeaderRow(data.draft.headerRow)
+              setColumns(data.draft.columns)
+              setDraftRestored(true)
+              return
+            }
+          }
+        } catch (e) {
+          console.warn('Failed to load draft from DB:', e)
+        }
+      }
+
+      // Fallback to localStorage
+      try {
+        const savedDraft = localStorage.getItem(draftKey)
+        if (savedDraft) {
+          const draft: DraftState = JSON.parse(savedDraft)
+          // Only restore if draft is less than 7 days old
+          const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
+          if (draft.timestamp > sevenDaysAgo && draft.columns.length > 0) {
+            setPhase(draft.phase)
+            setHeaderRow(draft.headerRow)
+            setColumns(draft.columns)
+            setDraftRestored(true)
+            return
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to restore draft from localStorage:', e)
+      }
+      setDraftRestored(true)
+    }
+
+    restoreDraft()
+  }, [rawData, draftKey, draftRestored, dataSourceId, tabName])
+
+  // Clear draft when completing (both DB and localStorage)
+  const handleCompleteWithClear = async () => {
+    // Clear localStorage
+    localStorage.removeItem(draftKey)
+
+    // Clear DB draft
+    if (dataSourceId) {
+      try {
+        await fetch(
+          `/api/tab-mappings/draft?data_source_id=${dataSourceId}&tab_name=${encodeURIComponent(tabName)}`,
+          { method: 'DELETE' }
+        )
+      } catch (e) {
+        console.warn('Failed to clear draft from DB:', e)
+      }
+    }
+
+    onComplete({
+      headerRow,
+      columns,
+      primaryEntity: getPrimaryEntity(),
+    })
+  }
 
   // Undo handler
   const handleUndo = useCallback(() => {
@@ -258,33 +354,85 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, onComplete, onB
     loadData()
   }, [spreadsheetId, tabName])
 
+  // Track the last headerRow we initialized columns for (to detect user changes)
+  const lastInitializedHeaderRow = useRef<number | null>(null)
+
+  // Reset tracking when tab changes
+  useEffect(() => {
+    lastInitializedHeaderRow.current = null
+  }, [spreadsheetId, tabName])
+
   // Initialize columns when header row changes - with auto-detection
+  // When restoring a draft, preserve classifications but refresh header names from rawData
   useEffect(() => {
     if (!rawData || headerRow >= rawData.rows.length) return
 
     const headers = rawData.rows[headerRow]
-    const initialColumns: ColumnClassification[] = headers.map((header, idx) => {
-      const name = (header || '').toLowerCase()
 
-      // Auto-detect weekly columns (contains "weekly" or matches date patterns)
-      const isWeekly =
-        name.includes('weekly') ||
-        name.includes('week ') ||
-        name.match(/^w\d+\s/) || // W1, W2, etc.
-        name.match(/^\d{1,2}\/\d{1,2}/) || // 1/6, 12/25
-        name.match(/^\d{4}-\d{2}-\d{2}/) // 2024-01-06
+    // Case 1: User changed headerRow in Preview phase - reinitialize columns
+    // This happens when lastInitializedHeaderRow differs from current headerRow
+    const headerRowChanged = lastInitializedHeaderRow.current !== null &&
+                            lastInitializedHeaderRow.current !== headerRow
 
-      return {
-        sourceIndex: idx,
-        sourceColumn: header || `Column ${idx + 1}`,
-        category: isWeekly ? 'weekly' : null,
-        targetField: null,
-        authority: 'source_of_truth',
-        isKey: false,
-      }
-    })
-    setColumns(initialColumns)
-  }, [rawData, headerRow])
+    if (headerRowChanged) {
+      lastInitializedHeaderRow.current = headerRow
+      const initialColumns: ColumnClassification[] = headers.map((header, idx) => {
+        const name = (header || '').toLowerCase()
+        const isWeekly =
+          name.includes('weekly') ||
+          name.includes('week ') ||
+          name.match(/^w\d+\s/) ||
+          name.match(/^\d{1,2}\/\d{1,2}/) ||
+          name.match(/^\d{4}-\d{2}-\d{2}/)
+
+        return {
+          sourceIndex: idx,
+          sourceColumn: header || `Column ${idx + 1}`,
+          category: isWeekly ? 'weekly' : null,
+          targetField: null,
+          authority: 'source_of_truth',
+          isKey: false,
+        }
+      })
+      setColumns(initialColumns)
+      return
+    }
+
+    // Case 2: Draft restored - preserve classifications but sync header names
+    if (draftRestored && columns.length > 0 && lastInitializedHeaderRow.current === null) {
+      lastInitializedHeaderRow.current = headerRow
+      // Update sourceColumn names from actual headers to ensure they're current
+      setColumns(prev => prev.map((col, idx) => ({
+        ...col,
+        sourceColumn: headers[idx] || `Column ${idx + 1}`,
+      })))
+      return
+    }
+
+    // Case 3: First initialization (no draft)
+    if (lastInitializedHeaderRow.current === null) {
+      lastInitializedHeaderRow.current = headerRow
+      const initialColumns: ColumnClassification[] = headers.map((header, idx) => {
+        const name = (header || '').toLowerCase()
+        const isWeekly =
+          name.includes('weekly') ||
+          name.includes('week ') ||
+          name.match(/^w\d+\s/) ||
+          name.match(/^\d{1,2}\/\d{1,2}/) ||
+          name.match(/^\d{4}-\d{2}-\d{2}/)
+
+        return {
+          sourceIndex: idx,
+          sourceColumn: header || `Column ${idx + 1}`,
+          category: isWeekly ? 'weekly' : null,
+          targetField: null,
+          authority: 'source_of_truth',
+          isKey: false,
+        }
+      })
+      setColumns(initialColumns)
+    }
+  }, [rawData, headerRow, draftRestored, columns.length])
 
   // Handlers
   const handleCategoryChange = (columnIndex: number, category: ColumnCategory) => {
@@ -357,59 +505,83 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, onComplete, onB
     return 'asins'
   }
 
-  const handleComplete = () => {
-    onComplete({
-      headerRow,
-      columns,
-      primaryEntity: getPrimaryEntity(),
-    })
-  }
-
   if (isLoading) {
     return (
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        className="space-y-4"
+        className="space-y-0"
       >
-        {/* Skeleton card mimicking preview structure */}
+        {/* Loading header with tab context */}
         <div className="rounded-xl border bg-card overflow-hidden">
-          {/* Header skeleton */}
-          <div className="p-5 border-b">
-            <div className="flex items-center justify-between">
-              <div className="space-y-2">
-                <div className="h-5 w-40 bg-gradient-to-r from-muted/60 via-muted/30 to-muted/60 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite] rounded" />
-                <div className="h-4 w-64 bg-gradient-to-r from-muted/40 via-muted/20 to-muted/40 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite] rounded" style={{ animationDelay: '100ms' }} />
+          {/* Header with loading context */}
+          <div className="p-5 border-b bg-gradient-to-r from-muted/10 to-transparent">
+            <div className="flex items-center gap-4">
+              {/* Animated icon */}
+              <div className="relative">
+                <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <Table className="h-5 w-5 text-primary/70" />
+                </div>
+                <motion.div
+                  className="absolute -right-0.5 -bottom-0.5 h-4 w-4 rounded-full bg-background border-2 border-primary/50 flex items-center justify-center"
+                  animate={{ scale: [1, 1.2, 1] }}
+                  transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
+                >
+                  <Loader2 className="h-2.5 w-2.5 text-primary animate-spin" />
+                </motion.div>
               </div>
-              <div className="h-9 w-28 bg-gradient-to-r from-muted/50 via-muted/25 to-muted/50 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite] rounded-lg" />
+              <div className="flex-1 min-w-0">
+                <h3 className="font-medium text-foreground truncate">{tabName}</h3>
+                <p className="text-sm text-muted-foreground">Loading spreadsheet data...</p>
+              </div>
             </div>
           </div>
 
-          {/* Table skeleton */}
+          {/* Skeleton table with staggered animation */}
           <div className="p-4">
-            {/* Header row */}
+            {/* Header row skeleton */}
             <div className="flex gap-3 pb-3 border-b mb-3">
-              <div className="h-8 w-10 bg-muted/30 rounded" />
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="h-8 flex-1 bg-gradient-to-r from-muted/50 via-muted/25 to-muted/50 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite] rounded" style={{ animationDelay: `${i * 50}ms` }} />
+              <div className="h-8 w-8 bg-muted/30 rounded flex items-center justify-center">
+                <span className="text-[10px] text-muted-foreground/50">#</span>
+              </div>
+              {[1, 2, 3, 4].map((i) => (
+                <motion.div
+                  key={i}
+                  className="h-8 flex-1 bg-gradient-to-r from-primary/10 via-primary/5 to-primary/10 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite] rounded"
+                  style={{ animationDelay: `${i * 100}ms` }}
+                />
               ))}
             </div>
-            {/* Data rows */}
+            {/* Data rows skeleton */}
             {[0, 1, 2, 3, 4].map((i) => (
-              <div key={i} className="flex gap-3 py-2">
-                <div className="h-8 w-10 bg-muted/20 rounded flex items-center justify-center text-xs text-muted-foreground">{i + 1}</div>
-                {[1, 2, 3].map((j) => (
-                  <div key={j} className="h-8 flex-1 bg-gradient-to-r from-muted/30 via-muted/15 to-muted/30 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite] rounded" style={{ animationDelay: `${(i * 3 + j) * 40}ms` }} />
+              <motion.div
+                key={i}
+                className="flex gap-3 py-1.5"
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: i * 0.05, duration: 0.3, ease: easeOut }}
+              >
+                <div className="h-8 w-8 bg-muted/15 rounded flex items-center justify-center text-xs text-muted-foreground/40">{i + 1}</div>
+                {[1, 2, 3, 4].map((j) => (
+                  <div
+                    key={j}
+                    className="h-8 flex-1 bg-gradient-to-r from-muted/25 via-muted/10 to-muted/25 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite] rounded"
+                    style={{ animationDelay: `${(i * 4 + j) * 50}ms` }}
+                  />
                 ))}
-              </div>
+              </motion.div>
             ))}
           </div>
-        </div>
 
-        {/* Loading indicator */}
-        <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          <span>Fetching spreadsheet data...</span>
+          {/* Progress bar at bottom */}
+          <div className="h-1 bg-muted/20 overflow-hidden">
+            <motion.div
+              className="h-full bg-gradient-to-r from-primary/40 via-primary/60 to-primary/40"
+              initial={{ x: "-100%" }}
+              animate={{ x: "100%" }}
+              transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
+            />
+          </div>
         </div>
       </motion.div>
     )
@@ -465,7 +637,7 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, onComplete, onB
           columns={columns}
           onFieldChange={handleFieldChange}
           onAuthorityChange={handleAuthorityChange}
-          onConfirm={handleComplete}
+          onConfirm={handleCompleteWithClear}
           onBack={() => setPhase('classify')}
           embedded={embedded}
         />
@@ -642,7 +814,7 @@ function PreviewPhase({
           <div className="flex items-center justify-between pt-4 border-t">
             <Button variant="outline" onClick={onBack} className="gap-2">
               <ArrowLeft className="h-4 w-4" />
-              Back
+              Back to Tabs
             </Button>
             <Button onClick={onConfirm} className="gap-2">
               This looks right
@@ -749,13 +921,6 @@ function ClassifyPhase({
       }
       lastClickedIndex.current = visualIdx
     }
-  }
-
-  // Simple toggle for keyboard
-  const toggleSelection = (idx: number) => {
-    setSelectedIndices(prev =>
-      prev.includes(idx) ? prev.filter(i => i !== idx) : [...prev, idx]
-    )
   }
 
   const applyBulkCategory = (category: ColumnCategory) => {
@@ -967,52 +1132,159 @@ function ClassifyPhase({
             </div>
           </div>
 
-          {/* Stats badges */}
+          {/* Stats badges with animated counts */}
           <div className="flex flex-wrap gap-2 mt-4">
-            {stats.partner > 0 && (
-              <Badge variant="outline" className="bg-blue-500/10 text-blue-600 border-blue-500/30">
-                <Building2 className="h-3 w-3 mr-1" />
-                {stats.partner} Partner
-                {partnerKey && <Key className="h-3 w-3 ml-1 text-amber-500" />}
-              </Badge>
-            )}
-            {stats.staff > 0 && (
-              <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/30">
-                <Users className="h-3 w-3 mr-1" />
-                {stats.staff} Staff
-                {staffKey && <Key className="h-3 w-3 ml-1 text-amber-500" />}
-              </Badge>
-            )}
-            {stats.asin > 0 && (
-              <Badge variant="outline" className="bg-orange-500/10 text-orange-600 border-orange-500/30">
-                <Package className="h-3 w-3 mr-1" />
-                {stats.asin} ASIN
-                {asinKey && <Key className="h-3 w-3 ml-1 text-amber-500" />}
-              </Badge>
-            )}
-            {stats.weekly > 0 && (
-              <Badge variant="outline" className="bg-purple-500/10 text-purple-600 border-purple-500/30">
-                <Calendar className="h-3 w-3 mr-1" />
-                {stats.weekly} Weekly
-              </Badge>
-            )}
-            {stats.computed > 0 && (
-              <Badge variant="outline" className="bg-cyan-500/10 text-cyan-600 border-cyan-500/30">
-                <Calculator className="h-3 w-3 mr-1" />
-                {stats.computed} Computed
-              </Badge>
-            )}
-            {stats.skip > 0 && (
-              <Badge variant="outline" className="bg-gray-500/10 text-gray-600 border-gray-500/30">
-                <SkipForward className="h-3 w-3 mr-1" />
-                {stats.skip} Skip
-              </Badge>
-            )}
-            {stats.unclassified > 0 && (
-              <Badge variant="outline" className="text-muted-foreground">
-                {stats.unclassified} unclassified
-              </Badge>
-            )}
+            <AnimatePresence mode="popLayout">
+              {stats.partner > 0 && (
+                <motion.div
+                  key="partner-badge"
+                  initial={{ scale: 0.8, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0.8, opacity: 0 }}
+                  transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                >
+                  <Badge variant="outline" className="bg-blue-500/10 text-blue-600 border-blue-500/30">
+                    <Building2 className="h-3 w-3 mr-1" />
+                    <motion.span
+                      key={stats.partner}
+                      initial={{ y: -8, opacity: 0 }}
+                      animate={{ y: 0, opacity: 1 }}
+                      transition={{ duration: 0.15 }}
+                    >
+                      {stats.partner}
+                    </motion.span>{' '}Partner
+                    {partnerKey && <Key className="h-3 w-3 ml-1 text-amber-500" />}
+                  </Badge>
+                </motion.div>
+              )}
+              {stats.staff > 0 && (
+                <motion.div
+                  key="staff-badge"
+                  initial={{ scale: 0.8, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0.8, opacity: 0 }}
+                  transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                >
+                  <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/30">
+                    <Users className="h-3 w-3 mr-1" />
+                    <motion.span
+                      key={stats.staff}
+                      initial={{ y: -8, opacity: 0 }}
+                      animate={{ y: 0, opacity: 1 }}
+                      transition={{ duration: 0.15 }}
+                    >
+                      {stats.staff}
+                    </motion.span>{' '}Staff
+                    {staffKey && <Key className="h-3 w-3 ml-1 text-amber-500" />}
+                  </Badge>
+                </motion.div>
+              )}
+              {stats.asin > 0 && (
+                <motion.div
+                  key="asin-badge"
+                  initial={{ scale: 0.8, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0.8, opacity: 0 }}
+                  transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                >
+                  <Badge variant="outline" className="bg-orange-500/10 text-orange-600 border-orange-500/30">
+                    <Package className="h-3 w-3 mr-1" />
+                    <motion.span
+                      key={stats.asin}
+                      initial={{ y: -8, opacity: 0 }}
+                      animate={{ y: 0, opacity: 1 }}
+                      transition={{ duration: 0.15 }}
+                    >
+                      {stats.asin}
+                    </motion.span>{' '}ASIN
+                    {asinKey && <Key className="h-3 w-3 ml-1 text-amber-500" />}
+                  </Badge>
+                </motion.div>
+              )}
+              {stats.weekly > 0 && (
+                <motion.div
+                  key="weekly-badge"
+                  initial={{ scale: 0.8, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0.8, opacity: 0 }}
+                  transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                >
+                  <Badge variant="outline" className="bg-purple-500/10 text-purple-600 border-purple-500/30">
+                    <Calendar className="h-3 w-3 mr-1" />
+                    <motion.span
+                      key={stats.weekly}
+                      initial={{ y: -8, opacity: 0 }}
+                      animate={{ y: 0, opacity: 1 }}
+                      transition={{ duration: 0.15 }}
+                    >
+                      {stats.weekly}
+                    </motion.span>{' '}Weekly
+                  </Badge>
+                </motion.div>
+              )}
+              {stats.computed > 0 && (
+                <motion.div
+                  key="computed-badge"
+                  initial={{ scale: 0.8, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0.8, opacity: 0 }}
+                  transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                >
+                  <Badge variant="outline" className="bg-cyan-500/10 text-cyan-600 border-cyan-500/30">
+                    <Calculator className="h-3 w-3 mr-1" />
+                    <motion.span
+                      key={stats.computed}
+                      initial={{ y: -8, opacity: 0 }}
+                      animate={{ y: 0, opacity: 1 }}
+                      transition={{ duration: 0.15 }}
+                    >
+                      {stats.computed}
+                    </motion.span>{' '}Computed
+                  </Badge>
+                </motion.div>
+              )}
+              {stats.skip > 0 && (
+                <motion.div
+                  key="skip-badge"
+                  initial={{ scale: 0.8, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0.8, opacity: 0 }}
+                  transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                >
+                  <Badge variant="outline" className="bg-gray-500/10 text-gray-600 border-gray-500/30">
+                    <SkipForward className="h-3 w-3 mr-1" />
+                    <motion.span
+                      key={stats.skip}
+                      initial={{ y: -8, opacity: 0 }}
+                      animate={{ y: 0, opacity: 1 }}
+                      transition={{ duration: 0.15 }}
+                    >
+                      {stats.skip}
+                    </motion.span>{' '}Skip
+                  </Badge>
+                </motion.div>
+              )}
+              {stats.unclassified > 0 && (
+                <motion.div
+                  key="unclassified-badge"
+                  initial={{ scale: 0.8, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0.8, opacity: 0 }}
+                  transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                >
+                  <Badge variant="outline" className="text-muted-foreground">
+                    <motion.span
+                      key={stats.unclassified}
+                      initial={{ y: -8, opacity: 0 }}
+                      animate={{ y: 0, opacity: 1 }}
+                      transition={{ duration: 0.15 }}
+                    >
+                      {stats.unclassified}
+                    </motion.span>{' '}unclassified
+                  </Badge>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
           {/* Bulk action bar */}
@@ -1154,8 +1426,6 @@ function ClassifyPhase({
                 const sample = getSample(idx)
                 const isSelected = selectedIndices.includes(idx)
                 const isFocused = focusedIndex === visualIdx
-                const config = col.category ? CATEGORY_CONFIG[col.category] : null
-                const canBeKey = col.category && col.category !== 'skip' && col.category !== 'weekly'
 
                 // Get the actual sample values for each key (for showing linked relationship)
                 const partnerKeyValue = partnerKey ? getSample(partnerKey.sourceIndex) : null
@@ -1166,15 +1436,34 @@ function ClassifyPhase({
                   <motion.div
                     key={idx}
                     layout
-                    className={`flex items-center gap-3 p-3 rounded-lg border transition-all relative ${
-                      col.isKey
-                        ? 'bg-amber-500/5 border-amber-500/30'
+                    initial={false}
+                    animate={{
+                      backgroundColor: col.isKey
+                        ? 'rgba(245, 158, 11, 0.05)'
                         : isSelected
-                        ? 'bg-accent border-primary/50'
+                        ? 'hsl(var(--accent))'
                         : isFocused
-                        ? 'bg-accent/50 border-primary ring-2 ring-primary/30 ring-offset-1'
+                        ? 'hsl(var(--accent) / 0.5)'
                         : col.category
-                        ? 'bg-muted/30 border-border'
+                        ? 'hsl(var(--muted) / 0.3)'
+                        : 'transparent',
+                      scale: 1,
+                    }}
+                    whileTap={{ scale: 0.995 }}
+                    transition={{
+                      backgroundColor: { duration: 0.2, ease: easeOut },
+                      scale: { duration: 0.1 },
+                      layout: { duration: 0.2, ease: easeOut }
+                    }}
+                    className={`flex items-center gap-3 p-3 rounded-lg border relative ${
+                      col.isKey
+                        ? 'border-amber-500/30'
+                        : isSelected
+                        ? 'border-primary/50'
+                        : isFocused
+                        ? 'border-primary ring-2 ring-primary/30 ring-offset-1'
+                        : col.category
+                        ? 'border-border'
                         : 'border-border hover:bg-accent/50'
                     }`}
                   >
@@ -1198,18 +1487,39 @@ function ClassifyPhase({
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="font-medium text-sm truncate">{col.sourceColumn}</span>
-                        {col.isKey && col.category && (
-                          <Badge className={`text-white text-[10px] px-1.5 py-0 ${
-                            col.category === 'partner' ? 'bg-blue-500' :
-                            col.category === 'staff' ? 'bg-green-500' :
-                            col.category === 'asin' ? 'bg-orange-500' : 'bg-amber-500'
-                          }`}>
-                            <Key className="h-3 w-3 mr-0.5" />
-                            {col.category === 'partner' ? 'Partner Key' :
-                             col.category === 'staff' ? 'Staff Key' :
-                             col.category === 'asin' ? 'ASIN Key' : 'Key'}
-                          </Badge>
-                        )}
+                        <AnimatePresence mode="wait">
+                          {col.isKey && col.category && (
+                            <motion.div
+                              initial={{ scale: 0, opacity: 0 }}
+                              animate={{ scale: 1, opacity: 1 }}
+                              exit={{ scale: 0, opacity: 0 }}
+                              transition={{
+                                type: "spring",
+                                stiffness: 500,
+                                damping: 25,
+                                duration: 0.3
+                              }}
+                            >
+                              <Badge className={`text-white text-[10px] px-1.5 py-0 ${
+                                col.category === 'partner' ? 'bg-blue-500' :
+                                col.category === 'staff' ? 'bg-green-500' :
+                                col.category === 'asin' ? 'bg-orange-500' : 'bg-amber-500'
+                              }`}>
+                                <motion.span
+                                  initial={{ rotate: -20 }}
+                                  animate={{ rotate: 0 }}
+                                  transition={{ delay: 0.1, type: "spring", stiffness: 300 }}
+                                  className="inline-flex"
+                                >
+                                  <Lock className="h-3 w-3 mr-0.5" />
+                                </motion.span>
+                                {col.category === 'partner' ? 'Partner Key' :
+                                 col.category === 'staff' ? 'Staff Key' :
+                                 col.category === 'asin' ? 'ASIN Key' : 'Key'}
+                              </Badge>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
                       </div>
                       <p className="text-xs text-muted-foreground truncate">{sample || '(empty)'}</p>
                     </div>
@@ -1524,7 +1834,7 @@ function ClassifyPhase({
           <div className="p-3 rounded-lg bg-muted/50 border border-border/50">
             <p className="text-xs text-muted-foreground">
               <Key className="h-3 w-3 inline mr-1 text-amber-500" />
-              <strong>Key</strong> = The column that uniquely identifies each record (e.g., <span className="text-blue-600">"Brand Name"</span> for partners, <span className="text-green-600">"Full Name"</span> for staff, <span className="text-orange-600">"ASIN Code"</span> for products)
+              <strong>Key</strong> = The column that uniquely identifies each record (e.g., <span className="text-blue-600">&quot;Brand Name&quot;</span> for partners, <span className="text-green-600">&quot;Full Name&quot;</span> for staff, <span className="text-orange-600">&quot;ASIN Code&quot;</span> for products)
             </p>
           </div>
 
@@ -1597,7 +1907,7 @@ function ClassifyPhase({
           <div className="flex items-center justify-between pt-4 border-t">
             <Button variant="outline" onClick={onBack} className="gap-2">
               <ArrowLeft className="h-4 w-4" />
-              Back
+              Change Header Row
             </Button>
             <Button
               onClick={onConfirm}
@@ -2284,7 +2594,7 @@ function MapPhase({
           <div className="flex items-center justify-between pt-4 border-t">
             <Button variant="outline" onClick={onBack} className="gap-2">
               <ArrowLeft className="h-4 w-4" />
-              Back
+              Back to Classify
             </Button>
             <Button onClick={onConfirm} className="gap-2">
               <CheckCircle2 className="h-4 w-4" />

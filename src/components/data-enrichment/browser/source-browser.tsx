@@ -80,13 +80,13 @@ export function SourceBrowser({ onBack, initialSourceId }: SourceBrowserProps) {
               loadPreviewForSource(sourceToSelect.id, sourceToSelect.spreadsheet_id)
             }
 
-            // Auto-select first active tab if we have tabs in the database
+            // Auto-select first workable tab (active or reference, not flagged/hidden)
             if (sourceToSelect.tabs.length > 0) {
-              const activeTabs = sourceToSelect.tabs.filter((t: { status?: string }) =>
-                !t.status || t.status === 'active' || t.status === 'flagged'
+              const workableTabs = sourceToSelect.tabs.filter((t: { status?: string }) =>
+                !t.status || t.status === 'active' || t.status === 'reference'
               )
-              if (activeTabs.length > 0) {
-                setActiveTabId(activeTabs[0].id)
+              if (workableTabs.length > 0) {
+                setActiveTabId(workableTabs[0].id)
               }
             }
           }
@@ -114,10 +114,15 @@ export function SourceBrowser({ onBack, initialSourceId }: SourceBrowserProps) {
           [sourceId]: preview,
         }))
 
-        // Auto-select first tab
-        if (preview.tabs.length > 0) {
-          setActiveTabId(String(preview.tabs[0].sheetId))
-        }
+        // Only auto-select if no tab is currently selected
+        // (DB tabs are already selected in fetchSources if available)
+        setActiveTabId(current => {
+          if (current) return current // Don't override existing selection
+          if (preview.tabs.length > 0) {
+            return String(preview.tabs[0].sheetId)
+          }
+          return current
+        })
       }
     } catch (error) {
       console.error('Error loading preview:', error)
@@ -167,6 +172,22 @@ export function SourceBrowser({ onBack, initialSourceId }: SourceBrowserProps) {
   })()
 
   const activeTab = sheetTabs.find(t => t.id === activeTabId)
+
+  // Auto-select first workable tab when tabs are available but none selected
+  useEffect(() => {
+    if (sheetTabs.length > 0 && !activeTabId) {
+      // Prefer active/reference tabs, exclude flagged/hidden
+      const workableTabs = sheetTabs.filter(t =>
+        t.status === 'active' || t.status === 'reference' || !t.status
+      )
+      if (workableTabs.length > 0) {
+        setActiveTabId(workableTabs[0].id)
+      } else if (sheetTabs.length > 0) {
+        // Fall back to first tab if all are flagged/hidden
+        setActiveTabId(sheetTabs[0].id)
+      }
+    }
+  }, [sheetTabs, activeTabId])
 
   // Handle tab status change
   const handleTabStatusChange = async (tabId: string, status: string, notes?: string) => {
@@ -636,49 +657,74 @@ export function SourceBrowser({ onBack, initialSourceId }: SourceBrowserProps) {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="p-6 space-y-6"
+            className="p-6 space-y-4"
           >
-            {/* Skeleton tab bar */}
-            <div className="flex gap-2">
+            {/* Skeleton tab bar with animated shimmer */}
+            <div className="flex gap-2 pb-2">
               {[80, 100, 90, 85, 75].map((width, i) => (
-                <div
+                <motion.div
                   key={i}
-                  className="h-9 rounded-lg bg-gradient-to-r from-muted/60 via-muted/30 to-muted/60 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite]"
+                  className="h-9 rounded-lg bg-gradient-to-r from-primary/10 via-primary/5 to-primary/10 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite]"
                   style={{ width: `${width}px`, animationDelay: `${i * 100}ms` }}
+                  initial={{ opacity: 0, y: 5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.05 }}
                 />
               ))}
             </div>
 
-            {/* Skeleton content card */}
+            {/* Main content card with loading context */}
             <div className="rounded-xl border bg-card overflow-hidden">
-              {/* Header */}
-              <div className="p-5 border-b bg-muted/5">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-2.5">
-                    <div className="h-6 w-56 bg-gradient-to-r from-muted/60 via-muted/30 to-muted/60 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite] rounded" />
-                    <div className="h-4 w-80 bg-gradient-to-r from-muted/40 via-muted/20 to-muted/40 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite] rounded" style={{ animationDelay: '150ms' }} />
+              {/* Header with context */}
+              <div className="p-5 border-b bg-gradient-to-r from-muted/10 to-transparent">
+                <div className="flex items-center gap-4">
+                  {/* Animated icon */}
+                  <div className="relative">
+                    <div className="h-10 w-10 rounded-lg bg-green-500/10 flex items-center justify-center">
+                      <Table className="h-5 w-5 text-green-600/70" />
+                    </div>
+                    <motion.div
+                      className="absolute -right-0.5 -bottom-0.5 h-4 w-4 rounded-full bg-background border-2 border-green-500/50 flex items-center justify-center"
+                      animate={{ scale: [1, 1.2, 1] }}
+                      transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
+                    >
+                      <Loader2 className="h-2.5 w-2.5 text-green-600 animate-spin" />
+                    </motion.div>
                   </div>
-                  <div className="h-10 w-36 bg-gradient-to-r from-muted/50 via-muted/25 to-muted/50 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite] rounded-lg" />
+                  <div className="flex-1">
+                    <h3 className="font-medium text-foreground">{activeSource?.name || 'Loading...'}</h3>
+                    <p className="text-sm text-muted-foreground">Connecting to Google Sheets...</p>
+                  </div>
                 </div>
               </div>
 
-              {/* Table skeleton */}
-              <div className="p-5 space-y-3">
+              {/* Table skeleton with staggered rows */}
+              <div className="p-5 space-y-2">
                 {[0, 1, 2, 3, 4, 5].map((i) => (
-                  <div key={i} className="flex items-center gap-4" style={{ animationDelay: `${i * 75}ms` }}>
-                    <div className="h-10 w-12 bg-gradient-to-r from-muted/50 via-muted/25 to-muted/50 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite] rounded" />
-                    <div className="h-10 flex-[2] bg-gradient-to-r from-muted/40 via-muted/20 to-muted/40 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite] rounded" style={{ animationDelay: `${i * 75 + 50}ms` }} />
-                    <div className="h-10 flex-[3] bg-gradient-to-r from-muted/35 via-muted/15 to-muted/35 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite] rounded" style={{ animationDelay: `${i * 75 + 100}ms` }} />
-                    <div className="h-10 w-28 bg-gradient-to-r from-muted/30 via-muted/15 to-muted/30 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite] rounded" style={{ animationDelay: `${i * 75 + 150}ms` }} />
-                  </div>
+                  <motion.div
+                    key={i}
+                    className="flex items-center gap-4"
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: i * 0.05, duration: 0.3 }}
+                  >
+                    <div className="h-9 w-8 bg-muted/20 rounded flex items-center justify-center text-xs text-muted-foreground/40">{i + 1}</div>
+                    <div className="h-9 flex-[2] bg-gradient-to-r from-muted/30 via-muted/15 to-muted/30 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite] rounded" style={{ animationDelay: `${i * 75 + 50}ms` }} />
+                    <div className="h-9 flex-[3] bg-gradient-to-r from-muted/25 via-muted/10 to-muted/25 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite] rounded" style={{ animationDelay: `${i * 75 + 100}ms` }} />
+                    <div className="h-9 w-24 bg-gradient-to-r from-muted/20 via-muted/10 to-muted/20 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite] rounded" style={{ animationDelay: `${i * 75 + 150}ms` }} />
+                  </motion.div>
                 ))}
               </div>
-            </div>
 
-            {/* Loading message */}
-            <div className="flex items-center justify-center gap-3 text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              <span className="text-sm">Connecting to Google Sheets...</span>
+              {/* Progress bar at bottom */}
+              <div className="h-1 bg-muted/20 overflow-hidden">
+                <motion.div
+                  className="h-full bg-gradient-to-r from-green-500/40 via-green-500/60 to-green-500/40"
+                  initial={{ x: "-100%" }}
+                  animate={{ x: "100%" }}
+                  transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
+                />
+              </div>
             </div>
           </motion.div>
         ) : activeSourceId && activeTabId && activeTab ? (
@@ -694,6 +740,7 @@ export function SourceBrowser({ onBack, initialSourceId }: SourceBrowserProps) {
               spreadsheetId={activeSource?.spreadsheet_id || activeSourceId.replace('temp-', '')}
               sheetName={activeSource?.name || activePreview?.title || ''}
               tabName={activeTab.name}
+              dataSourceId={activeSource?.id}
               onComplete={handleMappingComplete}
               onBack={() => setActiveTabId(null)}
               embedded

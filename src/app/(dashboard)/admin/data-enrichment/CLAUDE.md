@@ -202,14 +202,16 @@ Following CLAUDE.md animation guidelines:
 2. **Connect a Google Sheet** - Persists to `data_sources` table
 3. **Load sheet tabs** - Fetches from Google Sheets API, shows in sub-tab bar
 4. **Tab Status System** - Change status, hide tabs, flag with notes
-5. **SmartMapper UI** - Shows columns, classification dropdowns (visual only)
+5. **SmartMapper UI** - Column classification with unified dropdown
+6. **Save column mappings** - SmartMapper persists to `column_mappings` table
+7. **Draft persistence** - In-progress work saved to DB + localStorage fallback
+8. **Delightful animations** - Key badge lock, row highlight, count animations
 
 ### What's TODO 🚧
 
-1. **Save column mappings** - SmartMapper doesn't persist to `column_mappings` yet
-2. **Show mapping progress** - Calculate % complete from actual DB data
-3. **Sync data** - Actually import data from sheets to entity tables
-4. **Multiple sources** - Test with 2+ connected sheets
+1. **Show mapping progress** - Calculate % complete from actual DB data
+2. **Sync data** - Actually import data from sheets to entity tables
+3. **Multiple sources** - Test with 2+ connected sheets
 
 ### Simplified Flow (Current)
 
@@ -262,6 +264,86 @@ Body: { status: 'flagged', notes: 'Need to review this with finance team' }
 
 ---
 
+## DRAFT PERSISTENCE SYSTEM
+
+Mapping progress is automatically saved so users (and other admins) can resume work without losing progress.
+
+### How It Works
+
+1. **Primary Storage: Database**
+   - Draft state saved to `tab_mappings.draft_state` (JSONB)
+   - Includes: phase, headerRow, columns, timestamp
+   - Tracks who last updated: `draft_updated_by`, `draft_updated_at`
+   - Enables multi-admin collaboration
+
+2. **Fallback: localStorage**
+   - Immediate backup for offline resilience
+   - Used when DB save fails or dataSourceId not available
+   - 7-day expiry for stale drafts
+
+3. **Debounced Saving**
+   - DB saves debounced at 500ms to avoid hammering server
+   - localStorage saves immediately for responsiveness
+
+### Database Schema
+
+```sql
+-- Added to tab_mappings
+draft_state JSONB               -- { phase, headerRow, columns, timestamp }
+draft_updated_by TEXT           -- User who last updated
+draft_updated_at TIMESTAMPTZ    -- When draft was last updated
+```
+
+### API
+
+```
+GET /api/tab-mappings/draft?data_source_id=X&tab_name=Y
+  Returns: { draft, updatedBy, updatedAt }
+
+POST /api/tab-mappings/draft
+  Body: { data_source_id, tab_name, draft_state, updated_by? }
+
+DELETE /api/tab-mappings/draft?data_source_id=X&tab_name=Y
+  Clears draft (called when mapping completes)
+```
+
+### Draft State Structure
+
+```typescript
+interface DraftState {
+  phase: 'preview' | 'classify' | 'map'
+  headerRow: number
+  columns: Array<{
+    sourceIndex: number
+    sourceColumn: string
+    category: 'partner' | 'staff' | 'asin' | 'weekly' | 'computed' | 'skip' | null
+    targetField: string | null
+    authority: 'source_of_truth' | 'reference'
+    isKey: boolean
+    computedConfig?: ComputedFieldConfig
+  }>
+  timestamp: number
+}
+```
+
+### UX Animations
+
+SmartMapper includes delightful micro-interactions:
+
+1. **Key Badge Lock Animation** - When setting a column as key:
+   - Badge springs in with scale animation (500 stiffness, 25 damping)
+   - Lock icon rotates from -20° to 0° with spring effect
+
+2. **Row Highlight Animation** - When classifying:
+   - Smooth background color transitions (200ms ease-out)
+   - Subtle scale tap feedback (0.995)
+
+3. **Category Badge Count Animation** - Stats badges:
+   - Pop in/out with spring animation when appearing/disappearing
+   - Count numbers slide in from above when changing
+
+---
+
 ## DATABASE SCHEMA (Current)
 
 ### data_sources
@@ -285,6 +367,9 @@ header_row INT DEFAULT 0
 primary_entity TEXT              -- 'partners', 'staff', 'asins'
 status TEXT DEFAULT 'active'     -- 'active', 'reference', 'hidden', 'flagged'
 notes TEXT                       -- Notes for flagged tabs
+draft_state JSONB                -- In-progress mapping state (see Draft Persistence)
+draft_updated_by TEXT            -- Who last updated the draft
+draft_updated_at TIMESTAMPTZ     -- When draft was last updated
 is_active BOOLEAN DEFAULT true   -- (legacy)
 created_at, updated_at TIMESTAMPTZ
 UNIQUE(data_source_id, tab_name)
@@ -316,7 +401,11 @@ UNIQUE(tab_mapping_id, source_column)
 | GET | `/api/sheets/search` | Search Google Drive for sheets |
 | GET | `/api/sheets/preview?id=X` | Get sheet tabs and metadata |
 | GET | `/api/sheets/raw-rows?id=X&tab=Y` | Get raw data from a tab |
+| POST | `/api/tab-mappings` | Create tab mapping (for unmapped tabs) |
 | PATCH | `/api/tab-mappings/[id]/status` | Update tab status/notes |
+| GET | `/api/tab-mappings/draft?data_source_id=X&tab_name=Y` | Load draft state |
+| POST | `/api/tab-mappings/draft` | Save draft state |
+| DELETE | `/api/tab-mappings/draft?data_source_id=X&tab_name=Y` | Clear draft state |
 | POST | `/api/mappings/save` | Save column mappings (full payload) |
 
 ---
