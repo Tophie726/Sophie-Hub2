@@ -194,7 +194,7 @@ Following CLAUDE.md animation guidelines:
 
 ## CURRENT IMPLEMENTATION STATUS
 
-> **Last Updated: January 2026**
+> **Last Updated: January 19, 2026**
 
 ### What's Working ✅
 
@@ -204,14 +204,18 @@ Following CLAUDE.md animation guidelines:
 4. **Tab Status System** - Change status, hide tabs, flag with notes
 5. **SmartMapper UI** - Column classification with unified dropdown
 6. **Save column mappings** - SmartMapper persists to `column_mappings` table
-7. **Draft persistence** - In-progress work saved to DB + localStorage fallback
+7. **Draft persistence** - In-progress work saved to DB + localStorage fallback ✓ *Migration verified*
 8. **Delightful animations** - Key badge lock, row highlight, count animations
+9. **Auto-select first tab** - No blank page on load
+10. **Collapsible flagged tabs** - Separate section, keeps main bar clean
+11. **Polished loading states** - Context-aware skeletons with progress bars
 
 ### What's TODO 🚧
 
 1. **Show mapping progress** - Calculate % complete from actual DB data
 2. **Sync data** - Actually import data from sheets to entity tables
 3. **Multiple sources** - Test with 2+ connected sheets
+4. **Clear draft on save** - Delete draft after successful mapping commit
 
 ### Simplified Flow (Current)
 
