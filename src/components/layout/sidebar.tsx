@@ -9,12 +9,6 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip'
-import {
   LayoutDashboard,
   Users,
   UserCircle,
@@ -68,8 +62,7 @@ export function Sidebar() {
   const pathname = usePathname()
 
   return (
-    <TooltipProvider delayDuration={0}>
-      <motion.aside
+    <motion.aside
         initial={{ x: -20, opacity: 0 }}
         animate={{ x: 0, opacity: 1 }}
         transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
@@ -101,45 +94,39 @@ export function Sidebar() {
                       const Icon = item.icon
 
                       return (
-                        <Tooltip key={item.name}>
-                          <TooltipTrigger asChild>
-                            <Link
-                              href={item.href}
-                              className={cn(
-                                'group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200',
-                                isActive
-                                  ? 'bg-primary/10 text-primary'
-                                  : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
-                                item.highlight && !isActive && 'text-orange-500/80 hover:text-orange-500'
-                              )}
-                            >
-                              {isActive && (
-                                <motion.div
-                                  layoutId="activeNav"
-                                  className="absolute inset-0 rounded-lg bg-primary/10"
-                                  transition={{ type: 'spring', bounce: 0.15, duration: 0.5 }}
-                                />
-                              )}
-                              <Icon className={cn(
-                                'relative h-4 w-4 shrink-0 transition-transform duration-200 group-hover:scale-110',
-                                item.highlight && !isActive && 'text-orange-500'
-                              )} />
-                              <span className="relative">{item.name}</span>
-                              {item.highlight && (
-                                <span className="relative ml-auto flex h-2 w-2">
-                                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-orange-400 opacity-75"></span>
-                                  <span className="relative inline-flex h-2 w-2 rounded-full bg-orange-500"></span>
-                                </span>
-                              )}
-                              {isActive && (
-                                <ChevronRight className="relative ml-auto h-4 w-4 opacity-50" />
-                              )}
-                            </Link>
-                          </TooltipTrigger>
-                          <TooltipContent side="right" className="text-xs">
-                            {item.name}
-                          </TooltipContent>
-                        </Tooltip>
+                        <Link
+                          key={item.name}
+                          href={item.href}
+                          className={cn(
+                            'group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200',
+                            isActive
+                              ? 'bg-primary/10 text-primary'
+                              : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+                            item.highlight && !isActive && 'text-orange-500/80 hover:text-orange-500'
+                          )}
+                        >
+                          {isActive && (
+                            <motion.div
+                              layoutId="activeNav"
+                              className="absolute inset-0 rounded-lg bg-primary/10"
+                              transition={{ type: 'spring', bounce: 0.15, duration: 0.5 }}
+                            />
+                          )}
+                          <Icon className={cn(
+                            'relative h-4 w-4 shrink-0 transition-transform duration-200 group-hover:scale-110',
+                            item.highlight && !isActive && 'text-orange-500'
+                          )} />
+                          <span className="relative">{item.name}</span>
+                          {item.highlight && (
+                            <span className="relative ml-auto flex h-2 w-2">
+                              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-orange-400 opacity-75"></span>
+                              <span className="relative inline-flex h-2 w-2 rounded-full bg-orange-500"></span>
+                            </span>
+                          )}
+                          {isActive && (
+                            <ChevronRight className="relative ml-auto h-4 w-4 opacity-50" />
+                          )}
+                        </Link>
                       )
                     })}
                   </div>
@@ -172,6 +159,5 @@ export function Sidebar() {
           </div>
         </div>
       </motion.aside>
-    </TooltipProvider>
   )
 }
