@@ -1603,16 +1603,6 @@ function ClassifyPhase({
                       <p className="text-xs text-muted-foreground truncate">{sample || '(empty)'}</p>
                     </div>
 
-                    {/* Quick shortcuts hint when focused and unclassified */}
-                    {isFocused && !col.category && (
-                      <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                        <kbd className="px-1 py-0.5 rounded bg-blue-500/20 text-blue-600 font-mono">1</kbd>
-                        <kbd className="px-1 py-0.5 rounded bg-green-500/20 text-green-600 font-mono">2</kbd>
-                        <kbd className="px-1 py-0.5 rounded bg-purple-500/20 text-purple-600 font-mono">3</kbd>
-                        <kbd className="px-1 py-0.5 rounded bg-cyan-500/20 text-cyan-600 font-mono">4</kbd>
-                        <kbd className="px-1 py-0.5 rounded bg-gray-500/20 text-gray-600 font-mono">5</kbd>
-                      </div>
-                    )}
 
                     {/* Display selected domain tags for entity columns - LEFT of dropdown */}
                     {(col.category === 'partner' || col.category === 'staff' || col.category === 'asin') && col.tagIds && col.tagIds.length > 0 && (
@@ -1761,8 +1751,8 @@ function ClassifyPhase({
                               {col.category === 'asin' && <Check className="h-3 w-3 ml-auto" />}
                             </DropdownMenuItem>
 
-                            {/* Domain tags for Partner/ASIN columns */}
-                            {(col.category === 'partner' || col.category === 'asin') && availableTags.length > 0 && (
+                            {/* Domain tags for Partner/ASIN columns - always show in submenu */}
+                            {availableTags.length > 0 && (
                               <>
                                 <DropdownMenuSeparator />
                                 <div className="px-2 py-1 text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
@@ -1868,8 +1858,8 @@ function ClassifyPhase({
                               </DropdownMenuItem>
                             )}
 
-                            {/* Domain tags for Staff columns */}
-                            {col.category === 'staff' && availableTags.length > 0 && (
+                            {/* Domain tags for Staff columns - always show in submenu */}
+                            {availableTags.length > 0 && (
                               <>
                                 <DropdownMenuSeparator />
                                 <div className="px-2 py-1 text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
