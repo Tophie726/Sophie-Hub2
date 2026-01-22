@@ -245,16 +245,16 @@ export function TabOverviewDashboard({
         </div>
       )}
 
-      {/* Flagged tabs section */}
+      {/* Flagged tabs section - subtle styling */}
       {flaggedTabs.length > 0 && (
         <Collapsible open={showFlagged} onOpenChange={setShowFlagged}>
-          <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 overflow-hidden">
+          <div className="rounded-lg border bg-muted/30 overflow-hidden">
             <CollapsibleTrigger asChild>
-              <button className="w-full flex items-center justify-between px-4 py-3 text-sm hover:bg-amber-500/10 transition-colors">
-                <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400">
-                  <Flag className="h-4 w-4" />
-                  <span className="font-medium">Flagged for Review</span>
-                  <span className="bg-amber-500/20 px-2 py-0.5 rounded text-xs font-medium tabular-nums">
+              <button className="w-full flex items-center justify-between px-4 py-2.5 text-sm hover:bg-muted/50 transition-colors">
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Flag className="h-3.5 w-3.5 text-amber-500/70" />
+                  <span className="text-xs font-medium">Flagged for Review</span>
+                  <span className="text-xs text-muted-foreground/60 tabular-nums">
                     {flaggedTabs.length}
                   </span>
                 </div>
@@ -262,26 +262,29 @@ export function TabOverviewDashboard({
                   animate={{ rotate: showFlagged ? 180 : 0 }}
                   transition={{ duration: 0.2, ease: easeOut }}
                 >
-                  <ChevronDown className="h-4 w-4 text-amber-600/50" />
+                  <ChevronDown className="h-3.5 w-3.5 text-muted-foreground/50" />
                 </motion.div>
               </button>
             </CollapsibleTrigger>
             <CollapsibleContent>
-              <div className="px-4 pb-4 space-y-3">
+              <div className="px-4 pb-3 space-y-2">
                 {flaggedTabs.map((tab) => (
                   <motion.button
                     key={tab.id}
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     onClick={() => onSelectTab(tab.id)}
-                    className="w-full text-left p-3 rounded-lg border border-amber-500/20 bg-background hover:bg-amber-500/5 transition-colors"
+                    className="w-full text-left p-3 rounded-lg border bg-background hover:bg-muted/50 transition-colors group"
                   >
                     <div className="flex items-center justify-between mb-1">
-                      <span className="font-medium text-sm">{tab.tab_name}</span>
+                      <div className="flex items-center gap-2">
+                        <Flag className="h-3 w-3 text-amber-500/60" />
+                        <span className="font-medium text-sm group-hover:text-foreground">{tab.tab_name}</span>
+                      </div>
                       <span className="text-xs text-muted-foreground">{tab.columnCount} cols</span>
                     </div>
                     {tab.notes && (
-                      <div className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                      <div className="flex items-start gap-1.5 text-xs text-muted-foreground ml-5">
                         <MessageSquare className="h-3 w-3 flex-shrink-0 mt-0.5" />
                         <span className="line-clamp-2">{tab.notes}</span>
                       </div>
@@ -300,9 +303,9 @@ export function TabOverviewDashboard({
           <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-4">
             <LayoutGrid className="h-6 w-6 text-muted-foreground" />
           </div>
-          <h3 className="font-medium mb-1">No tabs mapped yet</h3>
+          <h3 className="font-medium mb-1">No tabs in this sheet</h3>
           <p className="text-sm text-muted-foreground max-w-sm">
-            Select a tab from the bar above to start mapping columns to your database.
+            Connect a Google Sheet with tabs to start mapping columns.
           </p>
         </div>
       )}

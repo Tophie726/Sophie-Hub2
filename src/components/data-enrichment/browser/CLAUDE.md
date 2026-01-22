@@ -22,17 +22,17 @@ SourceBrowser
 ### SheetTabBar
 Renders tabs for navigating between sheet tabs within a source. Features:
 - **Overview tab** (`OVERVIEW_TAB_ID = '__overview__'`): Always first, shows dashboard
-- Regular tabs with entity color indicators
-- Flagged tabs show inline with flag icon (no separate section)
-- Hidden tabs toggle
-- Status dropdown (Active, Reference, Flagged, Hidden)
+- Only shows **active** and **reference** tabs - keeps the bar clean
+- Flagged and hidden tabs are only accessible from Overview dashboard
+- Status dropdown (Active, Reference, Flagged, Hidden) for changing tab status
 
 ### TabOverviewDashboard
 Per-source dashboard showing all tabs at a glance. Features:
 - Grid/List view toggle (persisted in state)
 - Overall progress bar (calculated from all tab stats)
 - Tab cards/rows showing: entity type, progress, category breakdown, last edit
-- Hidden tabs toggle
+- Hidden tabs toggle (only place to access hidden tabs)
+- Flagged tabs collapsible section (subtle styling, only place to access flagged tabs)
 
 ### TabCard
 Card component for grid view. Shows:

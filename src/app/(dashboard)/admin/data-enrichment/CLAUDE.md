@@ -207,7 +207,7 @@ Following CLAUDE.md animation guidelines:
 7. **Draft persistence** - In-progress work saved to DB + localStorage fallback ✓ *Migration verified*
 8. **Delightful animations** - Key badge lock, row highlight, count animations
 9. **Auto-select first workable tab** - Skips flagged/hidden, selects active/reference tabs
-10. **Flagged tabs inline** - Flagged tabs show inline in tab bar with flag icon
+10. **Flagged/hidden tabs on Overview only** - Keeps tab bar clean, access via Overview dashboard
 11. **Polished loading states** - Context-aware skeletons with progress bars
 12. **Source tab drag-and-drop reorder** - Reorder connected sheets (needs migration for persistence)
 13. **Sign out / re-auth flow** - Refresh Google OAuth tokens when expired

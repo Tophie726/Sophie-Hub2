@@ -6,7 +6,6 @@ import {
   Table,
   Check,
   Flag,
-  Eye,
   EyeOff,
   MoreHorizontal,
   BookOpen,
@@ -71,7 +70,6 @@ export function SheetTabBar({
 }: SheetTabBarProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, width: 0 })
-  const [showHidden, setShowHidden] = useState(false)
   const [flagDialog, setFlagDialog] = useState<{
     open: boolean
     tabId: string | null
@@ -80,14 +78,9 @@ export function SheetTabBar({
   }>({ open: false, tabId: null, tabName: '', currentNotes: '' })
   const [flagNotes, setFlagNotes] = useState('')
 
-  // Split tabs into categories - flagged tabs show inline with main tabs
-  const mainTabs = tabs.filter(t => !t.status || t.status === 'active' || t.status === 'reference' || t.status === 'flagged')
-  const hiddenTabs = tabs.filter(t => t.status === 'hidden')
-
-  // Visible main tabs (always show, unless showHidden adds hidden ones)
-  const visibleMainTabs = showHidden
-    ? [...mainTabs, ...hiddenTabs]
-    : mainTabs
+  // Only show active and reference tabs in the tab bar
+  // Flagged and hidden tabs are only accessible from Overview dashboard
+  const visibleTabs = tabs.filter(t => !t.status || t.status === 'active' || t.status === 'reference')
 
   // Update active indicator position
   useEffect(() => {
@@ -103,7 +96,7 @@ export function SheetTabBar({
         width: activeTab.offsetWidth,
       })
     }
-  }, [activeTabId, tabs, showHidden])
+  }, [activeTabId, tabs])
 
   const handleStatusChange = (tabId: string, status: TabStatus, tab: SheetTab) => {
     if (status === 'flagged') {
@@ -304,35 +297,13 @@ export function SheetTabBar({
           {/* Divider */}
           <div className="w-px bg-border/50 mx-1 my-1.5" />
 
-          {visibleMainTabs.map((tab) => (
+          {visibleTabs.map((tab) => (
             <TabButton key={tab.id} tab={tab} />
           ))}
-
-          {/* Hidden tabs toggle */}
-          {hiddenTabs.length > 0 && (
-            <Button
-              variant={showHidden ? "secondary" : "ghost"}
-              size="sm"
-              onClick={() => setShowHidden(!showHidden)}
-              className={cn(
-                'ml-2 h-8 px-2.5 text-xs gap-1.5',
-                showHidden
-                  ? 'bg-muted text-foreground'
-                  : 'text-muted-foreground/60 hover:text-muted-foreground'
-              )}
-            >
-              {showHidden ? (
-                <Eye className="h-3.5 w-3.5" />
-              ) : (
-                <EyeOff className="h-3.5 w-3.5" />
-              )}
-              <span className="tabular-nums">{hiddenTabs.length}</span>
-            </Button>
-          )}
         </div>
 
         {/* Active Tab Indicator - subtle underline */}
-        {activeTabId && (isOverviewActive || visibleMainTabs.some(t => t.id === activeTabId)) && (
+        {activeTabId && (isOverviewActive || visibleTabs.some(t => t.id === activeTabId)) && (
           <motion.div
             initial={false}
             animate={{
