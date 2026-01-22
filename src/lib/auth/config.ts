@@ -57,6 +57,21 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
+    async redirect({ url, baseUrl }) {
+      // After sign in, go to dashboard (unless a specific callback was requested)
+      if (url === baseUrl || url === `${baseUrl}/`) {
+        return `${baseUrl}/dashboard`
+      }
+      // Allow relative URLs
+      if (url.startsWith('/')) {
+        return `${baseUrl}${url}`
+      }
+      // Allow URLs on the same origin
+      if (url.startsWith(baseUrl)) {
+        return url
+      }
+      return `${baseUrl}/dashboard`
+    },
     async jwt({ token, account }) {
       // Initial sign in - persist the OAuth access_token and refresh_token
       if (account) {
