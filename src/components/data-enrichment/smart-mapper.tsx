@@ -253,7 +253,9 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
             // Only restore if draft is less than 7 days old
             const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
             if (data.draft.timestamp > sevenDaysAgo) {
-              setPhase(data.draft.phase)
+              // Always start at preview phase so user can confirm header selection
+              // but restore headerRow and columns so progress isn't lost
+              setPhase('preview')
               setHeaderRow(data.draft.headerRow)
               setColumns(data.draft.columns)
               setDraftRestored(true)
@@ -273,7 +275,8 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
           // Only restore if draft is less than 7 days old
           const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
           if (draft.timestamp > sevenDaysAgo && draft.columns.length > 0) {
-            setPhase(draft.phase)
+            // Always start at preview phase so user can confirm header selection
+            setPhase('preview')
             setHeaderRow(draft.headerRow)
             setColumns(draft.columns)
             setDraftRestored(true)
@@ -844,7 +847,9 @@ function PreviewPhase({
           </div>
 
           <div className="flex items-center justify-between text-sm text-muted-foreground">
-            <span>Showing first 20 rows · {rawData.totalRows.toLocaleString()} total rows</span>
+            <span>
+              Showing {Math.min(rawData.rows.length, 20)} of {rawData.totalRows.toLocaleString()} rows
+            </span>
             {headerRow > 0 && (
               <span className="text-blue-600">
                 Rows 1-{headerRow} will be skipped
