@@ -1076,17 +1076,15 @@ function ClassifyPhase({
     }
   }, [progressPercent, lastMilestone])
 
-  // Category shortcuts mapping
+  // Category shortcuts mapping (ASIN is sub-option under Partner, no direct shortcut)
   const categoryShortcuts: Record<string, ColumnCategory> = {
     '1': 'partner',
     '2': 'staff',
-    '3': 'asin',
-    '4': 'weekly',
-    '5': 'computed',
-    '6': 'skip',
+    '3': 'weekly',
+    '4': 'computed',
+    '5': 'skip',
     'p': 'partner',
     's': 'staff',
-    'a': 'asin',
     'w': 'weekly',
     'c': 'computed',
     'x': 'skip',
@@ -1610,10 +1608,35 @@ function ClassifyPhase({
                       <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
                         <kbd className="px-1 py-0.5 rounded bg-blue-500/20 text-blue-600 font-mono">1</kbd>
                         <kbd className="px-1 py-0.5 rounded bg-green-500/20 text-green-600 font-mono">2</kbd>
-                        <kbd className="px-1 py-0.5 rounded bg-orange-500/20 text-orange-600 font-mono">3</kbd>
-                        <kbd className="px-1 py-0.5 rounded bg-purple-500/20 text-purple-600 font-mono">4</kbd>
-                        <kbd className="px-1 py-0.5 rounded bg-cyan-500/20 text-cyan-600 font-mono">5</kbd>
-                        <kbd className="px-1 py-0.5 rounded bg-gray-500/20 text-gray-600 font-mono">6</kbd>
+                        <kbd className="px-1 py-0.5 rounded bg-purple-500/20 text-purple-600 font-mono">3</kbd>
+                        <kbd className="px-1 py-0.5 rounded bg-cyan-500/20 text-cyan-600 font-mono">4</kbd>
+                        <kbd className="px-1 py-0.5 rounded bg-gray-500/20 text-gray-600 font-mono">5</kbd>
+                      </div>
+                    )}
+
+                    {/* Display selected domain tags for entity columns - LEFT of dropdown */}
+                    {(col.category === 'partner' || col.category === 'staff' || col.category === 'asin') && col.tagIds && col.tagIds.length > 0 && (
+                      <div className="flex items-center gap-1">
+                        {col.tagIds.map(tagId => {
+                          const tag = availableTags.find(t => t.id === tagId)
+                          if (!tag) return null
+                          const tagBgClass = {
+                            emerald: 'bg-emerald-500/20 text-emerald-600',
+                            blue: 'bg-blue-500/20 text-blue-600',
+                            violet: 'bg-violet-500/20 text-violet-600',
+                            amber: 'bg-amber-500/20 text-amber-600',
+                            orange: 'bg-orange-500/20 text-orange-600',
+                            gray: 'bg-gray-500/20 text-gray-600',
+                          }[tag.color] || 'bg-gray-500/20 text-gray-600'
+                          return (
+                            <span
+                              key={tagId}
+                              className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${tagBgClass}`}
+                            >
+                              {tag.name}
+                            </span>
+                          )
+                        })}
                       </div>
                     )}
 
@@ -1928,32 +1951,6 @@ function ClassifyPhase({
                         {col.computedConfig ? 'Edit' : 'Configure'}
                       </Button>
                     )}
-
-                    {/* Display selected domain tags for entity columns */}
-                    {(col.category === 'partner' || col.category === 'staff' || col.category === 'asin') && col.tagIds && col.tagIds.length > 0 && (
-                      <div className="flex items-center gap-1">
-                        {col.tagIds.map(tagId => {
-                          const tag = availableTags.find(t => t.id === tagId)
-                          if (!tag) return null
-                          const tagBgClass = {
-                            emerald: 'bg-emerald-500/20 text-emerald-600',
-                            blue: 'bg-blue-500/20 text-blue-600',
-                            violet: 'bg-violet-500/20 text-violet-600',
-                            amber: 'bg-amber-500/20 text-amber-600',
-                            orange: 'bg-orange-500/20 text-orange-600',
-                            gray: 'bg-gray-500/20 text-gray-600',
-                          }[tag.color] || 'bg-gray-500/20 text-gray-600'
-                          return (
-                            <span
-                              key={tagId}
-                              className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${tagBgClass}`}
-                            >
-                              {tag.name}
-                            </span>
-                          )
-                        })}
-                      </div>
-                    )}
                   </motion.div>
                 )
               })}
@@ -1986,22 +1983,18 @@ function ClassifyPhase({
                   <span className="text-green-600 font-medium">Staff</span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <kbd className="px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-600 text-[10px] font-mono font-medium">3</kbd>
-                  <span className="text-orange-600 font-medium">ASIN</span>
+                  <kbd className="px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-600 text-[10px] font-mono font-medium">3</kbd>
+                  <span className="text-purple-600 font-medium">Weekly</span>
                 </div>
               </div>
               {/* Categories row 2 */}
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-1.5">
-                  <kbd className="px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-600 text-[10px] font-mono font-medium">4</kbd>
-                  <span className="text-purple-600 font-medium">Weekly</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <kbd className="px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-600 text-[10px] font-mono font-medium">5</kbd>
+                  <kbd className="px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-600 text-[10px] font-mono font-medium">4</kbd>
                   <span className="text-cyan-600 font-medium">Computed</span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <kbd className="px-1.5 py-0.5 rounded bg-gray-500/20 text-gray-500 text-[10px] font-mono font-medium">6</kbd>
+                  <kbd className="px-1.5 py-0.5 rounded bg-gray-500/20 text-gray-500 text-[10px] font-mono font-medium">5</kbd>
                   <span className="text-gray-500 font-medium">Skip</span>
                 </div>
               </div>
