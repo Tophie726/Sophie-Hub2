@@ -42,7 +42,6 @@ import {
   Sparkles,
   Table,
   Key,
-  Lock,
   Link2,
   Star,
   FileText,
@@ -1590,7 +1589,7 @@ function ClassifyPhase({
                                   transition={{ delay: 0.1, type: "spring", stiffness: 300 }}
                                   className="inline-flex"
                                 >
-                                  <Lock className="h-3 w-3 mr-0.5" />
+                                  <Key className="h-3 w-3 mr-0.5" />
                                 </motion.span>
                                 {col.category === 'partner' ? 'Partner Key' :
                                  col.category === 'staff' ? 'Staff Key' :
@@ -1946,14 +1945,6 @@ function ClassifyPhase({
               })}
             </div>
           </ScrollArea>
-
-          {/* Key explanation */}
-          <div className="p-3 rounded-lg bg-muted/50 border border-border/50">
-            <p className="text-xs text-muted-foreground">
-              <Key className="h-3 w-3 inline mr-1 text-amber-500" />
-              <strong>Key</strong> = The column that uniquely identifies each record (e.g., <span className="text-blue-600">&quot;Brand Name&quot;</span> for partners, <span className="text-green-600">&quot;Full Name&quot;</span> for staff, <span className="text-orange-600">&quot;ASIN Code&quot;</span> for products)
-            </p>
-          </div>
 
           {/* Keyboard shortcuts legend */}
           <div className="p-3 rounded-lg bg-muted/30 border border-border">
