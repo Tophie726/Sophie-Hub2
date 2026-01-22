@@ -947,7 +947,7 @@ CREATE TABLE field_lineage (
 
 **Phase 3: Bulk Classification** — "Classify your columns"
 - All columns shown in a list with checkboxes
-- Each column has a dropdown: Partner / Staff / Weekly / Skip
+- Each column has a dropdown: Partner (with ASIN nested) / Staff / Weekly / Skip
 - **Multi-select + Bulk Action Bar**:
   - Select multiple columns via checkboxes
   - Apply category to all selected at once
@@ -956,7 +956,7 @@ CREATE TABLE field_lineage (
   - Staff: columns matching `manager`, `email`, `slack`, etc.
   - Partner: columns matching `brand`, `tier`, `fee`, etc.
 - Stats badges show classification breakdown
-- Anchor column locked with "Key" badge
+- Key badge for Partner/Staff anchors (ASIN has no key management)
 
 **Phase 4: Field Mapping** — "Map to database fields"
 - Organized by category (3-column layout):
@@ -968,16 +968,32 @@ CREATE TABLE field_lineage (
 
 ---
 
-### Column Categories
+### Column Categories & Entity Hierarchy
 
-| Category | Icon | Color | Behavior |
-|----------|------|-------|----------|
-| Partner | 🏢 Building2 | Blue | Maps to `partners` table fields |
-| Staff | 👥 Users | Green | Maps to `staff` table fields |
-| ASIN | 📦 Package | Orange | Maps to `asins` table fields |
-| Weekly | 📅 Calendar | Purple | Pivoted to `weekly_statuses` table |
-| Computed | 🔢 Calculator | Cyan | Stored in computed_fields registry, not synced directly |
-| Skip | ⏭️ SkipForward | Gray | Not imported |
+**Entity Hierarchy:**
+```
+Partner (top-level client entity)
+└── ASIN (products belonging to partners)
+
+Staff (separate entity, team members)
+```
+
+**UI Dropdown Structure:**
+- **Partner** → submenu with key options
+  - ASIN (Product) - nested under Partner, no key management
+- **Staff** → submenu with key options
+- Weekly, Computed, Skip - flat options
+
+| Category | Icon | Color | Behavior | Key Support |
+|----------|------|-------|----------|-------------|
+| Partner | 🏢 Building2 | Blue | Maps to `partners` table fields | ✓ Key designation |
+| └─ ASIN | 📦 Package | Orange | Maps to `asins` table (child of Partner) | No keys (parent/child later) |
+| Staff | 👥 Users | Green | Maps to `staff` table fields | ✓ Key designation |
+| Weekly | 📅 Calendar | Purple | Pivoted to `weekly_statuses` table | — |
+| Computed | 🔢 Calculator | Cyan | Stored in computed_fields registry | — |
+| Skip | ⏭️ SkipForward | Gray | Not imported | — |
+
+**Note:** ASIN is nested under Partner in the UI to communicate the entity hierarchy. Parent/child ASIN relationships (variations) will be added later.
 
 ---
 
