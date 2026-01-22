@@ -58,7 +58,6 @@ import {
   MessageSquare,
   X,
   ChevronRight,
-  Tags,
 } from 'lucide-react'
 
 // ============ TYPES ============
@@ -1738,6 +1737,45 @@ function ClassifyPhase({
                               ASIN (Product)
                               {col.category === 'asin' && <Check className="h-3 w-3 ml-auto" />}
                             </DropdownMenuItem>
+
+                            {/* Domain tags for Partner/ASIN columns */}
+                            {(col.category === 'partner' || col.category === 'asin') && availableTags.length > 0 && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <div className="px-2 py-1 text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+                                  Domain Tags
+                                </div>
+                                {availableTags.map(tag => {
+                                  const isSelected = col.tagIds?.includes(tag.id) || false
+                                  const dotColor = {
+                                    emerald: 'bg-emerald-500',
+                                    blue: 'bg-blue-500',
+                                    violet: 'bg-violet-500',
+                                    amber: 'bg-amber-500',
+                                    orange: 'bg-orange-500',
+                                    gray: 'bg-gray-500',
+                                  }[tag.color] || 'bg-gray-500'
+                                  return (
+                                    <DropdownMenuItem
+                                      key={tag.id}
+                                      onClick={(e) => {
+                                        e.preventDefault()
+                                        const currentTags = col.tagIds || []
+                                        const newTags = isSelected
+                                          ? currentTags.filter(id => id !== tag.id)
+                                          : [...currentTags, tag.id]
+                                        onTagsChange(idx, newTags)
+                                      }}
+                                      className="text-xs flex items-center gap-2"
+                                    >
+                                      <span className={`h-2 w-2 rounded-full ${dotColor}`} />
+                                      <span className="flex-1">{tag.name}</span>
+                                      {isSelected && <Check className="h-3 w-3" />}
+                                    </DropdownMenuItem>
+                                  )
+                                })}
+                              </>
+                            )}
                           </DropdownMenuSubContent>
                         </DropdownMenuSub>
 
@@ -1806,6 +1844,45 @@ function ClassifyPhase({
                                 Set as Staff Key
                               </DropdownMenuItem>
                             )}
+
+                            {/* Domain tags for Staff columns */}
+                            {col.category === 'staff' && availableTags.length > 0 && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <div className="px-2 py-1 text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+                                  Domain Tags
+                                </div>
+                                {availableTags.map(tag => {
+                                  const isSelected = col.tagIds?.includes(tag.id) || false
+                                  const dotColor = {
+                                    emerald: 'bg-emerald-500',
+                                    blue: 'bg-blue-500',
+                                    violet: 'bg-violet-500',
+                                    amber: 'bg-amber-500',
+                                    orange: 'bg-orange-500',
+                                    gray: 'bg-gray-500',
+                                  }[tag.color] || 'bg-gray-500'
+                                  return (
+                                    <DropdownMenuItem
+                                      key={tag.id}
+                                      onClick={(e) => {
+                                        e.preventDefault()
+                                        const currentTags = col.tagIds || []
+                                        const newTags = isSelected
+                                          ? currentTags.filter(id => id !== tag.id)
+                                          : [...currentTags, tag.id]
+                                        onTagsChange(idx, newTags)
+                                      }}
+                                      className="text-xs flex items-center gap-2"
+                                    >
+                                      <span className={`h-2 w-2 rounded-full ${dotColor}`} />
+                                      <span className="flex-1">{tag.name}</span>
+                                      {isSelected && <Check className="h-3 w-3" />}
+                                    </DropdownMenuItem>
+                                  )
+                                })}
+                              </>
+                            )}
                           </DropdownMenuSubContent>
                         </DropdownMenuSub>
 
@@ -1852,91 +1929,30 @@ function ClassifyPhase({
                       </Button>
                     )}
 
-                    {/* Domain tags picker for entity columns */}
-                    {(col.category === 'partner' || col.category === 'staff' || col.category === 'asin') && availableTags.length > 0 && (
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className={`h-8 text-xs gap-1 ${
-                              col.tagIds?.length ? 'text-foreground' : 'text-muted-foreground'
-                            }`}
-                          >
-                            {col.tagIds?.length ? (
-                              <div className="flex items-center gap-1">
-                                {col.tagIds.slice(0, 2).map(tagId => {
-                                  const tag = availableTags.find(t => t.id === tagId)
-                                  if (!tag) return null
-                                  const tagBgClass = {
-                                    emerald: 'bg-emerald-500/20 text-emerald-600',
-                                    blue: 'bg-blue-500/20 text-blue-600',
-                                    violet: 'bg-violet-500/20 text-violet-600',
-                                    amber: 'bg-amber-500/20 text-amber-600',
-                                    orange: 'bg-orange-500/20 text-orange-600',
-                                    gray: 'bg-gray-500/20 text-gray-600',
-                                  }[tag.color] || 'bg-gray-500/20 text-gray-600'
-                                  return (
-                                    <span
-                                      key={tagId}
-                                      className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${tagBgClass}`}
-                                    >
-                                      {tag.name}
-                                    </span>
-                                  )
-                                })}
-                                {col.tagIds.length > 2 && (
-                                  <span className="text-[10px] text-muted-foreground">
-                                    +{col.tagIds.length - 2}
-                                  </span>
-                                )}
-                              </div>
-                            ) : (
-                              <>
-                                <Tags className="h-3 w-3" />
-                                Tags
-                              </>
-                            )}
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-[180px]">
-                          <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground border-b">
-                            Domain Tags
-                          </div>
-                          {availableTags.map(tag => {
-                            const isSelected = col.tagIds?.includes(tag.id) || false
-                            const dotColorClass = {
-                              emerald: 'bg-emerald-500',
-                              blue: 'bg-blue-500',
-                              violet: 'bg-violet-500',
-                              amber: 'bg-amber-500',
-                              orange: 'bg-orange-500',
-                              gray: 'bg-gray-500',
-                            }[tag.color] || 'bg-gray-500'
-
-                            return (
-                              <DropdownMenuItem
-                                key={tag.id}
-                                className="text-xs cursor-pointer"
-                                onSelect={(e) => {
-                                  e.preventDefault()
-                                  const currentTags = col.tagIds || []
-                                  const newTags = isSelected
-                                    ? currentTags.filter(id => id !== tag.id)
-                                    : [...currentTags, tag.id]
-                                  onTagsChange(idx, newTags)
-                                }}
-                              >
-                                <div className="flex items-center gap-2 w-full">
-                                  <div className={`w-2 h-2 rounded-full ${dotColorClass}`} />
-                                  <span className="flex-1">{tag.name}</span>
-                                  {isSelected && <Check className="h-3 w-3 text-primary" />}
-                                </div>
-                              </DropdownMenuItem>
-                            )
-                          })}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                    {/* Display selected domain tags for entity columns */}
+                    {(col.category === 'partner' || col.category === 'staff' || col.category === 'asin') && col.tagIds && col.tagIds.length > 0 && (
+                      <div className="flex items-center gap-1">
+                        {col.tagIds.map(tagId => {
+                          const tag = availableTags.find(t => t.id === tagId)
+                          if (!tag) return null
+                          const tagBgClass = {
+                            emerald: 'bg-emerald-500/20 text-emerald-600',
+                            blue: 'bg-blue-500/20 text-blue-600',
+                            violet: 'bg-violet-500/20 text-violet-600',
+                            amber: 'bg-amber-500/20 text-amber-600',
+                            orange: 'bg-orange-500/20 text-orange-600',
+                            gray: 'bg-gray-500/20 text-gray-600',
+                          }[tag.color] || 'bg-gray-500/20 text-gray-600'
+                          return (
+                            <span
+                              key={tagId}
+                              className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${tagBgClass}`}
+                            >
+                              {tag.name}
+                            </span>
+                          )
+                        })}
+                      </div>
                     )}
                   </motion.div>
                 )
