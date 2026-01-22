@@ -1664,20 +1664,20 @@ function ClassifyPhase({
 
                         <DropdownMenuSeparator />
 
-                        {/* Partner with key submenu */}
+                        {/* Partner with key submenu - ASIN nested under Partner */}
                         <DropdownMenuSub>
                           <DropdownMenuSubTrigger className="text-xs">
                             <Building2 className="h-3 w-3 mr-2 text-blue-500" />
                             Partner
-                            {col.category === 'partner' && <Check className="h-3 w-3 ml-auto" />}
+                            {(col.category === 'partner' || col.category === 'asin') && <Check className="h-3 w-3 ml-auto" />}
                           </DropdownMenuSubTrigger>
-                          <DropdownMenuSubContent className="w-[200px]">
-                            {/* Always show current key info first with real value */}
+                          <DropdownMenuSubContent className="w-[220px]">
+                            {/* Partner key info */}
                             {partnerKey && (
                               <div className="px-2 py-1.5 text-[10px] border-b border-border/50 mb-1">
                                 <div className="flex items-center gap-1 text-muted-foreground">
                                   <Key className="h-3 w-3 text-blue-500" />
-                                  <span>Key: {partnerKey.sourceColumn}</span>
+                                  <span>Partner Key: {partnerKey.sourceColumn}</span>
                                 </div>
                                 {partnerKeyValue && (
                                   <div className="mt-1 pl-4 font-medium text-blue-600 truncate">
@@ -1692,6 +1692,7 @@ function ClassifyPhase({
                             >
                               <Building2 className="h-3 w-3 mr-2 text-blue-500" />
                               Set as Partner
+                              {col.category === 'partner' && !col.isKey && <Check className="h-3 w-3 ml-auto" />}
                             </DropdownMenuItem>
                             {partnerKey ? (
                               <>
@@ -1729,6 +1730,77 @@ function ClassifyPhase({
                                 Set as Partner Key
                               </DropdownMenuItem>
                             )}
+
+                            <DropdownMenuSeparator />
+
+                            {/* ASIN nested under Partner */}
+                            <DropdownMenuSub>
+                              <DropdownMenuSubTrigger className="text-xs">
+                                <Package className="h-3 w-3 mr-2 text-orange-500" />
+                                ASIN (Product)
+                                {col.category === 'asin' && <Check className="h-3 w-3 ml-auto" />}
+                              </DropdownMenuSubTrigger>
+                              <DropdownMenuSubContent className="w-[200px]">
+                                {/* ASIN key info */}
+                                {asinKey && (
+                                  <div className="px-2 py-1.5 text-[10px] border-b border-border/50 mb-1">
+                                    <div className="flex items-center gap-1 text-muted-foreground">
+                                      <Key className="h-3 w-3 text-orange-500" />
+                                      <span>ASIN Key: {asinKey.sourceColumn}</span>
+                                    </div>
+                                    {asinKeyValue && (
+                                      <div className="mt-1 pl-4 font-medium text-orange-600 truncate">
+                                        → {asinKeyValue}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                                <DropdownMenuItem
+                                  onClick={() => onCategoryChange(idx, 'asin')}
+                                  className="text-xs"
+                                >
+                                  <Package className="h-3 w-3 mr-2 text-orange-500" />
+                                  Set as ASIN
+                                  {col.category === 'asin' && !col.isKey && <Check className="h-3 w-3 ml-auto" />}
+                                </DropdownMenuItem>
+                                {asinKey ? (
+                                  <>
+                                    {!col.isKey && (
+                                      <DropdownMenuItem
+                                        onClick={() => {
+                                          onCategoryChange(idx, 'asin')
+                                          requestKeyConfirmation(idx, col.sourceColumn, 'asin', false)
+                                        }}
+                                        className="text-xs"
+                                      >
+                                        <Key className="h-3 w-3 mr-2 text-amber-500" />
+                                        Make this the Key
+                                      </DropdownMenuItem>
+                                    )}
+                                    {col.isKey && col.category === 'asin' && (
+                                      <DropdownMenuItem
+                                        onClick={() => requestKeyConfirmation(idx, col.sourceColumn, 'asin', true)}
+                                        className="text-xs text-destructive"
+                                      >
+                                        <X className="h-3 w-3 mr-2" />
+                                        Remove as Key
+                                      </DropdownMenuItem>
+                                    )}
+                                  </>
+                                ) : (
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      onCategoryChange(idx, 'asin')
+                                      requestKeyConfirmation(idx, col.sourceColumn, 'asin', false)
+                                    }}
+                                    className="text-xs"
+                                  >
+                                    <Key className="h-3 w-3 mr-2 text-amber-500" />
+                                    Set as ASIN Key
+                                  </DropdownMenuItem>
+                                )}
+                              </DropdownMenuSubContent>
+                            </DropdownMenuSub>
                           </DropdownMenuSubContent>
                         </DropdownMenuSub>
 
@@ -1795,74 +1867,6 @@ function ClassifyPhase({
                               >
                                 <Key className="h-3 w-3 mr-2 text-amber-500" />
                                 Set as Staff Key
-                              </DropdownMenuItem>
-                            )}
-                          </DropdownMenuSubContent>
-                        </DropdownMenuSub>
-
-                        {/* ASIN with key submenu */}
-                        <DropdownMenuSub>
-                          <DropdownMenuSubTrigger className="text-xs">
-                            <Package className="h-3 w-3 mr-2 text-orange-500" />
-                            ASIN
-                            {col.category === 'asin' && <Check className="h-3 w-3 ml-auto" />}
-                          </DropdownMenuSubTrigger>
-                          <DropdownMenuSubContent className="w-[200px]">
-                            {/* Always show current key info first with real value */}
-                            {asinKey && (
-                              <div className="px-2 py-1.5 text-[10px] border-b border-border/50 mb-1">
-                                <div className="flex items-center gap-1 text-muted-foreground">
-                                  <Key className="h-3 w-3 text-orange-500" />
-                                  <span>Key: {asinKey.sourceColumn}</span>
-                                </div>
-                                {asinKeyValue && (
-                                  <div className="mt-1 pl-4 font-medium text-orange-600 truncate">
-                                    → {asinKeyValue}
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                            <DropdownMenuItem
-                              onClick={() => onCategoryChange(idx, 'asin')}
-                              className="text-xs"
-                            >
-                              <Package className="h-3 w-3 mr-2 text-orange-500" />
-                              Set as ASIN
-                            </DropdownMenuItem>
-                            {asinKey ? (
-                              <>
-                                {!col.isKey && (
-                                  <DropdownMenuItem
-                                    onClick={() => {
-                                      onCategoryChange(idx, 'asin')
-                                      requestKeyConfirmation(idx, col.sourceColumn, 'asin', false)
-                                    }}
-                                    className="text-xs"
-                                  >
-                                    <Key className="h-3 w-3 mr-2 text-amber-500" />
-                                    Make this the Key
-                                  </DropdownMenuItem>
-                                )}
-                                {col.isKey && col.category === 'asin' && (
-                                  <DropdownMenuItem
-                                    onClick={() => requestKeyConfirmation(idx, col.sourceColumn, 'asin', true)}
-                                    className="text-xs text-destructive"
-                                  >
-                                    <X className="h-3 w-3 mr-2" />
-                                    Remove as Key
-                                  </DropdownMenuItem>
-                                )}
-                              </>
-                            ) : (
-                              <DropdownMenuItem
-                                onClick={() => {
-                                  onCategoryChange(idx, 'asin')
-                                  requestKeyConfirmation(idx, col.sourceColumn, 'asin', false)
-                                }}
-                                className="text-xs"
-                              >
-                                <Key className="h-3 w-3 mr-2 text-amber-500" />
-                                Set as ASIN Key
                               </DropdownMenuItem>
                             )}
                           </DropdownMenuSubContent>
