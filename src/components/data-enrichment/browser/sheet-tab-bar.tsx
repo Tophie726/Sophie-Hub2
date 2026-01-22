@@ -69,7 +69,8 @@ export function SheetTabBar({
   onStatusChange,
 }: SheetTabBarProps) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, width: 0 })
+  const [indicatorStyle, setIndicatorStyle] = useState<{ left: number; width: number } | null>(null)
+  const [indicatorReady, setIndicatorReady] = useState(false)
   const [flagDialog, setFlagDialog] = useState<{
     open: boolean
     tabId: string | null
@@ -91,12 +92,18 @@ export function SheetTabBar({
     ) as HTMLElement
 
     if (activeTab) {
-      setIndicatorStyle({
+      const newStyle = {
         left: activeTab.offsetLeft,
         width: activeTab.offsetWidth,
-      })
+      }
+      setIndicatorStyle(newStyle)
+      // Mark indicator ready after first measurement (skip initial animation)
+      if (!indicatorReady) {
+        // Use requestAnimationFrame to ensure paint before enabling animations
+        requestAnimationFrame(() => setIndicatorReady(true))
+      }
     }
-  }, [activeTabId, tabs])
+  }, [activeTabId, tabs, indicatorReady])
 
   const handleStatusChange = (tabId: string, status: TabStatus, tab: SheetTab) => {
     if (status === 'flagged') {
@@ -303,7 +310,7 @@ export function SheetTabBar({
         </div>
 
         {/* Active Tab Indicator - subtle underline */}
-        {activeTabId && (isOverviewActive || visibleTabs.some(t => t.id === activeTabId)) && (
+        {indicatorStyle && activeTabId && (isOverviewActive || visibleTabs.some(t => t.id === activeTabId)) && (
           <motion.div
             initial={false}
             animate={{
@@ -311,7 +318,7 @@ export function SheetTabBar({
               width: indicatorStyle.width,
               opacity: 1,
             }}
-            transition={{ duration: 0.2, ease: easeOut }}
+            transition={indicatorReady ? { duration: 0.2, ease: easeOut } : { duration: 0 }}
             className="absolute bottom-0 h-0.5 bg-primary/50 rounded-full"
           />
         )}
