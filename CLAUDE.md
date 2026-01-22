@@ -85,9 +85,58 @@ Reference: animations.dev by Emil Kowalski
 1. **Spacing**: Use consistent spacing scale (4, 8, 12, 16, 24, 32, 48, 64px)
 2. **Typography**: Clear hierarchy, max 2-3 font sizes per view
 3. **Color**: Purposeful use of accent colors (orange = action/priority, green = success, blue = info)
-4. **Borders**: Subtle (border-border/40), not heavy
+4. **Borders**: Subtle (border-border/40), not heavy. Prefer `box-shadow: 0 0 0 1px` over border for better blending
 5. **Shadows**: Sparingly, for elevation (hover states, modals)
 6. **Empty States**: Never just "No data"—always guide next action
+
+### Typography Polish
+
+- **Font smoothing**: Always use `-webkit-font-smoothing: antialiased`
+- **No layout shift**: Never change font-weight on hover/selected states
+- **Tabular numbers**: Use `font-variant-numeric: tabular-nums` for dynamic numbers (counters, prices)
+- **Text wrapping**: Use `text-wrap: balance` on headings for better line breaks
+- **Proper characters**: Use `…` not `...`, curly quotes not straight quotes
+
+### Borders & Shadows
+
+- **Shadows for borders**: Use `box-shadow: 0 0 0 1px rgba(0,0,0,0.08)` instead of border for better blending
+- **Hairline borders**: Use 0.5px on retina displays for crisp dividers
+- **Eased gradients**: Use eased gradients over linear for solid color fades
+- **Mask over gradient**: Prefer `mask-image` for fades—works better with varying content
+
+### Layout Rules
+
+- **No layout shift**: Dynamic elements should never cause layout shift. Use hardcoded dimensions for skeletons
+- **Z-index scale**: Use fixed scale (dropdown: 100, modal: 200, tooltip: 300, toast: 400)
+- **Safe areas**: Account for device notches with `env(safe-area-inset-*)`
+- **Scroll margins**: Set `scroll-margin-top` for anchor scrolling with sticky headers
+- **No fade on scrollable**: Don't apply fade masks on scrollable lists—cuts off content
+
+### Forms & Controls
+
+- **Labels**: Clicking label must focus input. Always associate with `for` or wrap
+- **Input types**: Use appropriate `type` (email, tel, url, number, search)
+- **Font size 16px+**: Inputs must be 16px+ to prevent iOS zoom on focus
+- **Autofocus**: Only on desktop—never autofocus on touch devices (opens keyboard)
+- **Form wrapper**: Always wrap inputs in `<form>` to enable Enter submission
+- **Cmd+Enter**: Support Cmd/Ctrl+Enter for textarea submission
+- **Disable after submit**: Disable buttons during submission to prevent double-submits
+
+### Button Polish
+
+- **Always use `<button>`**: Never add click events to divs/spans
+- **Press feel**: Add `transform: scale(0.97)` on `:active` for tactile feedback
+- **Shortcuts as tooltips**: If action has keyboard shortcut, show it in tooltip
+
+### Checkbox/Control Rules
+
+- **No dead zones**: Space between checkbox and label must be clickable
+- **Use wrapper labels**: `<label class="flex"><input type="checkbox"/><span>Label</span></label>`
+
+### Decorative Elements
+
+- **Pointer events**: Disable `pointer-events` on decorative elements
+- **User select**: Disable `user-select` on code illustrations
 
 ---
 

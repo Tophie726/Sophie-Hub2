@@ -26,12 +26,14 @@ export async function GET(request: NextRequest) {
     }
 
     const data = await getSheetRawRows(session.accessToken, spreadsheetId, tabName)
-    const detectedHeaderRow = detectHeaderRow(data.rows)
+    const headerDetection = detectHeaderRow(data.rows)
 
     return NextResponse.json({
       rows: data.rows,
       totalRows: data.totalRows,
-      detectedHeaderRow,
+      detectedHeaderRow: headerDetection.rowIndex,
+      headerConfidence: headerDetection.confidence,
+      headerReasons: headerDetection.reasons,
     })
   } catch (error) {
     console.error('Error getting raw rows:', error)

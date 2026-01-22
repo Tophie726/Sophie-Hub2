@@ -38,6 +38,7 @@ export interface DataSourceWithStats {
     categoryStats: CategoryStats
     status: 'active' | 'reference' | 'hidden' | 'flagged'
     notes: string | null
+    updated_at: string | null  // When this tab mapping was last modified
   }[]
 }
 
@@ -102,11 +103,27 @@ export async function POST(request: Request) {
 // GET - Fetch all data sources with stats
 export async function GET() {
   try {
-    // Fetch all data sources
-    const { data: sources, error: sourcesError } = await supabase
+    // Fetch all data sources, ordered by display_order (fallback to created_at if column doesn't exist)
+    let sources, sourcesError
+
+    // Try with display_order first
+    const result = await supabase
       .from('data_sources')
       .select('*')
-      .order('updated_at', { ascending: false })
+      .order('display_order', { ascending: true })
+
+    if (result.error?.code === '42703') {
+      // Column doesn't exist, fall back to created_at
+      const fallback = await supabase
+        .from('data_sources')
+        .select('*')
+        .order('created_at', { ascending: true })
+      sources = fallback.data
+      sourcesError = fallback.error
+    } else {
+      sources = result.data
+      sourcesError = result.error
+    }
 
     if (sourcesError) throw sourcesError
 
@@ -120,7 +137,7 @@ export async function GET() {
         // Get tab mappings (include all tabs, not just active - filter in UI)
         const { data: tabs, error: tabsError } = await supabase
           .from('tab_mappings')
-          .select('id, tab_name, primary_entity, header_row, status, notes')
+          .select('id, tab_name, primary_entity, header_row, status, notes, updated_at')
           .eq('data_source_id', source.id)
           .order('tab_name')
 
@@ -200,6 +217,7 @@ export async function GET() {
               categoryStats: tabCategoryStats,
               status: tab.status || 'active',
               notes: tab.notes || null,
+              updated_at: tab.updated_at || null,
             }
           })
         )

@@ -64,6 +64,8 @@ interface TabRawData {
   rows: string[][]
   totalRows: number
   detectedHeaderRow: number
+  headerConfidence: number    // 0-100 confidence score
+  headerReasons: string[]     // Human-readable explanations
 }
 
 type EntityType = 'partners' | 'staff' | 'asins'
@@ -605,6 +607,8 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
           key="preview"
           rawData={rawData}
           headerRow={headerRow}
+          headerConfidence={rawData.headerConfidence}
+          headerReasons={rawData.headerReasons}
           onHeaderRowChange={setHeaderRow}
           onConfirm={() => setPhase('classify')}
           onBack={onBack}
@@ -650,6 +654,8 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
 function PreviewPhase({
   rawData,
   headerRow,
+  headerConfidence,
+  headerReasons,
   onHeaderRowChange,
   onConfirm,
   onBack,
@@ -658,6 +664,8 @@ function PreviewPhase({
 }: {
   rawData: TabRawData
   headerRow: number
+  headerConfidence: number
+  headerReasons: string[]
   onHeaderRowChange: (row: number) => void
   onConfirm: () => void
   onBack: () => void
@@ -667,18 +675,24 @@ function PreviewPhase({
   const scrollRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const rowRefs = useRef<(HTMLTableRowElement | null)[]>([])
-  const hasInteracted = useRef(false)
+  const hasScrolledToDetected = useRef(false)
   const maxRow = Math.min(rawData.rows.length - 1, 19)
 
   useEffect(() => {
     containerRef.current?.focus()
   }, [])
 
+  // Auto-scroll to detected header row on mount (once)
   useEffect(() => {
-    if (!hasInteracted.current) return
-    const row = rowRefs.current[headerRow]
-    if (row) {
-      row.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    if (!hasScrolledToDetected.current && headerRow > 0) {
+      hasScrolledToDetected.current = true
+      // Small delay to ensure DOM is ready
+      setTimeout(() => {
+        const row = rowRefs.current[headerRow]
+        if (row) {
+          row.scrollIntoView({ block: 'center', behavior: 'smooth' })
+        }
+      }, 100)
     }
   }, [headerRow])
 
@@ -687,14 +701,21 @@ function PreviewPhase({
       case 'ArrowDown':
       case 'j':
         e.preventDefault()
-        hasInteracted.current = true
         onHeaderRowChange(Math.min(maxRow, headerRow + 1))
+        // Scroll to new row
+        setTimeout(() => {
+          const row = rowRefs.current[Math.min(maxRow, headerRow + 1)]
+          row?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+        }, 0)
         break
       case 'ArrowUp':
       case 'k':
         e.preventDefault()
-        hasInteracted.current = true
         onHeaderRowChange(Math.max(0, headerRow - 1))
+        setTimeout(() => {
+          const row = rowRefs.current[Math.max(0, headerRow - 1)]
+          row?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+        }, 0)
         break
       case 'Enter':
       case ' ':
@@ -721,19 +742,33 @@ function PreviewPhase({
                 {embedded ? `Preview: ${tabName}` : 'We found your data!'}
               </CardTitle>
               <CardDescription>
-                {embedded ? 'Confirm header row, then continue to classify columns.' : 'Confirm where your column headers are. Use arrow keys to navigate.'}
+                {headerConfidence >= 80 ? (
+                  <>We detected row {headerRow + 1} as headers. Confirm or select a different row.</>
+                ) : headerConfidence > 0 ? (
+                  <>Row {headerRow + 1} might be headers ({headerConfidence}% confident). Select the correct row.</>
+                ) : (
+                  <>Click on the row that contains your column headers.</>
+                )}
               </CardDescription>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">Header row:</span>
+            <div className="flex items-center gap-3">
+              {/* Confidence badge - subtle */}
+              {headerConfidence > 0 && (
+                <span className="text-xs text-muted-foreground">
+                  {headerConfidence}% confident
+                </span>
+              )}
               <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
                 <Button
                   variant="ghost"
                   size="icon"
                   className="h-8 w-8"
                   onClick={() => {
-                    hasInteracted.current = true
                     onHeaderRowChange(Math.max(0, headerRow - 1))
+                    setTimeout(() => {
+                      const row = rowRefs.current[Math.max(0, headerRow - 1)]
+                      row?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+                    }, 0)
                   }}
                   disabled={headerRow === 0}
                 >
@@ -745,8 +780,11 @@ function PreviewPhase({
                   size="icon"
                   className="h-8 w-8"
                   onClick={() => {
-                    hasInteracted.current = true
                     onHeaderRowChange(Math.min(maxRow, headerRow + 1))
+                    setTimeout(() => {
+                      const row = rowRefs.current[Math.min(maxRow, headerRow + 1)]
+                      row?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+                    }, 0)
                   }}
                   disabled={headerRow >= maxRow}
                 >
@@ -774,7 +812,10 @@ function PreviewPhase({
                           backgroundColor: isHeaderRow ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
                         }}
                         transition={{ duration: 0.2, ease: easeOut }}
-                        className={`border-b ${isBeforeHeader ? 'opacity-50' : ''}`}
+                        className={`border-b cursor-pointer hover:bg-muted/50 ${isBeforeHeader ? 'opacity-50' : ''}`}
+                        onClick={() => {
+                          onHeaderRowChange(rowIndex)
+                        }}
                       >
                         <td className="px-2 py-2 w-12 text-center text-xs text-muted-foreground bg-muted/30 border-r">
                           {rowIndex + 1}
@@ -814,7 +855,7 @@ function PreviewPhase({
           <div className="flex items-center justify-between pt-4 border-t">
             <Button variant="outline" onClick={onBack} className="gap-2">
               <ArrowLeft className="h-4 w-4" />
-              Back to Tabs
+              Back
             </Button>
             <Button onClick={onConfirm} className="gap-2">
               This looks right

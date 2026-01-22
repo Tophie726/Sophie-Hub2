@@ -195,46 +195,102 @@ export async function getSheetRawRows(
 }
 
 /**
- * Auto-detect header row by analyzing row content
- * Returns the likely header row index (0-based)
+ * Result of header row detection with confidence scoring
  */
-export function detectHeaderRow(rows: string[][]): number {
-  if (rows.length === 0) return 0
+export interface HeaderDetectionResult {
+  rowIndex: number
+  confidence: number  // 0-100
+  reasons: string[]   // Human-readable explanations
+}
 
-  // Heuristics:
-  // 1. Header rows typically have more non-empty cells
-  // 2. Header rows have text-like values (not numbers/dates)
-  // 3. First row after empty/sparse rows is likely header
+/**
+ * Common header keywords that suggest a row is a header
+ */
+const HEADER_KEYWORDS = [
+  'id', 'name', 'email', 'status', 'date', 'brand', 'partner', 'staff',
+  'phone', 'address', 'type', 'category', 'description', 'notes', 'title',
+  'asin', 'sku', 'product', 'price', 'quantity', 'total', 'amount',
+  'created', 'updated', 'modified', 'first', 'last', 'full', 'company',
+  'manager', 'owner', 'assigned', 'department', 'role', 'tier', 'fee',
+]
+
+/**
+ * Auto-detect header row by analyzing row content
+ * Returns the likely header row index (0-based) with confidence score
+ */
+export function detectHeaderRow(rows: string[][]): HeaderDetectionResult {
+  if (rows.length === 0) {
+    return { rowIndex: 0, confidence: 0, reasons: ['No data in sheet'] }
+  }
 
   let bestHeaderIndex = 0
   let bestScore = 0
+  let bestReasons: string[] = []
 
   for (let i = 0; i < Math.min(rows.length, 10); i++) {
     const row = rows[i]
     let score = 0
+    const reasons: string[] = []
 
     // Count non-empty cells
     const nonEmpty = row.filter(cell => cell.trim() !== '').length
-    score += nonEmpty * 2
+    const nonEmptyRatio = nonEmpty / Math.max(row.length, 1)
 
-    // Bonus if cells look like headers (short text, no numbers)
-    const headerLikeCells = row.filter(cell => {
-      const trimmed = cell.trim()
-      if (!trimmed) return false
-      // Headers are usually short and text-like
-      if (trimmed.length > 50) return false
-      // Headers usually don't start with numbers
-      if (/^\d+\.?\d*$/.test(trimmed)) return false
-      return true
+    if (nonEmptyRatio > 0.5) {
+      score += 10
+      reasons.push(`${Math.round(nonEmptyRatio * 100)}% of cells filled`)
+    }
+
+    // Header keyword matching (+15 pts each, capped at 45)
+    const keywordMatches = row.filter(cell => {
+      const lower = cell.toLowerCase().trim()
+      return HEADER_KEYWORDS.some(kw => lower.includes(kw))
     }).length
-    score += headerLikeCells * 3
+    if (keywordMatches > 0) {
+      const keywordScore = Math.min(keywordMatches * 15, 45)
+      score += keywordScore
+      reasons.push(`${keywordMatches} header keyword${keywordMatches > 1 ? 's' : ''} found`)
+    }
+
+    // Uniqueness check (+20 pts): All non-empty cells are unique
+    const nonEmptyCells = row.filter(cell => cell.trim() !== '')
+    const uniqueCells = new Set(nonEmptyCells.map(c => c.toLowerCase().trim()))
+    if (nonEmptyCells.length > 2 && uniqueCells.size === nonEmptyCells.length) {
+      score += 20
+      reasons.push('All values unique')
+    }
+
+    // All-text row (+15 pts): No pure numbers or dates in the row
+    const allText = row.every(cell => {
+      const trimmed = cell.trim()
+      if (!trimmed) return true // Empty cells are fine
+      const type = guessType(trimmed)
+      return type === 'text' || type === 'empty'
+    })
+    if (allText && nonEmpty > 0) {
+      score += 15
+      reasons.push('All text values (no numbers/dates)')
+    }
+
+    // Position bonus (+10 pts row 0, +5 pts row 1)
+    if (i === 0) {
+      score += 10
+      reasons.push('First row')
+    } else if (i === 1) {
+      score += 5
+      reasons.push('Second row')
+    }
 
     // Penalty for rows that look like data (have emails, URLs, long text)
     const dataLikeCells = row.filter(cell => {
       return cell.includes('@') || cell.includes('http') || cell.length > 100
     }).length
-    score -= dataLikeCells * 5
+    if (dataLikeCells > 0) {
+      score -= dataLikeCells * 10
+      reasons.push(`Contains ${dataLikeCells} data-like value${dataLikeCells > 1 ? 's' : ''} (emails/URLs)`)
+    }
 
+    // Type diversity in subsequent rows (+15 pts)
     // Check if next row has different "type" (suggests this is header)
     if (i < rows.length - 1) {
       const nextRow = rows[i + 1]
@@ -242,17 +298,48 @@ export function detectHeaderRow(rows: string[][]): number {
       const nextTypes = nextRow.map(c => guessType(c))
       const typeDiffs = currentTypes.filter((t, idx) => t !== nextTypes[idx]).length
       if (typeDiffs > currentTypes.length / 2) {
-        score += 10 // This row is likely a header
+        score += 15
+        reasons.push('Data types differ from next row')
       }
+    }
+
+    // Bonus if cells look like headers (short text, no numbers)
+    const headerLikeCells = row.filter(cell => {
+      const trimmed = cell.trim()
+      if (!trimmed) return false
+      if (trimmed.length > 50) return false
+      if (/^\d+\.?\d*$/.test(trimmed)) return false
+      return true
+    }).length
+    if (headerLikeCells > row.length / 2) {
+      score += 5
+      reasons.push('Most cells look like labels')
     }
 
     if (score > bestScore) {
       bestScore = score
       bestHeaderIndex = i
+      bestReasons = reasons.filter(r => !r.includes('data-like')) // Remove penalty reasons from display
     }
   }
 
-  return bestHeaderIndex
+  // Convert score to confidence (0-100)
+  // Max theoretical score is around 120 (keywords 45 + unique 20 + all-text 15 + position 10 + type-diff 15 + header-like 5 + filled 10)
+  const confidence = Math.min(100, Math.round((bestScore / 100) * 100))
+
+  return {
+    rowIndex: bestHeaderIndex,
+    confidence,
+    reasons: bestReasons.length > 0 ? bestReasons : ['Best match based on content analysis'],
+  }
+}
+
+/**
+ * Legacy wrapper for backward compatibility
+ * @deprecated Use detectHeaderRow() which returns HeaderDetectionResult
+ */
+export function detectHeaderRowIndex(rows: string[][]): number {
+  return detectHeaderRow(rows).rowIndex
 }
 
 function guessType(value: string): 'empty' | 'number' | 'date' | 'email' | 'text' {

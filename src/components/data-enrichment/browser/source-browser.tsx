@@ -4,10 +4,21 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowLeft, Loader2, Search, Table, ChevronUp } from 'lucide-react'
 import { SourceTabBar } from './source-tab-bar'
-import { SheetTabBar } from './sheet-tab-bar'
+import { SheetTabBar, OVERVIEW_TAB_ID } from './sheet-tab-bar'
 import { SmartMapper } from '../smart-mapper'
+import { TabOverviewDashboard } from './tab-overview-dashboard'
 import { Button } from '@/components/ui/button'
 import { SheetSearchModal } from '../sheet-search-modal'
+
+interface CategoryStats {
+  partner: number
+  staff: number
+  asin: number
+  weekly: number
+  computed: number
+  skip: number
+  unmapped: number
+}
 
 interface DataSource {
   id: string
@@ -23,8 +34,10 @@ interface DataSource {
     primary_entity: 'partners' | 'staff' | 'asins'
     header_row: number
     columnCount: number
+    categoryStats?: CategoryStats
     status?: 'active' | 'reference' | 'hidden' | 'flagged'
     notes?: string | null
+    updated_at?: string | null
   }[]
 }
 
@@ -50,8 +63,9 @@ export function SourceBrowser({ onBack, initialSourceId }: SourceBrowserProps) {
   const [sources, setSources] = useState<DataSource[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [activeSourceId, setActiveSourceId] = useState<string | null>(initialSourceId || null)
-  const [activeTabId, setActiveTabId] = useState<string | null>(null)
+  const [activeTabId, setActiveTabId] = useState<string | null>(OVERVIEW_TAB_ID) // Default to Overview
   const [showSearchModal, setShowSearchModal] = useState(false)
+  const [dashboardViewMode, setDashboardViewMode] = useState<'grid' | 'list'>('grid')
 
   // For new sources - store preview data until saved
   const [sheetPreviews, setSheetPreviews] = useState<Record<string, SheetPreview>>({})
@@ -80,15 +94,8 @@ export function SourceBrowser({ onBack, initialSourceId }: SourceBrowserProps) {
               loadPreviewForSource(sourceToSelect.id, sourceToSelect.spreadsheet_id)
             }
 
-            // Auto-select first workable tab (active or reference, not flagged/hidden)
-            if (sourceToSelect.tabs.length > 0) {
-              const workableTabs = sourceToSelect.tabs.filter((t: { status?: string }) =>
-                !t.status || t.status === 'active' || t.status === 'reference'
-              )
-              if (workableTabs.length > 0) {
-                setActiveTabId(workableTabs[0].id)
-              }
-            }
+            // Default to Overview tab when selecting a source
+            setActiveTabId(OVERVIEW_TAB_ID)
           }
         }
       } catch (error) {
@@ -163,29 +170,30 @@ export function SourceBrowser({ onBack, initialSourceId }: SourceBrowserProps) {
     if (previewTabs.length === 0) return dbTabs
 
     // Merge: use db tab if it exists for that name, otherwise use preview tab
+    // Always prefer preview's columnCount (actual sheet columns) over db's columnCount (mapped columns)
     const dbTabsByName = new Map(dbTabs.map(t => [t.name, t]))
 
     return previewTabs.map(previewTab => {
       const dbTab = dbTabsByName.get(previewTab.name)
-      return dbTab || previewTab
+      if (dbTab) {
+        // Merge: keep DB data but use preview's actual column count
+        return {
+          ...dbTab,
+          columnCount: previewTab.columnCount,
+        }
+      }
+      return previewTab
     })
   })()
 
   const activeTab = sheetTabs.find(t => t.id === activeTabId)
 
-  // Auto-select first workable tab when tabs are available but none selected
+  // Auto-select Overview when tabs are available but none selected
+  // (Keep Overview as default, don't auto-jump to a specific tab)
   useEffect(() => {
     if (sheetTabs.length > 0 && !activeTabId) {
-      // Prefer active/reference tabs, exclude flagged/hidden
-      const workableTabs = sheetTabs.filter(t =>
-        t.status === 'active' || t.status === 'reference' || !t.status
-      )
-      if (workableTabs.length > 0) {
-        setActiveTabId(workableTabs[0].id)
-      } else if (sheetTabs.length > 0) {
-        // Fall back to first tab if all are flagged/hidden
-        setActiveTabId(sheetTabs[0].id)
-      }
+      // Default to Overview tab instead of auto-selecting first workable tab
+      setActiveTabId(OVERVIEW_TAB_ID)
     }
   }, [sheetTabs, activeTabId])
 
@@ -380,14 +388,8 @@ export function SourceBrowser({ onBack, initialSourceId }: SourceBrowserProps) {
       loadPreviewForSource(sourceId, source.spreadsheet_id)
     }
 
-    // Auto-select first tab of the new source
-    if (source?.tabs.length) {
-      setActiveTabId(source.tabs[0].id)
-    } else if (preview?.tabs.length) {
-      setActiveTabId(String(preview.tabs[0].sheetId))
-    } else {
-      setActiveTabId(null)
-    }
+    // Default to Overview tab when selecting a source
+    setActiveTabId(OVERVIEW_TAB_ID)
   }
 
   // Handle sheet tab selection
@@ -636,6 +638,24 @@ export function SourceBrowser({ onBack, initialSourceId }: SourceBrowserProps) {
         activeSourceId={activeSourceId}
         onSelectSource={handleSelectSource}
         onAddSource={handleAddSource}
+        onReorder={async (reorderedSources) => {
+          // Reorder the full sources array to match the new order
+          const newOrder = reorderedSources.map(rs =>
+            sources.find(s => s.id === rs.id)!
+          ).filter(Boolean)
+          setSources(newOrder)
+
+          // Persist to database
+          try {
+            await fetch('/api/data-sources/reorder', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ sourceIds: reorderedSources.map(s => s.id) }),
+            })
+          } catch (error) {
+            console.error('Failed to persist source order:', error)
+          }
+        }}
       />
 
       {/* Sheet Tab Bar */}
@@ -727,6 +747,45 @@ export function SourceBrowser({ onBack, initialSourceId }: SourceBrowserProps) {
               </div>
             </div>
           </motion.div>
+        ) : activeSourceId && activeTabId === OVERVIEW_TAB_ID ? (
+          /* Overview Dashboard */
+          <motion.div
+            key={`${activeSourceId}-overview`}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.2, ease: easeOut }}
+          >
+            <TabOverviewDashboard
+              sourceName={activeSource?.name || ''}
+              tabs={sheetTabs.map(t => {
+                // Find matching DB tab for additional data
+                const dbTab = activeSource?.tabs?.find(dt => dt.tab_name === t.name)
+                return {
+                  id: t.id,
+                  tab_name: t.name,
+                  primary_entity: t.primaryEntity,
+                  header_row: dbTab?.header_row ?? -1,
+                  columnCount: t.columnCount || 0,
+                  categoryStats: dbTab?.categoryStats || {
+                    partner: 0,
+                    staff: 0,
+                    asin: 0,
+                    weekly: 0,
+                    computed: 0,
+                    skip: 0,
+                    unmapped: t.columnCount || 0,
+                  },
+                  status: t.status || 'active',
+                  notes: t.notes || null,
+                  updated_at: dbTab?.updated_at || null,
+                }
+              })}
+              onSelectTab={handleSelectTab}
+              viewMode={dashboardViewMode}
+              onViewModeChange={setDashboardViewMode}
+            />
+          </motion.div>
         ) : activeSourceId && activeTabId && activeTab ? (
           <motion.div
             key={`${activeSourceId}-${activeTabId}`}
@@ -742,7 +801,7 @@ export function SourceBrowser({ onBack, initialSourceId }: SourceBrowserProps) {
               tabName={activeTab.name}
               dataSourceId={activeSource?.id}
               onComplete={handleMappingComplete}
-              onBack={() => setActiveTabId(null)}
+              onBack={() => setActiveTabId(OVERVIEW_TAB_ID)}
               embedded
             />
           </motion.div>

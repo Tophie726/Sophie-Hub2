@@ -194,7 +194,7 @@ Following CLAUDE.md animation guidelines:
 
 ## CURRENT IMPLEMENTATION STATUS
 
-> **Last Updated: January 19, 2026**
+> **Last Updated: January 22, 2026**
 
 ### What's Working ✅
 
@@ -206,16 +206,66 @@ Following CLAUDE.md animation guidelines:
 6. **Save column mappings** - SmartMapper persists to `column_mappings` table
 7. **Draft persistence** - In-progress work saved to DB + localStorage fallback ✓ *Migration verified*
 8. **Delightful animations** - Key badge lock, row highlight, count animations
-9. **Auto-select first tab** - No blank page on load
-10. **Collapsible flagged tabs** - Separate section, keeps main bar clean
+9. **Auto-select first workable tab** - Skips flagged/hidden, selects active/reference tabs
+10. **Flagged tabs inline** - Flagged tabs show inline in tab bar with flag icon
 11. **Polished loading states** - Context-aware skeletons with progress bars
+12. **Source tab drag-and-drop reorder** - Reorder connected sheets (needs migration for persistence)
+13. **Sign out / re-auth flow** - Refresh Google OAuth tokens when expired
+14. **Auto header detection with confidence** - Intelligent header row detection with scoring (≥80% = auto-confirm UI)
+15. **Sheet Overview Dashboard** - Per-source dashboard showing all tabs with progress, grid/list view toggle
+16. **Mapping progress display** - Progress bars and category breakdown from real DB data
 
 ### What's TODO 🚧
 
-1. **Show mapping progress** - Calculate % complete from actual DB data
-2. **Sync data** - Actually import data from sheets to entity tables
-3. **Multiple sources** - Test with 2+ connected sheets
-4. **Clear draft on save** - Delete draft after successful mapping commit
+1. **Sync data** - Actually import data from sheets to entity tables
+2. **Clear draft on save** - Delete draft after successful mapping commit
+3. **Run display_order migration** - Enable persisted source tab ordering
+
+### Recently Implemented Features
+
+#### Auto Header Detection with Confidence ✅
+Intelligent header row detection using multiple heuristics with confidence scoring:
+
+**Scoring Heuristics:**
+- Header keyword matching (+15 pts each, capped at 45): ID, Name, Email, Status, Date, Brand, Partner, Staff, etc.
+- Uniqueness check (+20 pts): All non-empty cells are unique
+- All-text row (+15 pts): No pure numbers or dates in the row
+- Position bonus (+10 pts row 0, +5 pts row 1)
+- Type diversity from next row (+15 pts): Suggests current row is header
+
+**UI Behavior:**
+- Always shows full table view for transparency
+- Auto-scrolls to detected header row on mount (smooth scroll to center)
+- Shows confidence as subtle hint text
+- User can click any row to select as header
+
+**API:** `GET /api/sheets/raw-rows` now returns `headerConfidence` (0-100) and `headerReasons` (string[])
+
+**Files:**
+- `src/lib/google/sheets.ts` - `detectHeaderRow()` with `HeaderDetectionResult` type
+- `src/components/data-enrichment/smart-mapper.tsx` - Confidence-based PreviewPhase UI
+
+#### Sheet Overview Dashboard ✅
+Per-source dashboard showing all tabs at a glance with real database stats:
+
+**Features:**
+- Grid/List view toggle (persisted in component state)
+- Overall progress bar calculated from all tab stats
+- Tab cards showing: entity type, progress bar, category breakdown, header status, last edit time
+- Flagged tabs collapsible section with notes
+- Hidden tabs toggle
+- Defaults to Overview when selecting a source
+
+**Components:**
+- `TabOverviewDashboard` - Main dashboard component
+- `TabCard` - Grid view card with hover animations
+- `TabListRow` - Table row for list view
+
+**API:** `GET /api/data-sources` now includes `updated_at` per tab for "last edited" display
+
+**Files:** See `src/components/data-enrichment/browser/CLAUDE.md` for detailed documentation
+
+### Upcoming Features (Planned)
 
 ### Simplified Flow (Current)
 
@@ -225,11 +275,21 @@ Hub (category cards)
         └── SourceBrowser
               ├── Empty state: "Connect a Google Sheet" button
               ├── Source tabs (top row) - one per connected sheet
-              ├── Sheet tabs (sub-row) - tabs within active sheet
-              └── SmartMapper - column classification UI
+              ├── Sheet tabs (sub-row) - includes Overview tab first
+              │     ├── Overview (default) → TabOverviewDashboard
+              │     └── Regular tabs → SmartMapper
+              └── Content area
+                    ├── TabOverviewDashboard (when Overview selected)
+                    │     ├── Grid/List view toggle
+                    │     ├── TabCard (grid) / TabListRow (list)
+                    │     └── Flagged section, Hidden toggle
+                    └── SmartMapper (when specific tab selected)
+                          ├── PreviewPhase (confidence-based)
+                          ├── ClassifyPhase
+                          └── MapPhase
 ```
 
-**Note:** We removed the intermediate "SheetsOverview" layer. Hub goes directly to SourceBrowser for simplicity.
+**Note:** Overview tab is always first and selected by default when switching sources. SmartMapper's "Back" returns to Overview.
 
 ---
 
@@ -1096,13 +1156,17 @@ const handleKeyDown = (e: React.KeyboardEvent, items: any[], selectedIndex: numb
 
 ```
 src/components/data-enrichment/
-├── browser/                     # NEW: Data Browser components
+├── browser/                     # Data Browser components
 │   ├── CategoryHub.tsx          # Level 1: Category cards (Sheets, Forms, Docs)
 │   ├── CategoryCard.tsx         # Individual category card with stats
 │   ├── SourceBrowser.tsx        # Level 2: Browser-tab interface
 │   ├── SourceTabBar.tsx         # Top row: source tabs
-│   ├── SheetTabBar.tsx          # Second row: sheet sub-tabs
+│   ├── SheetTabBar.tsx          # Second row: sheet sub-tabs with Overview tab
+│   ├── TabOverviewDashboard.tsx # Per-source dashboard with tab stats
+│   ├── TabCard.tsx              # Grid view card for dashboard
+│   ├── TabListRow.tsx           # List view row for dashboard
 │   ├── AddSourceModal.tsx       # Modal for connecting new source
+│   ├── CLAUDE.md                # Browser component documentation
 │   └── BrowserShell.tsx         # Overall shell with breadcrumb nav
 ├── smart-mapper/                # Column classification (existing)
 │   ├── SmartMapper.tsx          # Main classifier UI (unified dropdown)
