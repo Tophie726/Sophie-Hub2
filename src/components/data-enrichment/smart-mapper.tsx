@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Checkbox } from '@/components/ui/checkbox'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   Select,
@@ -57,6 +58,7 @@ import {
   MessageSquare,
   X,
   ChevronRight,
+  Tags,
 } from 'lucide-react'
 
 // ============ TYPES ============
@@ -99,7 +101,16 @@ interface ColumnClassification {
   targetField: string | null
   authority: SourceAuthority
   isKey: boolean // This column is the identifier/key for its entity type
+  tagIds?: string[] // Field tag IDs for cross-cutting domain classification
   computedConfig?: ComputedFieldConfig // For computed fields
+}
+
+// Field tag type for UI
+interface FieldTag {
+  id: string
+  name: string
+  color: string
+  description?: string | null
 }
 
 interface SmartMapperProps {
@@ -187,8 +198,25 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
   const [columnsHistory, setColumnsHistory] = useState<ColumnClassification[][]>([])
   const [draftRestored, setDraftRestored] = useState(false)
   const [_isSavingDraft, setIsSavingDraft] = useState(false) // TODO: Show saving indicator
+  const [availableTags, setAvailableTags] = useState<FieldTag[]>([])
   const draftKey = getDraftKey(spreadsheetId, tabName)
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Fetch available field tags
+  useEffect(() => {
+    async function fetchTags() {
+      try {
+        const response = await fetch('/api/field-tags')
+        const data = await response.json()
+        if (data.tags) {
+          setAvailableTags(data.tags)
+        }
+      } catch (error) {
+        console.warn('Failed to fetch field tags:', error)
+      }
+    }
+    fetchTags()
+  }, [])
 
   // Save draft to DB (debounced) and localStorage (immediate backup)
   useEffect(() => {
@@ -463,6 +491,12 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
     ))
   }
 
+  const handleTagsChange = (columnIndex: number, tagIds: string[]) => {
+    setColumns(prev => prev.map((col, idx) =>
+      idx === columnIndex ? { ...col, tagIds } : col
+    ))
+  }
+
   const handleKeyToggle = (columnIndex: number) => {
     const col = columns[columnIndex]
     if (!col.category || col.category === 'skip' || col.category === 'weekly') return
@@ -631,6 +665,8 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
           onBulkCategoryChange={handleBulkCategoryChange}
           onKeyToggle={handleKeyToggle}
           onComputedConfigChange={handleComputedConfigChange}
+          availableTags={availableTags}
+          onTagsChange={handleTagsChange}
           onConfirm={() => setPhase('map')}
           onBack={() => setPhase('preview')}
           embedded={embedded}
@@ -885,6 +921,8 @@ function ClassifyPhase({
   onBulkCategoryChange,
   onKeyToggle,
   onComputedConfigChange,
+  availableTags,
+  onTagsChange,
   onConfirm,
   onBack,
   embedded = false,
@@ -898,6 +936,8 @@ function ClassifyPhase({
   onBulkCategoryChange: (indices: number[], category: ColumnCategory) => void
   onKeyToggle: (index: number) => void
   onComputedConfigChange: (index: number, config: ComputedFieldConfig) => void
+  availableTags: FieldTag[]
+  onTagsChange: (index: number, tagIds: string[]) => void
   onConfirm: () => void
   onBack: () => void
   embedded?: boolean
@@ -1869,6 +1909,93 @@ function ClassifyPhase({
                         <Calculator className="h-3 w-3 mr-1" />
                         {col.computedConfig ? 'Edit' : 'Configure'}
                       </Button>
+                    )}
+
+                    {/* Domain tags picker for entity columns */}
+                    {(col.category === 'partner' || col.category === 'staff' || col.category === 'asin') && availableTags.length > 0 && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className={`h-8 text-xs gap-1 ${
+                              col.tagIds?.length ? 'text-foreground' : 'text-muted-foreground'
+                            }`}
+                          >
+                            {col.tagIds?.length ? (
+                              <div className="flex items-center gap-1">
+                                {col.tagIds.slice(0, 2).map(tagId => {
+                                  const tag = availableTags.find(t => t.id === tagId)
+                                  if (!tag) return null
+                                  const tagBgClass = {
+                                    emerald: 'bg-emerald-500/20 text-emerald-600',
+                                    blue: 'bg-blue-500/20 text-blue-600',
+                                    violet: 'bg-violet-500/20 text-violet-600',
+                                    amber: 'bg-amber-500/20 text-amber-600',
+                                    orange: 'bg-orange-500/20 text-orange-600',
+                                    gray: 'bg-gray-500/20 text-gray-600',
+                                  }[tag.color] || 'bg-gray-500/20 text-gray-600'
+                                  return (
+                                    <span
+                                      key={tagId}
+                                      className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${tagBgClass}`}
+                                    >
+                                      {tag.name}
+                                    </span>
+                                  )
+                                })}
+                                {col.tagIds.length > 2 && (
+                                  <span className="text-[10px] text-muted-foreground">
+                                    +{col.tagIds.length - 2}
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <>
+                                <Tags className="h-3 w-3" />
+                                Tags
+                              </>
+                            )}
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-[180px]">
+                          <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground border-b">
+                            Domain Tags
+                          </div>
+                          {availableTags.map(tag => {
+                            const isSelected = col.tagIds?.includes(tag.id) || false
+                            const dotColorClass = {
+                              emerald: 'bg-emerald-500',
+                              blue: 'bg-blue-500',
+                              violet: 'bg-violet-500',
+                              amber: 'bg-amber-500',
+                              orange: 'bg-orange-500',
+                              gray: 'bg-gray-500',
+                            }[tag.color] || 'bg-gray-500'
+
+                            return (
+                              <DropdownMenuItem
+                                key={tag.id}
+                                className="text-xs cursor-pointer"
+                                onSelect={(e) => {
+                                  e.preventDefault()
+                                  const currentTags = col.tagIds || []
+                                  const newTags = isSelected
+                                    ? currentTags.filter(id => id !== tag.id)
+                                    : [...currentTags, tag.id]
+                                  onTagsChange(idx, newTags)
+                                }}
+                              >
+                                <div className="flex items-center gap-2 w-full">
+                                  <div className={`w-2 h-2 rounded-full ${dotColorClass}`} />
+                                  <span className="flex-1">{tag.name}</span>
+                                  {isSelected && <Check className="h-3 w-3 text-primary" />}
+                                </div>
+                              </DropdownMenuItem>
+                            )
+                          })}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     )}
                   </motion.div>
                 )

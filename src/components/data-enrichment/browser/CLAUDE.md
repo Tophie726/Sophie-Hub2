@@ -108,6 +108,20 @@ All animations use `ease-out` curve: `[0.22, 1, 0.36, 1]`
 | View toggle | 200ms | opacity crossfade |
 | Collapsible | 200ms | height expand |
 
+## Field Tags (Domain Classification)
+
+SmartMapper's ClassifyPhase supports **field tags** for cross-cutting domain classification:
+
+- Tags: Finance, Operations, Contact, HR, Product
+- Orthogonal to entity types (a Partner field AND a Staff field can both be "Finance")
+- Multi-select dropdown in each entity column row
+- Tags saved to `column_mapping_tags` junction table
+
+**UI Pattern:**
+- Tag picker only appears for classified entity columns (partner, staff, asin)
+- Shows selected tags as colored badges
+- Dropdown menu with checkboxes for multi-select
+
 ## Constants
 
 ```typescript

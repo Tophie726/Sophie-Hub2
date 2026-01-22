@@ -117,7 +117,8 @@ export async function POST(request: NextRequest) {
     )
 
     if (regularMappings.length > 0) {
-      const { error } = await supabase
+      // Insert column mappings and get back the IDs
+      const { data: insertedMappings, error } = await supabase
         .from('column_mappings')
         .insert(
           regularMappings.map(cm => ({
@@ -130,8 +131,40 @@ export async function POST(request: NextRequest) {
             is_key: cm.is_key,
           }))
         )
+        .select('id, source_column_index')
 
       if (error) throw error
+
+      // 3b. Save column_mapping_tags for each mapping with tags
+      if (insertedMappings) {
+        const tagInserts: Array<{ column_mapping_id: string; tag_id: string }> = []
+
+        for (const mapping of insertedMappings) {
+          // Find the original mapping with tag_ids
+          const originalMapping = regularMappings.find(
+            cm => cm.source_column_index === mapping.source_column_index
+          )
+          if (originalMapping?.tag_ids?.length) {
+            for (const tagId of originalMapping.tag_ids) {
+              tagInserts.push({
+                column_mapping_id: mapping.id,
+                tag_id: tagId,
+              })
+            }
+          }
+        }
+
+        if (tagInserts.length > 0) {
+          const { error: tagError } = await supabase
+            .from('column_mapping_tags')
+            .insert(tagInserts)
+
+          if (tagError) {
+            console.error('Error saving column mapping tags:', tagError)
+            // Don't fail the whole save for tags
+          }
+        }
+      }
     }
 
     // 4. Save weekly pattern (instead of individual weekly column mappings)

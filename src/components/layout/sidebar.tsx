@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { signOut } from 'next-auth/react'
 import { motion } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -159,14 +160,14 @@ export function Sidebar() {
                 <span className="text-sm font-medium">Tomas Norton</span>
                 <span className="text-xs text-muted-foreground">Admin</span>
               </div>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
-                    <LogOut className="h-4 w-4" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="right">Sign out</TooltipContent>
-              </Tooltip>
+              <button
+                type="button"
+                onClick={() => signOut({ callbackUrl: '/api/auth/signin' })}
+                className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                title="Sign out"
+              >
+                <LogOut className="h-4 w-4" />
+              </button>
             </div>
           </div>
         </div>

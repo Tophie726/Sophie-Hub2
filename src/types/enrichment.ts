@@ -51,6 +51,15 @@ export interface ColumnMapping {
   transform_type: string
   transform_config: Record<string, unknown> | null
   created_at: string
+  tags?: FieldTag[]  // Populated via join
+}
+
+// Field tags for cross-cutting domain classification
+export interface FieldTag {
+  id: string
+  name: string
+  color: string
+  description?: string | null
 }
 
 export interface ColumnPatternMatchConfig {
@@ -214,6 +223,7 @@ export interface SaveMappingRequest {
     target_field: string | null
     authority: SourceAuthority
     is_key: boolean
+    tag_ids?: string[]  // Array of field_tag IDs
   }>
   // Pattern for weekly columns (instead of individual mappings)
   weeklyPattern?: {
@@ -263,6 +273,7 @@ export interface UIColumnClassification {
   targetField: string | null
   authority: SourceAuthority
   isKey: boolean
+  tagIds?: string[]  // Array of field_tag IDs for cross-cutting domain tags
   // For computed fields
   computedConfig?: {
     computationType: ComputationType
@@ -285,6 +296,7 @@ export function uiToApiMapping(
     target_field: ui.targetField,
     authority: ui.authority,
     is_key: ui.isKey,
+    tag_ids: ui.tagIds,
   }
 }
 

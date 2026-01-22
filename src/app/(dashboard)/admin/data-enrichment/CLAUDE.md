@@ -265,6 +265,59 @@ Per-source dashboard showing all tabs at a glance with real database stats:
 
 **Files:** See `src/components/data-enrichment/browser/CLAUDE.md` for detailed documentation
 
+#### Field Tags (Cross-Cutting Domain Classification) ✅
+Column mappings can now have **domain tags** for cross-cutting classification orthogonal to entity types:
+
+**Available Tags:**
+| Tag | Color | Description |
+|-----|-------|-------------|
+| Finance | Emerald | Financial data: fees, salaries, invoices, billing |
+| Operations | Blue | Operational data: status, capacity, assignments |
+| Contact | Violet | Contact information: email, phone, address, Slack |
+| HR | Amber | Human resources: hire dates, PTO, training |
+| Product | Orange | Product data: categories, pricing, inventory |
+
+**Why Tags?**
+- Entity types (Partner, Staff, ASIN) answer "whose data is this?"
+- Tags answer "what domain/category does this field belong to?"
+- A Partner field like "Base Fee" is tagged `Finance`
+- A Staff field like "Salary" is also tagged `Finance`
+- Later, you can query all Finance fields regardless of entity type
+
+**UI Integration:**
+- Tag picker appears on entity columns (Partner, Staff, ASIN) in ClassifyPhase
+- Multiple tags can be selected per column
+- Tags displayed as colored badges in the classification row
+- Dropdown menu with checkboxes for multi-select
+
+**Database Schema:**
+```sql
+-- Field tags table
+CREATE TABLE field_tags (
+  id UUID PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  color TEXT DEFAULT 'gray',  -- emerald, blue, violet, amber, orange
+  description TEXT
+);
+
+-- Junction table for many-to-many
+CREATE TABLE column_mapping_tags (
+  column_mapping_id UUID REFERENCES column_mappings(id),
+  tag_id UUID REFERENCES field_tags(id),
+  PRIMARY KEY (column_mapping_id, tag_id)
+);
+```
+
+**API:**
+- `GET /api/field-tags` - Fetch all available tags
+- Tags are saved along with column mappings in `POST /api/mappings/save`
+
+**Files:**
+- `supabase/migrations/20260122_field_tags.sql` - Database schema
+- `src/app/api/field-tags/route.ts` - API endpoint
+- `src/types/enrichment.ts` - `FieldTag` type, `tag_ids` in mappings
+- `src/components/data-enrichment/smart-mapper.tsx` - Tag picker UI
+
 ### Upcoming Features (Planned)
 
 ### Simplified Flow (Current)
