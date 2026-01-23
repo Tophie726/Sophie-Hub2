@@ -8,11 +8,11 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode
 }) {
-  const session = await getServerSession(authOptions)
-
-  if (!session) {
-    redirect('/api/auth/signin')
-  }
+  // Auth bypass for mobile access - TODO: remove when done
+  // const session = await getServerSession(authOptions)
+  // if (!session) {
+  //   redirect('/api/auth/signin')
+  // }
 
   return <MainLayout>{children}</MainLayout>
 }

@@ -106,7 +106,7 @@ export function SheetSearchModal({
   }
 
   const handleConnectGoogle = () => {
-    signIn('google', { callbackUrl: '/admin/data-enrichment' })
+    signIn('google', { callbackUrl: `${window.location.origin}/admin/data-enrichment` })
   }
 
   return (

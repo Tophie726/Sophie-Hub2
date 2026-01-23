@@ -34,6 +34,7 @@ export interface DataSourceWithStats {
     tab_name: string
     primary_entity: string
     header_row: number
+    header_confirmed: boolean  // True when user explicitly confirmed header row
     columnCount: number
     categoryStats: CategoryStats
     status: 'active' | 'reference' | 'hidden' | 'flagged'
@@ -137,7 +138,7 @@ export async function GET() {
         // Get tab mappings (include all tabs, not just active - filter in UI)
         const { data: tabs, error: tabsError } = await supabase
           .from('tab_mappings')
-          .select('id, tab_name, primary_entity, header_row, status, notes, updated_at')
+          .select('id, tab_name, primary_entity, header_row, header_confirmed, status, notes, updated_at')
           .eq('data_source_id', source.id)
           .order('tab_name')
 
@@ -215,6 +216,7 @@ export async function GET() {
               ...tab,
               columnCount,
               categoryStats: tabCategoryStats,
+              header_confirmed: tab.header_confirmed || false,
               status: tab.status || 'active',
               notes: tab.notes || null,
               updated_at: tab.updated_at || null,

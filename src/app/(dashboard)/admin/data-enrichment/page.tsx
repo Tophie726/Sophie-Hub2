@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { useSearchParams, useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useSession } from 'next-auth/react'
 import { PageHeader } from '@/components/layout/page-header'
@@ -95,10 +96,40 @@ const easeOut: [number, number, number, number] = [0.22, 1, 0.36, 1]
 
 export default function DataEnrichmentPage() {
   const { data: session } = useSession()
+  const searchParams = useSearchParams()
+  const router = useRouter()
 
-  // NEW: Data Browser view state
-  const [browserView, setBrowserView] = useState<DataBrowserView>('hub')
-  const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null)
+  // Read initial state from URL params
+  const initialView = (searchParams.get('view') as DataBrowserView) || 'hub'
+  const initialSourceId = searchParams.get('source') || null
+  const initialTabId = searchParams.get('tab') || null
+
+  // NEW: Data Browser view state (initialized from URL)
+  const [browserView, setBrowserView] = useState<DataBrowserView>(initialView)
+  const [selectedSourceId, setSelectedSourceId] = useState<string | null>(initialSourceId)
+  const [selectedTabId, setSelectedTabId] = useState<string | null>(initialTabId)
+
+  // Sync state to URL when it changes
+  const updateURL = useCallback((view: DataBrowserView, sourceId: string | null, tabId: string | null) => {
+    const params = new URLSearchParams()
+    if (view !== 'hub') {
+      params.set('view', view)
+    }
+    if (sourceId) {
+      params.set('source', sourceId)
+    }
+    if (tabId) {
+      params.set('tab', tabId)
+    }
+    const queryString = params.toString()
+    const newPath = queryString ? `?${queryString}` : '/admin/data-enrichment'
+    router.replace(newPath, { scroll: false })
+  }, [router])
+
+  // Update URL when view, source, or tab changes
+  useEffect(() => {
+    updateURL(browserView, selectedSourceId, selectedTabId)
+  }, [browserView, selectedSourceId, selectedTabId, updateURL])
 
   // Legacy wizard state (kept for backward compatibility during migration)
   const [currentStep, setCurrentStep] = useState<WizardStep>('overview')
@@ -271,7 +302,7 @@ export default function DataEnrichmentPage() {
         />
       )}
 
-      <div className={browserView === 'hub' ? 'p-8' : ''}>
+      <div className={browserView === 'hub' ? 'p-4 md:p-8' : ''}>
         <AnimatePresence mode="wait">
           {/* Hub View - Category selection */}
           {browserView === 'hub' && (
@@ -296,6 +327,9 @@ export default function DataEnrichmentPage() {
               <SourceBrowser
                 onBack={() => setBrowserView('hub')}
                 initialSourceId={selectedSourceId}
+                initialTabId={selectedTabId}
+                onSourceChange={setSelectedSourceId}
+                onTabChange={setSelectedTabId}
               />
             </motion.div>
           )}

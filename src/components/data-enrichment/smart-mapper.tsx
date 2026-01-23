@@ -58,6 +58,7 @@ import {
   X,
   ChevronRight,
 } from 'lucide-react'
+import { MobileColumnCard } from './mobile-column-card'
 
 // ============ TYPES ============
 interface TabRawData {
@@ -342,6 +343,26 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
     })
   }
 
+  // Confirm header row selection (saves to DB)
+  const handleConfirmHeader = async () => {
+    if (dataSourceId) {
+      try {
+        await fetch('/api/tab-mappings/confirm-header', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            data_source_id: dataSourceId,
+            tab_name: tabName,
+            header_row: headerRow,
+          }),
+        })
+      } catch (e) {
+        console.warn('Failed to confirm header:', e)
+      }
+    }
+    setPhase('classify')
+  }
+
   // Undo handler
   const handleUndo = useCallback(() => {
     if (columnsHistory.length > 0) {
@@ -364,9 +385,11 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
   }, [handleUndo])
 
   // Load raw data
+  const [loadError, setLoadError] = useState<string | null>(null)
   useEffect(() => {
     async function loadData() {
       setIsLoading(true)
+      setLoadError(null)
       try {
         const response = await fetch(
           `/api/sheets/raw-rows?id=${spreadsheetId}&tab=${encodeURIComponent(tabName)}`
@@ -375,9 +398,14 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
         if (response.ok) {
           setRawData(data)
           setHeaderRow(data.detectedHeaderRow)
+        } else if (response.status === 401) {
+          setLoadError('Sign in required to access Google Sheets data')
+        } else {
+          setLoadError(data.error || 'Failed to load sheet data')
         }
       } catch (error) {
         console.error('Error loading data:', error)
+        setLoadError('Network error - please try again')
       } finally {
         setIsLoading(false)
       }
@@ -624,6 +652,28 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
     )
   }
 
+  if (loadError) {
+    const isAuthError = loadError.includes('Sign in')
+    return (
+      <div className="flex flex-col items-center justify-center py-24">
+        <p className="text-muted-foreground">{loadError}</p>
+        {isAuthError ? (
+          <Button
+            variant="default"
+            onClick={() => window.location.href = `${window.location.origin}/signin`}
+            className="mt-4"
+          >
+            Sign In
+          </Button>
+        ) : (
+          <Button variant="outline" onClick={onBack} className="mt-4">
+            Go Back
+          </Button>
+        )}
+      </div>
+    )
+  }
+
   if (!rawData || rawData.rows.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-24">
@@ -645,7 +695,7 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
           headerConfidence={rawData.headerConfidence}
           headerReasons={rawData.headerReasons}
           onHeaderRowChange={setHeaderRow}
-          onConfirm={() => setPhase('classify')}
+          onConfirm={handleConfirmHeader}
           onBack={onBack}
           embedded={embedded}
           tabName={tabName}
@@ -1371,37 +1421,39 @@ function ClassifyPhase({
             <motion.div
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="flex items-center gap-2 mt-4 p-3 bg-muted rounded-lg"
+              className="flex flex-wrap items-center gap-2 mt-4 p-3 bg-muted rounded-lg"
             >
-              <span className="text-sm font-medium">{selectedIndices.length} selected:</span>
-              <Button size="sm" variant="outline" onClick={() => applyBulkCategory('partner')} className="h-7 text-xs">
-                <Building2 className="h-3 w-3 mr-1" /> Partner
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => applyBulkCategory('staff')} className="h-7 text-xs">
-                <Users className="h-3 w-3 mr-1" /> Staff
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => applyBulkCategory('asin')} className="h-7 text-xs">
-                <Package className="h-3 w-3 mr-1" /> ASIN
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => applyBulkCategory('weekly')} className="h-7 text-xs">
-                <Calendar className="h-3 w-3 mr-1" /> Weekly
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => applyBulkCategory('computed')} className="h-7 text-xs">
-                <Calculator className="h-3 w-3 mr-1" /> Computed
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => applyBulkCategory('skip')} className="h-7 text-xs">
-                <SkipForward className="h-3 w-3 mr-1" /> Skip
-              </Button>
-              <Button size="sm" variant="ghost" onClick={() => setSelectedIndices([])} className="h-7 text-xs ml-auto">
+              <span className="text-sm font-medium w-full md:w-auto">{selectedIndices.length} selected:</span>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button size="sm" variant="outline" onClick={() => applyBulkCategory('partner')} className="h-9 md:h-7 text-xs">
+                  <Building2 className="h-3 w-3 mr-1" /> Partner
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => applyBulkCategory('staff')} className="h-9 md:h-7 text-xs">
+                  <Users className="h-3 w-3 mr-1" /> Staff
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => applyBulkCategory('asin')} className="h-9 md:h-7 text-xs">
+                  <Package className="h-3 w-3 mr-1" /> ASIN
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => applyBulkCategory('weekly')} className="h-9 md:h-7 text-xs">
+                  <Calendar className="h-3 w-3 mr-1" /> Weekly
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => applyBulkCategory('computed')} className="h-9 md:h-7 text-xs">
+                  <Calculator className="h-3 w-3 mr-1" /> Computed
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => applyBulkCategory('skip')} className="h-9 md:h-7 text-xs">
+                  <SkipForward className="h-3 w-3 mr-1" /> Skip
+                </Button>
+              </div>
+              <Button size="sm" variant="ghost" onClick={() => setSelectedIndices([])} className="h-9 md:h-7 text-xs ml-auto">
                 Clear
               </Button>
             </motion.div>
           )}
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Subtle filter tabs */}
-          <div className="flex items-center gap-1 pb-2 border-b border-border/50">
-            <span className="text-xs text-muted-foreground mr-2">View:</span>
+          {/* Subtle filter tabs - scrollable on mobile */}
+          <div className="flex items-center gap-1 pb-2 border-b border-border/50 overflow-x-auto scrollbar-hide">
+            <span className="text-xs text-muted-foreground mr-2 flex-shrink-0">View:</span>
             <button
               onClick={() => setActiveFilter('all')}
               className={`px-2 py-1 rounded text-xs transition-all ${
@@ -1498,7 +1550,34 @@ function ClassifyPhase({
             )}
           </div>
 
-          <ScrollArea className="h-[380px]">
+          {/* Mobile Card View */}
+          <div className="md:hidden space-y-3 max-h-[400px] overflow-y-auto pb-2">
+            {validColumns.map((col, visualIdx) => {
+              const idx = col.sourceIndex
+              const sample = getSample(idx)
+              const isSelected = selectedIndices.includes(idx)
+              const isFocused = focusedIndex === visualIdx
+
+              return (
+                <MobileColumnCard
+                  key={idx}
+                  column={col}
+                  sampleValue={sample}
+                  index={visualIdx}
+                  isSelected={isSelected}
+                  isFocused={isFocused}
+                  availableTags={availableTags}
+                  onCategoryChange={(category) => onCategoryChange(idx, category)}
+                  onKeyToggle={() => onKeyToggle(idx)}
+                  onTagsChange={(tagIds) => onTagsChange(idx, tagIds)}
+                  onSelect={(e) => handleSelectionClick(idx, e)}
+                />
+              )
+            })}
+          </div>
+
+          {/* Desktop Table View */}
+          <ScrollArea className="h-[380px] hidden md:block">
             <div className="space-y-1 pr-3">
               {validColumns.map((col, visualIdx) => {
                 const idx = col.sourceIndex
@@ -1946,8 +2025,8 @@ function ClassifyPhase({
             </div>
           </ScrollArea>
 
-          {/* Keyboard shortcuts legend */}
-          <div className="p-3 rounded-lg bg-muted/30 border border-border">
+          {/* Keyboard shortcuts legend - hidden on mobile */}
+          <div className="hidden md:block p-3 rounded-lg bg-muted/30 border border-border">
             <div className="flex items-center gap-2 mb-3">
               <Sparkles className="h-3.5 w-3.5 text-amber-500" />
               <span className="text-xs font-semibold">Keyboard Shortcuts</span>

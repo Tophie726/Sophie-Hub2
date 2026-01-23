@@ -9,7 +9,6 @@ import {
   ChevronDown,
   EyeOff,
   Eye,
-  MessageSquare,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -41,6 +40,7 @@ interface Tab {
   tab_name: string
   primary_entity: EntityType
   header_row: number
+  header_confirmed: boolean
   columnCount: number
   categoryStats: CategoryStats
   status: TabStatus
@@ -52,6 +52,7 @@ interface TabOverviewDashboardProps {
   sourceName: string
   tabs: Tab[]
   onSelectTab: (tabId: string) => void
+  onTabStatusChange?: (tabId: string, status: 'active' | 'reference' | 'hidden' | 'flagged', notes?: string) => void
   viewMode: ViewMode
   onViewModeChange: (mode: ViewMode) => void
 }
@@ -82,6 +83,7 @@ export function TabOverviewDashboard({
   sourceName,
   tabs,
   onSelectTab,
+  onTabStatusChange,
   viewMode,
   onViewModeChange,
 }: TabOverviewDashboardProps) {
@@ -104,19 +106,19 @@ export function TabOverviewDashboard({
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, ease: easeOut }}
-      className="space-y-6 p-6"
+      className="space-y-4 md:space-y-6 p-4 md:p-6"
     >
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-semibold">{sourceName} Overview</h2>
-          <p className="text-sm text-muted-foreground">
-            {tabs.length} tab{tabs.length !== 1 ? 's' : ''} · {totalColumns} columns · {overallProgress}% mapped
+      <div className="flex items-start md:items-center justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          <h2 className="text-base md:text-lg font-semibold truncate">{sourceName} Overview</h2>
+          <p className="text-xs md:text-sm text-muted-foreground">
+            {tabs.length} tab{tabs.length !== 1 ? 's' : ''} · {totalColumns} cols · {overallProgress}%
           </p>
         </div>
 
         {/* View toggle */}
-        <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+        <div className="flex items-center gap-1 bg-muted rounded-lg p-1 flex-shrink-0">
           <Button
             variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
             size="sm"
@@ -171,8 +173,10 @@ export function TabOverviewDashboard({
                   columnCount={tab.columnCount}
                   categoryStats={tab.categoryStats}
                   hasHeaders={tab.header_row >= 0}
+                  headerConfirmed={tab.header_confirmed}
                   updatedAt={tab.updated_at}
                   onClick={() => onSelectTab(tab.id)}
+                  onStatusChange={(status, notes) => onTabStatusChange?.(tab.id, status, notes)}
                 />
               </motion.div>
             ))}
@@ -186,8 +190,8 @@ export function TabOverviewDashboard({
             transition={{ duration: 0.2, ease: easeOut }}
             className="rounded-lg border bg-card overflow-hidden"
           >
-            {/* List header */}
-            <div className="grid grid-cols-[1fr,80px,120px,200px,80px] gap-4 px-4 py-2 border-b bg-muted/50 text-xs font-medium text-muted-foreground">
+            {/* List header - hidden on mobile */}
+            <div className="hidden md:grid grid-cols-[1fr,80px,120px,200px,80px] gap-4 px-4 py-2 border-b bg-muted/50 text-xs font-medium text-muted-foreground">
               <span>Tab Name</span>
               <span className="text-center">Headers</span>
               <span>Progress</span>
@@ -206,8 +210,10 @@ export function TabOverviewDashboard({
                 columnCount={tab.columnCount}
                 categoryStats={tab.categoryStats}
                 hasHeaders={tab.header_row >= 0}
+                headerConfirmed={tab.header_confirmed}
                 updatedAt={tab.updated_at}
                 onClick={() => onSelectTab(tab.id)}
+                onStatusChange={(status, notes) => onTabStatusChange?.(tab.id, status, notes)}
                 index={index}
               />
             ))}
@@ -245,7 +251,7 @@ export function TabOverviewDashboard({
         </div>
       )}
 
-      {/* Flagged tabs section - subtle styling */}
+      {/* Flagged tabs section - uses same TabCard for consistent UX */}
       {flaggedTabs.length > 0 && (
         <Collapsible open={showFlagged} onOpenChange={setShowFlagged}>
           <div className="rounded-lg border bg-muted/30 overflow-hidden">
@@ -267,29 +273,22 @@ export function TabOverviewDashboard({
               </button>
             </CollapsibleTrigger>
             <CollapsibleContent>
-              <div className="px-4 pb-3 space-y-2">
-                {flaggedTabs.map((tab) => (
-                  <motion.button
+              <div className="p-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {flaggedTabs.map((tab, index) => (
+                  <TabCard
                     key={tab.id}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
+                    id={tab.id}
+                    name={tab.tab_name}
+                    primaryEntity={tab.primary_entity}
+                    status={tab.status}
+                    columnCount={tab.columnCount}
+                    categoryStats={tab.categoryStats}
+                    hasHeaders={tab.header_row >= 0}
+                    headerConfirmed={tab.header_confirmed}
+                    updatedAt={tab.updated_at}
                     onClick={() => onSelectTab(tab.id)}
-                    className="w-full text-left p-3 rounded-lg border bg-background hover:bg-muted/50 transition-colors group"
-                  >
-                    <div className="flex items-center justify-between mb-1">
-                      <div className="flex items-center gap-2">
-                        <Flag className="h-3 w-3 text-amber-500/60" />
-                        <span className="font-medium text-sm group-hover:text-foreground">{tab.tab_name}</span>
-                      </div>
-                      <span className="text-xs text-muted-foreground">{tab.columnCount} cols</span>
-                    </div>
-                    {tab.notes && (
-                      <div className="flex items-start gap-1.5 text-xs text-muted-foreground ml-5">
-                        <MessageSquare className="h-3 w-3 flex-shrink-0 mt-0.5" />
-                        <span className="line-clamp-2">{tab.notes}</span>
-                      </div>
-                    )}
-                  </motion.button>
+                    onStatusChange={(status, notes) => onTabStatusChange?.(tab.id, status, notes)}
+                  />
                 ))}
               </div>
             </CollapsibleContent>

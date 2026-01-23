@@ -37,6 +37,12 @@ async function refreshAccessToken(token: any) {
 }
 
 export const authOptions: NextAuthOptions = {
+  // Trust the host header - allows both localhost and Tailscale to work
+  // NextAuth will auto-detect the callback URL from the request
+  trustHost: true,
+  pages: {
+    signIn: '/signin',
+  },
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,

@@ -13,6 +13,23 @@
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
   }
+
+  /* Safe area utilities for notch devices */
+  .h-safe-area-inset-top {
+    height: env(safe-area-inset-top, 0px);
+  }
+  .h-safe-area-inset-bottom {
+    height: env(safe-area-inset-bottom, 0px);
+  }
+  .pt-safe {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
 }
 
 
@@ -81,6 +98,21 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+
+  /* Smooth theme transitions */
+  html {
+    transition: background-color 0.3s ease-out, color 0.2s ease-out;
+  }
+
+  html * {
+    transition: background-color 0.3s ease-out, border-color 0.15s ease-out;
+  }
+
+  /* Prevent transition flash on page load */
+  html.no-transitions,
+  html.no-transitions * {
+    transition: none !important;
   }
 }
 

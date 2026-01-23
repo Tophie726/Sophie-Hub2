@@ -33,6 +33,7 @@ interface DataSource {
     tab_name: string
     primary_entity: 'partners' | 'staff' | 'asins'
     header_row: number
+    header_confirmed?: boolean
     columnCount: number
     categoryStats?: CategoryStats
     status?: 'active' | 'reference' | 'hidden' | 'flagged'
@@ -55,15 +56,30 @@ interface SheetPreview {
 interface SourceBrowserProps {
   onBack: () => void
   initialSourceId?: string | null
+  initialTabId?: string | null
+  onSourceChange?: (sourceId: string | null) => void
+  onTabChange?: (tabId: string | null) => void
 }
 
 const easeOut: [number, number, number, number] = [0.22, 1, 0.36, 1]
 
-export function SourceBrowser({ onBack, initialSourceId }: SourceBrowserProps) {
+export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceChange, onTabChange }: SourceBrowserProps) {
   const [sources, setSources] = useState<DataSource[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [activeSourceId, setActiveSourceId] = useState<string | null>(initialSourceId || null)
-  const [activeTabId, setActiveTabId] = useState<string | null>(OVERVIEW_TAB_ID) // Default to Overview
+  const [activeSourceId, setActiveSourceIdInternal] = useState<string | null>(initialSourceId || null)
+  const [activeTabId, setActiveTabIdInternal] = useState<string | null>(initialTabId || OVERVIEW_TAB_ID) // Default to Overview or initial
+
+  // Wrapper to propagate source changes up
+  const setActiveSourceId = (sourceId: string | null) => {
+    setActiveSourceIdInternal(sourceId)
+    onSourceChange?.(sourceId)
+  }
+
+  // Wrapper to propagate tab changes up
+  const setActiveTabId = (tabId: string | null) => {
+    setActiveTabIdInternal(tabId)
+    onTabChange?.(tabId)
+  }
   const [showSearchModal, setShowSearchModal] = useState(false)
   const [dashboardViewMode, setDashboardViewMode] = useState<'grid' | 'list'>('grid')
 
@@ -570,12 +586,12 @@ export function SourceBrowser({ onBack, initialSourceId }: SourceBrowserProps) {
         className="space-y-6"
       >
         {/* Header */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3 md:gap-4 px-4 md:px-0">
           <Button variant="ghost" size="icon" onClick={onBack}>
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div>
-            <h2 className="text-xl font-semibold">Google Sheets</h2>
+            <h2 className="text-lg md:text-xl font-semibold">Google Sheets</h2>
             <p className="text-sm text-muted-foreground">
               Connect your first spreadsheet to get started
             </p>
@@ -583,7 +599,7 @@ export function SourceBrowser({ onBack, initialSourceId }: SourceBrowserProps) {
         </div>
 
         {/* Empty state card */}
-        <div className="border-2 border-dashed rounded-xl p-16 text-center">
+        <div className="border-2 border-dashed rounded-xl p-8 md:p-16 text-center mx-4 md:mx-0">
           <div className="max-w-md mx-auto space-y-4">
             <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-green-500/10 mx-auto">
               <Search className="h-8 w-8 text-green-600" />
@@ -766,6 +782,7 @@ export function SourceBrowser({ onBack, initialSourceId }: SourceBrowserProps) {
                   tab_name: t.name,
                   primary_entity: t.primaryEntity,
                   header_row: dbTab?.header_row ?? -1,
+                  header_confirmed: dbTab?.header_confirmed || false,
                   columnCount: t.columnCount || 0,
                   categoryStats: dbTab?.categoryStats || {
                     partner: 0,
@@ -782,6 +799,7 @@ export function SourceBrowser({ onBack, initialSourceId }: SourceBrowserProps) {
                 }
               })}
               onSelectTab={handleSelectTab}
+              onTabStatusChange={handleTabStatusChange}
               viewMode={dashboardViewMode}
               onViewModeChange={setDashboardViewMode}
             />

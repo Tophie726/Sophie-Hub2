@@ -60,12 +60,12 @@ export function CategoryHub({ onSelectCategory }: CategoryHubProps) {
       className="space-y-8"
     >
       {/* Hero Section */}
-      <div className="text-center max-w-2xl mx-auto space-y-4">
+      <div className="text-center max-w-2xl mx-auto space-y-3 md:space-y-4 px-4">
         <motion.h2
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1, duration: 0.3, ease: easeOut }}
-          className="text-3xl font-bold tracking-tight"
+          className="text-2xl md:text-3xl font-bold tracking-tight"
         >
           Data Enrichment
         </motion.h2>
@@ -73,7 +73,7 @@ export function CategoryHub({ onSelectCategory }: CategoryHubProps) {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.15, duration: 0.3, ease: easeOut }}
-          className="text-lg text-muted-foreground"
+          className="text-base md:text-lg text-muted-foreground"
         >
           Connect your data sources and map them to your master tables.
           Start by selecting a category below.
@@ -85,7 +85,7 @@ export function CategoryHub({ onSelectCategory }: CategoryHubProps) {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.2, duration: 0.4 }}
-        className="grid gap-6 md:grid-cols-3 max-w-5xl mx-auto"
+        className="grid gap-4 md:gap-6 md:grid-cols-3 max-w-5xl mx-auto px-4 md:px-0"
       >
         <motion.div
           initial={{ opacity: 0, y: 20 }}

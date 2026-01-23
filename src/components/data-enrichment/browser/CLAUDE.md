@@ -79,7 +79,7 @@ Returns header detection with confidence:
 }
 ```
 
-## Header Detection Confidence
+## Header Detection & Confirmation
 
 The `detectHeaderRow()` function in `src/lib/google/sheets.ts` scores rows based on:
 - Header keyword matching (+15 pts each, capped at 45)
@@ -94,9 +94,63 @@ The `detectHeaderRow()` function in `src/lib/google/sheets.ts` scores rows based
 - Shows confidence as subtle hint text below header
 - User can click any row to select as header
 
+### Header Status States
+
+The UI shows three distinct states for header status:
+
+| State | Icon | Label | Meaning |
+|-------|------|-------|---------|
+| Not set | `–` | — | No header row identified yet |
+| Auto-detected | 🟠 | "Auto" | System detected a header row, awaiting user confirmation |
+| Confirmed | ✅🔒 | "Confirmed" | User clicked "This looks right" in Preview phase |
+
+**Database:**
+- `tab_mappings.header_confirmed BOOLEAN DEFAULT false`
+- Set to `true` when user confirms header in SmartMapper's Preview phase
+- API endpoint: `POST /api/tab-mappings/confirm-header`
+
+**Flow:**
+1. User sees tab with 🟠 "Auto" on Overview (auto-detected but not confirmed)
+2. Clicks tab → Preview: "We detected row X. Does this look right?"
+3. Clicks "This looks right" → saves `header_confirmed = true`
+4. Back on Overview: shows ✅🔒 "Confirmed"
+
+## Mobile Long-Press Action Sheet
+
+TabCard and TabListRow support **long-press to reveal actions** on mobile:
+
+**Interaction Pattern:**
+- **Long-press (500ms)**: Opens bottom action sheet with haptic feedback
+- **Short tap**: Navigates to the tab
+- **Touch move**: Cancels long-press (allows scrolling)
+- **Right-click (desktop)**: Opens same action sheet
+
+**Action Sheet Features:**
+- iOS-style bottom sheet with drag handle
+- 44px minimum touch targets (per design guidelines)
+- Full-width action buttons: Open, Flag/Unflag, Hide/Unhide
+- Cancel button with muted background
+- Safe area padding for devices with home indicator
+- Smooth slide-up animation using `easeOut` curve
+
+**CSS for preventing text selection:**
+```css
+.select-none
+.touch-manipulation
+[&_*]:select-none
+-webkit-touch-callout: none
+-webkit-user-select: none
+```
+
+**Animation Specs:**
+| Element | Duration | Effect |
+|---------|----------|--------|
+| Backdrop | 200ms | opacity fade |
+| Action sheet | 300ms | slide up from bottom |
+
 ## Animation Specs
 
-All animations use `ease-out` curve: `[0.22, 1, 0.36, 1]`
+All animations use `ease-out` curve from `@/lib/animations`: `[0.22, 1, 0.36, 1]`
 
 | Element | Duration | Effect |
 |---------|----------|--------|
@@ -107,6 +161,7 @@ All animations use `ease-out` curve: `[0.22, 1, 0.36, 1]`
 | Progress bar | 300ms | width fill |
 | View toggle | 200ms | opacity crossfade |
 | Collapsible | 200ms | height expand |
+| Action sheet | 300ms | y: 100% → 0 |
 
 ## Field Tags (Domain Classification)
 

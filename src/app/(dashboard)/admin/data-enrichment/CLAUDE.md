@@ -1325,6 +1325,56 @@ POST /api/data-enrichment/staged/apply
 5. **Conflict Dashboard**: Dedicated view for managing data conflicts across sources
 6. **Rollback**: Ability to undo a sync batch
 
+## Mobile Experience
+
+Data Enrichment supports mobile devices with responsive layouts optimized for touch.
+
+### Column Classification (SmartMapper)
+
+**Desktop**: Table-style list view with horizontal layout
+- Columns displayed as rows with inline category dropdown
+- Keyboard shortcuts for power users (1-5 for categories)
+- Shift/Cmd-click for multi-select
+
+**Mobile**: Card-based stacked layout
+- Each column displayed as a card (`MobileColumnCard` component)
+- Full-width category dropdown (44px+ touch targets)
+- Staggered entry animations (50ms delay per card)
+- Key toggle and tag picker as touch-friendly buttons
+
+### Responsive Breakpoints
+
+```
+Mobile:  < 768px (md breakpoint)
+Desktop: >= 768px
+```
+
+### Component Visibility
+
+| Component | Mobile | Desktop |
+|-----------|--------|---------|
+| Desktop column rows | Hidden | Visible |
+| Mobile column cards | Visible | Hidden |
+| Keyboard shortcuts legend | Hidden | Visible |
+| Bulk action bar | Wrapping layout | Inline layout |
+| Filter tabs | Horizontal scroll | Inline |
+| Tab bars | Horizontal scroll | Inline |
+
+### Touch Target Guidelines
+
+- Minimum 44px height for interactive elements
+- Full-width dropdowns for easier selection
+- Buttons: `h-9` on mobile vs `h-7` on desktop
+- Selection checkboxes: Large hit areas with padding
+
+### Files
+
+- `src/components/data-enrichment/mobile-column-card.tsx` - Mobile card component
+- `src/components/data-enrichment/smart-mapper.tsx` - Responsive ClassifyPhase
+- `src/components/data-enrichment/browser/sheet-tab-bar.tsx` - Scrollable tabs
+
+---
+
 ## Related Files
 
 - `src/lib/sheets/client.ts` - Google Sheets API wrapper

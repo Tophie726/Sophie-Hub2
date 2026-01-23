@@ -290,6 +290,108 @@ Data was fragmented with no single source of truth. The old approach crawled she
 - Co-locate related code (component + styles + types together when small)
 - Extract to lib/ when logic is reused
 
+---
+
+## Dark Mode
+
+Sophie Hub supports light, dark, and system theme modes.
+
+### Implementation
+- Uses `next-themes` with class strategy (`darkMode: ["class"]` in Tailwind)
+- Theme toggle in sidebar user section (cycles: light -> dark -> system)
+- Respects system preference by default
+- Theme persists in localStorage
+
+### Components
+- `ThemeProvider` wraps app in `src/components/providers/theme-provider.tsx`
+- `useTheme()` hook from `next-themes` for accessing/setting theme
+- Smooth theme transitions via CSS in `globals.css`
+
+### Usage
+```tsx
+import { useTheme } from 'next-themes'
+
+function MyComponent() {
+  const { theme, setTheme } = useTheme()
+  // theme is 'light' | 'dark' | 'system'
+}
+```
+
+---
+
+## Mobile Support
+
+Sophie Hub is fully responsive with mobile-first considerations.
+
+### Breakpoints
+- Mobile: < 768px (md breakpoint)
+- Desktop: >= 768px
+
+### Layout
+- **Sidebar**: Fixed on desktop, slide-in drawer on mobile
+- **Mobile Header**: Shows hamburger menu + Sophie Hub logo on mobile only
+- **Content**: `pl-0 md:pl-64` padding, `pt-14 md:pt-0` for mobile header
+
+### Components
+- `MobileMenuProvider` in `src/components/layout/mobile-menu-context.tsx`
+- `useMobileMenu()` hook provides `{ isOpen, toggle, open, close }`
+- Sidebar auto-closes on navigation on mobile
+- Body scroll locked when drawer is open
+
+### Touch Targets
+- Minimum 44px touch targets on all interactive elements
+- Full-width dropdowns on mobile for easier selection
+- Larger button heights on mobile (h-9 vs h-7)
+
+### Data Enrichment Mobile
+- Column classification uses card layout on mobile (`MobileColumnCard`)
+- Table layout on desktop (existing behavior)
+- Horizontal scrolling tab bars with `overflow-x-auto scrollbar-hide`
+- Filter tabs scroll horizontally on overflow
+
+---
+
+## Animation System
+
+Centralized animation constants in `src/lib/animations.ts`.
+
+### Easing Curves
+```typescript
+import { easeOut, easeInOut, easeOutExpo } from '@/lib/animations'
+
+// Primary - user interactions
+const easeOut = [0.22, 1, 0.36, 1]
+
+// Morphing - on-screen elements changing
+const easeInOut = [0.45, 0, 0.55, 1]
+```
+
+### Durations
+```typescript
+import { duration, durationMs } from '@/lib/animations'
+
+// Framer Motion (seconds)
+duration.micro  // 0.15 - button press
+duration.ui     // 0.2  - dropdowns, modals
+duration.page   // 0.3  - page transitions
+
+// CSS (milliseconds)
+durationMs.micro  // 150
+durationMs.ui     // 200
+durationMs.page   // 300
+```
+
+### Standard Variants
+```typescript
+import { fadeInUp, scaleOnHover, springPop } from '@/lib/animations'
+
+// Use directly with framer-motion
+<motion.div {...fadeInUp}>
+<motion.div {...scaleOnHover}>
+```
+
+---
+
 ## Commands
 
 ```bash

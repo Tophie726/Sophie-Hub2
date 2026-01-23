@@ -277,11 +277,12 @@ export function SheetTabBar({
   return (
     <>
       <div className="relative bg-muted/20 px-4">
-        {/* Main Tab Container */}
+        {/* Main Tab Container - scrolls horizontally on overflow */}
         <div
           ref={containerRef}
           className="flex items-stretch gap-1 overflow-x-auto scrollbar-hide py-2"
         >
+          <div className="flex items-center gap-1 min-w-max">
           {/* Overview tab - always first */}
           <motion.button
             data-tab-id={OVERVIEW_TAB_ID}
@@ -307,6 +308,7 @@ export function SheetTabBar({
           {visibleTabs.map((tab) => (
             <TabButton key={tab.id} tab={tab} />
           ))}
+          </div>
         </div>
 
         {/* Active Tab Indicator - subtle underline */}
