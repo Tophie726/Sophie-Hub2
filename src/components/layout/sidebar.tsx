@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { signOut } from 'next-auth/react'
 import { useTheme } from 'next-themes'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -61,6 +61,12 @@ interface SidebarContentProps {
 function SidebarContent({ onNavigate, layoutId = 'activeNav' }: SidebarContentProps) {
   const pathname = usePathname()
   const { theme, setTheme } = useTheme()
+  const [mounted, setMounted] = useState(false)
+
+  // Avoid hydration mismatch by only rendering theme icon after mount
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   // Cycle through themes: light -> dark -> system
   const cycleTheme = () => {
@@ -70,12 +76,15 @@ function SidebarContent({ onNavigate, layoutId = 'activeNav' }: SidebarContentPr
   }
 
   const getThemeIcon = () => {
+    // Return consistent icon on server to avoid hydration mismatch
+    if (!mounted) return Sun
     if (theme === 'light') return Sun
     if (theme === 'dark') return Moon
     return Monitor
   }
 
   const getThemeLabel = () => {
+    if (!mounted) return 'Theme'
     if (theme === 'light') return 'Light mode'
     if (theme === 'dark') return 'Dark mode'
     return 'System'

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { signIn } from 'next-auth/react'
 import { motion } from 'framer-motion'
 import { Loader2 } from 'lucide-react'
@@ -34,13 +35,14 @@ function GoogleLogo({ className }: { className?: string }) {
 
 export default function SignInPage() {
   const [isLoading, setIsLoading] = useState(false)
+  const searchParams = useSearchParams()
+
+  // Get the callback URL from search params (where user was trying to go)
+  const callbackUrl = searchParams.get('callbackUrl') || '/dashboard'
 
   const handleSignIn = async () => {
     setIsLoading(true)
-    // Use window.location.origin to ensure correct URL on any host (localhost, Tailscale, etc.)
-    await signIn('google', {
-      callbackUrl: `${window.location.origin}/dashboard`
-    })
+    await signIn('google', { callbackUrl })
   }
 
   return (

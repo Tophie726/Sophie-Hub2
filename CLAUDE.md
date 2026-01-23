@@ -412,11 +412,13 @@ To access the dev server from mobile devices over Tailscale:
 npx next dev -H 0.0.0.0 -p 3000
 ```
 
-### 2. Set NEXTAUTH_URL in .env.local
+### 2. NEXTAUTH_URL Auto-Detection
 
-```bash
-NEXTAUTH_URL=http://your-machine.tailnet-name.ts.net:3000
-```
+**Do NOT set NEXTAUTH_URL** in `.env.local`. With `trustHost: true` in auth config, NextAuth auto-detects the URL from the request. This allows seamless switching between:
+- `localhost:3000` on your laptop
+- `your-machine.tailnet.ts.net:3000` on mobile
+
+Both callback URLs must be registered in Google Cloud Console.
 
 ### 3. Configure Google OAuth Console
 
@@ -443,3 +445,4 @@ The auth config points to this page: `pages: { signIn: '/login.html' }`
 - Use HTTP (not HTTPS) unless you've set up Tailscale HTTPS certificates
 - The `allowedDevOrigins` config in `next.config.mjs` allows cross-origin dev requests
 - Google OAuth `prompt: 'select_account'` shows account picker without re-asking permissions every time
+- Sign-in preserves original URL - after login, users return to the page they were trying to access

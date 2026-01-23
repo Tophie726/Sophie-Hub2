@@ -260,7 +260,7 @@
 
       <form id="signinForm" class="hidden-form" method="POST" action="/api/auth/signin/google">
         <input type="hidden" name="csrfToken" id="csrfToken" value="">
-        <input type="hidden" name="callbackUrl" value="/dashboard">
+        <input type="hidden" name="callbackUrl" id="callbackUrlInput" value="/dashboard">
       </form>
     </div>
 
@@ -268,6 +268,11 @@
   </div>
 
   <script>
+    // Get the callback URL from search params (where user was trying to go)
+    const params = new URLSearchParams(window.location.search);
+    const callbackUrl = params.get('callbackUrl') || '/dashboard';
+    document.getElementById('callbackUrlInput').value = callbackUrl;
+
     // Fetch CSRF token on load
     fetch('/api/auth/csrf')
       .then(r => r.json())
