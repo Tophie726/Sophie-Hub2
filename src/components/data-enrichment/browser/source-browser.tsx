@@ -110,8 +110,11 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
               loadPreviewForSource(sourceToSelect.id, sourceToSelect.spreadsheet_id)
             }
 
-            // Default to Overview tab when selecting a source
-            setActiveTabId(OVERVIEW_TAB_ID)
+            // Only default to Overview if no initial tab was specified
+            // This preserves the tab selection from URL params on page reload
+            if (!initialTabId) {
+              setActiveTabId(OVERVIEW_TAB_ID)
+            }
           }
         }
       } catch (error) {

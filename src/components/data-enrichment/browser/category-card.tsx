@@ -72,17 +72,17 @@ export function CategoryCard({
       ) : stats ? (
         <div className="flex items-center gap-4 text-sm">
           <div className="flex items-center gap-1.5">
-            <span className="font-semibold">{stats.sources}</span>
+            <span className="font-semibold tabular-nums">{stats.sources}</span>
             <span className="text-muted-foreground">source{stats.sources !== 1 ? 's' : ''}</span>
           </div>
           <div className="h-4 w-px bg-border" />
           <div className="flex items-center gap-1.5">
-            <span className="font-semibold">{stats.tabs}</span>
+            <span className="font-semibold tabular-nums">{stats.tabs}</span>
             <span className="text-muted-foreground">tab{stats.tabs !== 1 ? 's' : ''}</span>
           </div>
           <div className="h-4 w-px bg-border" />
           <div className="flex items-center gap-1.5">
-            <span className="font-semibold">{stats.fields}</span>
+            <span className="font-semibold tabular-nums">{stats.fields}</span>
             <span className="text-muted-foreground">field{stats.fields !== 1 ? 's' : ''}</span>
           </div>
         </div>

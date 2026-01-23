@@ -61,89 +61,51 @@ export function CategoryHub({ onSelectCategory }: CategoryHubProps) {
     >
       {/* Hero Section */}
       <div className="text-center max-w-2xl mx-auto space-y-3 md:space-y-4 px-4">
-        <motion.h2
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1, duration: 0.3, ease: easeOut }}
-          className="text-2xl md:text-3xl font-bold tracking-tight"
-        >
+        <h2 className="text-2xl md:text-3xl font-bold tracking-tight">
           Data Enrichment
-        </motion.h2>
-        <motion.p
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.15, duration: 0.3, ease: easeOut }}
-          className="text-base md:text-lg text-muted-foreground"
-        >
+        </h2>
+        <p className="text-base md:text-lg text-muted-foreground">
           Connect your data sources and map them to your master tables.
           Start by selecting a category below.
-        </motion.p>
+        </p>
       </div>
 
       {/* Category Cards */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.2, duration: 0.4 }}
-        className="grid gap-4 md:gap-6 md:grid-cols-3 max-w-5xl mx-auto px-4 md:px-0"
-      >
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.25, duration: 0.3, ease: easeOut }}
-        >
-          <CategoryCard
-            title="Google Sheets"
-            description="Connect spreadsheets and map columns to your database tables"
-            icon={FileSpreadsheet}
-            iconColor="text-green-600"
-            bgColor="bg-green-500/10"
-            stats={sheetsStats || undefined}
-            onClick={() => onSelectCategory('sheets')}
-          />
-        </motion.div>
+      <div className="grid gap-4 md:gap-6 md:grid-cols-3 max-w-5xl mx-auto px-4 md:px-0">
+        <CategoryCard
+          title="Google Sheets"
+          description="Connect spreadsheets and map columns to your database tables"
+          icon={FileSpreadsheet}
+          iconColor="text-green-600"
+          bgColor="bg-green-500/10"
+          stats={sheetsStats || undefined}
+          onClick={() => onSelectCategory('sheets')}
+        />
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3, duration: 0.3, ease: easeOut }}
-        >
-          <CategoryCard
-            title="Google Forms"
-            description="Import form responses and map them to entities"
-            icon={FileText}
-            iconColor="text-purple-600"
-            bgColor="bg-purple-500/10"
-            comingSoon
-          />
-        </motion.div>
+        <CategoryCard
+          title="Google Forms"
+          description="Import form responses and map them to entities"
+          icon={FileText}
+          iconColor="text-purple-600"
+          bgColor="bg-purple-500/10"
+          comingSoon
+        />
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.35, duration: 0.3, ease: easeOut }}
-        >
-          <CategoryCard
-            title="Documents"
-            description="Extract structured data from Google Docs"
-            icon={FileQuestion}
-            iconColor="text-blue-600"
-            bgColor="bg-blue-500/10"
-            comingSoon
-          />
-        </motion.div>
-      </motion.div>
+        <CategoryCard
+          title="Documents"
+          description="Extract structured data from Google Docs"
+          icon={FileQuestion}
+          iconColor="text-blue-600"
+          bgColor="bg-blue-500/10"
+          comingSoon
+        />
+      </div>
 
       {/* Quick Stats Footer */}
       {sheetsStats && sheetsStats.sources > 0 && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.5, duration: 0.3 }}
-          className="text-center text-sm text-muted-foreground"
-        >
+        <p className="text-center text-sm text-muted-foreground">
           You have {sheetsStats.fields} fields mapped across {sheetsStats.tabs} tabs from {sheetsStats.sources} source{sheetsStats.sources !== 1 ? 's' : ''}
-        </motion.div>
+        </p>
       )}
     </motion.div>
   )
