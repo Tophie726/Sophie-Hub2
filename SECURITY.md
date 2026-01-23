@@ -311,6 +311,22 @@ async function logAuditEvent(event: {
 
 ---
 
+## Multi-Tenant Authorization
+
+For role-based access control (Pod Leaders seeing only their partners, Partners seeing only their data), see:
+
+**[docs/AUTHORIZATION.md](docs/AUTHORIZATION.md)**
+
+Covers:
+- User roles & permissions
+- API-level authorization
+- Supabase Row Level Security (RLS)
+- Frontend guards
+- Partner portal architecture
+- Common vulnerabilities (IDOR, mass assignment, privilege escalation)
+
+---
+
 ## API Route Protection
 
 All API routes use the `requireAuth()` helper:
