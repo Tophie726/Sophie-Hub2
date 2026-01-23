@@ -41,7 +41,7 @@ export const authOptions: NextAuthOptions = {
   // NextAuth will auto-detect the callback URL from the request
   trustHost: true,
   pages: {
-    signIn: '/signin',
+    signIn: '/login.html',
   },
   providers: [
     GoogleProvider({
@@ -57,7 +57,9 @@ export const authOptions: NextAuthOptions = {
             'https://www.googleapis.com/auth/spreadsheets.readonly',
           ].join(' '),
           access_type: 'offline',
-          prompt: 'consent',
+          // Use 'select_account' to show account picker without re-asking for permissions
+          // Only shows full consent on first login or when scopes change
+          prompt: 'select_account',
         },
       },
     }),

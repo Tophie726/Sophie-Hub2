@@ -53,10 +53,10 @@ export function CategoryHub({ onSelectCategory }: CategoryHubProps) {
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -20 }}
-      transition={{ duration: 0.3, ease: easeOut }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2, ease: easeOut }}
       className="space-y-8"
     >
       {/* Hero Section */}

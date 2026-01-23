@@ -395,7 +395,51 @@ import { fadeInUp, scaleOnHover, springPop } from '@/lib/animations'
 ## Commands
 
 ```bash
-npm run dev      # Start development server
+npm run dev      # Start development server (localhost only)
 npm run build    # Production build
 npm run lint     # Run ESLint
 ```
+
+---
+
+## Remote/Mobile Development (Tailscale)
+
+To access the dev server from mobile devices over Tailscale:
+
+### 1. Start Server on All Interfaces
+
+```bash
+npx next dev -H 0.0.0.0 -p 3000
+```
+
+### 2. Set NEXTAUTH_URL in .env.local
+
+```bash
+NEXTAUTH_URL=http://your-machine.tailnet-name.ts.net:3000
+```
+
+### 3. Configure Google OAuth Console
+
+Add these to your Google Cloud Console OAuth credentials:
+
+**Authorized JavaScript origins:**
+```
+http://your-machine.tailnet-name.ts.net:3000
+```
+
+**Authorized redirect URIs:**
+```
+http://your-machine.tailnet-name.ts.net:3000/api/auth/callback/google
+```
+
+### 4. Static Login Page
+
+Next.js React pages may not load properly on mobile Safari over Tailscale (JS hydration issues). A static HTML login page is available at `/login.html` that bypasses React and works reliably on mobile.
+
+The auth config points to this page: `pages: { signIn: '/login.html' }`
+
+### Notes
+
+- Use HTTP (not HTTPS) unless you've set up Tailscale HTTPS certificates
+- The `allowedDevOrigins` config in `next.config.mjs` allows cross-origin dev requests
+- Google OAuth `prompt: 'select_account'` shows account picker without re-asking permissions every time

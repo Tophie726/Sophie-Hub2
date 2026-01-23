@@ -52,15 +52,15 @@ export default function SignInPage() {
       <div className="flex-1 flex items-center justify-center p-6">
         <motion.div
           variants={staggerContainer}
-          initial="initial"
+          initial={false}
           animate="animate"
           className="w-full max-w-sm space-y-8"
         >
           {/* Logo and branding */}
-          <motion.div variants={staggerItem} className="text-center space-y-4">
+          <motion.div variants={staggerItem} initial={false} className="text-center space-y-4">
             {/* Animated logo */}
             <motion.div
-              initial={{ scale: 0.8, opacity: 0 }}
+              initial={false}
               animate={{ scale: 1, opacity: 1 }}
               transition={{
                 duration: duration.page,
@@ -93,6 +93,7 @@ export default function SignInPage() {
           {/* Sign in card */}
           <motion.div
             variants={staggerItem}
+            initial={false}
             className="rounded-2xl border bg-card p-6 md:p-8 shadow-sm"
           >
             <div className="space-y-6">
@@ -135,6 +136,7 @@ export default function SignInPage() {
           {/* Footer */}
           <motion.p
             variants={staggerItem}
+            initial={false}
             className="text-center text-xs text-muted-foreground/60"
           >
             Internal tool for Sophie Society team members

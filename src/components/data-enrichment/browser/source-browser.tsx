@@ -580,9 +580,10 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
   if (sources.length === 0 && !isLoadingPreview) {
     return (
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3, ease: easeOut }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.2, ease: easeOut }}
         className="space-y-6"
       >
         {/* Header */}
@@ -628,7 +629,8 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      transition={{ duration: 0.3, ease: easeOut }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2, ease: easeOut }}
       className="space-y-0"
     >
       {/* Header */}

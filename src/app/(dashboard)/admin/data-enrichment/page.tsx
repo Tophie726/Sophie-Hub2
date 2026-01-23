@@ -303,44 +303,32 @@ export default function DataEnrichmentPage() {
       )}
 
       <div className={browserView === 'hub' ? 'p-4 md:p-8' : ''}>
-        <AnimatePresence mode="wait">
+        <AnimatePresence mode="popLayout" initial={false}>
           {/* Hub View - Category selection */}
           {browserView === 'hub' && (
-            <motion.div
-              key="hub"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-            >
-              <CategoryHub onSelectCategory={handleSelectCategory} />
-            </motion.div>
+            <CategoryHub key="hub" onSelectCategory={handleSelectCategory} />
           )}
 
           {/* Sheets Browser View (tab mapping) */}
           {browserView === 'sheets-browser' && (
-            <motion.div
+            <SourceBrowser
               key="sheets-browser"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-            >
-              <SourceBrowser
-                onBack={() => setBrowserView('hub')}
-                initialSourceId={selectedSourceId}
-                initialTabId={selectedTabId}
-                onSourceChange={setSelectedSourceId}
-                onTabChange={setSelectedTabId}
-              />
-            </motion.div>
+              onBack={() => setBrowserView('hub')}
+              initialSourceId={selectedSourceId}
+              initialTabId={selectedTabId}
+              onSourceChange={setSelectedSourceId}
+              onTabChange={setSelectedTabId}
+            />
           )}
 
           {/* Forms View - Coming Soon */}
           {browserView === 'forms' && (
             <motion.div
               key="forms"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2, ease: easeOut }}
               className="p-8 text-center"
             >
               <p className="text-muted-foreground">Forms integration coming soon</p>
@@ -354,9 +342,10 @@ export default function DataEnrichmentPage() {
           {browserView === 'docs' && (
             <motion.div
               key="docs"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2, ease: easeOut }}
               className="p-8 text-center"
             >
               <p className="text-muted-foreground">Documents integration coming soon</p>
