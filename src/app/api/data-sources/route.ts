@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { requireAuth } from '@/lib/auth/api-auth'
 
 // Initialize Supabase client
 const supabase = createClient(
@@ -45,6 +46,9 @@ export interface DataSourceWithStats {
 
 // POST - Create a new data source
 export async function POST(request: Request) {
+  const auth = await requireAuth()
+  if (!auth.authenticated) return auth.response
+
   try {
     const body = await request.json()
     const { name, spreadsheet_id, spreadsheet_url } = body
@@ -103,6 +107,9 @@ export async function POST(request: Request) {
 
 // GET - Fetch all data sources with stats
 export async function GET() {
+  const auth = await requireAuth()
+  if (!auth.authenticated) return auth.response
+
   try {
     // Fetch all data sources, ordered by display_order (fallback to created_at if column doesn't exist)
     let sources, sourcesError

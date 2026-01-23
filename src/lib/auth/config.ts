@@ -65,6 +65,22 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
+    async signIn({ user }) {
+      // Restrict to allowed email domains (set ALLOWED_EMAIL_DOMAINS in .env.local)
+      // Example: ALLOWED_EMAIL_DOMAINS=sophiesociety.com,gmail.com
+      // Leave unset or empty to allow all domains (useful for development)
+      const allowedDomains = process.env.ALLOWED_EMAIL_DOMAINS?.split(',').map(d => d.trim()).filter(Boolean)
+
+      if (allowedDomains && allowedDomains.length > 0 && user.email) {
+        const emailDomain = user.email.split('@')[1]
+        if (!allowedDomains.includes(emailDomain)) {
+          // Return false to deny access, or a URL to redirect to an error page
+          return '/login.html?error=unauthorized_domain'
+        }
+      }
+
+      return true
+    },
     async jwt({ token, account }) {
       // Initial sign in - persist the OAuth access_token and refresh_token
       if (account) {

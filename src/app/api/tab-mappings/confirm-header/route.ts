@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { requireAuth } from '@/lib/auth/api-auth'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -9,6 +10,9 @@ const supabase = createClient(
 // POST - Confirm header row selection for a tab
 // Creates tab_mapping if it doesn't exist, or updates header_confirmed = true
 export async function POST(request: Request) {
+  const auth = await requireAuth()
+  if (!auth.authenticated) return auth.response
+
   try {
     const body = await request.json()
     const { data_source_id, tab_name, header_row } = body

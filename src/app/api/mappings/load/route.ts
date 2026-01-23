@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { requireAuth } from '@/lib/auth/api-auth'
 import { LoadMappingResponse } from '@/types/enrichment'
 
 // Initialize Supabase client
@@ -9,6 +10,9 @@ const supabase = createClient(
 )
 
 export async function GET(request: NextRequest) {
+  const auth = await requireAuth()
+  if (!auth.authenticated) return auth.response
+
   try {
     const { searchParams } = new URL(request.url)
     const spreadsheetId = searchParams.get('spreadsheet_id')

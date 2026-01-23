@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { requireAuth } from '@/lib/auth/api-auth'
 
 // Initialize Supabase client
 const supabase = createClient(
@@ -24,6 +25,9 @@ interface DraftState {
 
 // GET - Load draft state for a tab
 export async function GET(request: Request) {
+  const auth = await requireAuth()
+  if (!auth.authenticated) return auth.response
+
   try {
     const { searchParams } = new URL(request.url)
     const dataSourceId = searchParams.get('data_source_id')
@@ -73,6 +77,9 @@ export async function GET(request: Request) {
 
 // POST - Save draft state for a tab
 export async function POST(request: Request) {
+  const auth = await requireAuth()
+  if (!auth.authenticated) return auth.response
+
   try {
     const body = await request.json()
     const { data_source_id, tab_name, draft_state, updated_by } = body as {
@@ -139,6 +146,9 @@ export async function POST(request: Request) {
 
 // DELETE - Clear draft state for a tab
 export async function DELETE(request: Request) {
+  const auth = await requireAuth()
+  if (!auth.authenticated) return auth.response
+
   try {
     const { searchParams } = new URL(request.url)
     const dataSourceId = searchParams.get('data_source_id')

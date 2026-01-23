@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { requireAuth } from '@/lib/auth/api-auth'
 import {
   SaveMappingRequest,
   SaveMappingResponse,
@@ -13,6 +14,9 @@ const supabase = createClient(
 )
 
 export async function POST(request: NextRequest) {
+  const auth = await requireAuth()
+  if (!auth.authenticated) return auth.response
+
   try {
     const body: SaveMappingRequest = await request.json()
     const { dataSource, tabMapping, columnMappings, weeklyPattern, computedFields } = body
