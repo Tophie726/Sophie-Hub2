@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { requireAuth } from '@/lib/auth/api-auth'
+import { requirePermission } from '@/lib/auth/api-auth'
 import { LoadMappingResponse } from '@/types/enrichment'
 
 // Initialize Supabase client
@@ -9,8 +9,9 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
+// GET - Load field mappings (admin only)
 export async function GET(request: NextRequest) {
-  const auth = await requireAuth()
+  const auth = await requirePermission('data-enrichment:read')
   if (!auth.authenticated) return auth.response
 
   try {

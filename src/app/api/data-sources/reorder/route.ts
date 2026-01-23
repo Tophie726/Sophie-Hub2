@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { requireAuth } from '@/lib/auth/api-auth'
+import { requirePermission } from '@/lib/auth/api-auth'
 
+// POST - Reorder data sources (admin only)
 export async function POST(request: NextRequest) {
-  const auth = await requireAuth()
+  const auth = await requirePermission('data-enrichment:write')
   if (!auth.authenticated) return auth.response
 
   try {

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { requireAuth } from '@/lib/auth/api-auth'
+import { requirePermission } from '@/lib/auth/api-auth'
 
 // Initialize Supabase client
 const supabase = createClient(
@@ -8,9 +8,9 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// POST - Create a new tab mapping (minimal, for status tracking before full mapping)
+// POST - Create a new tab mapping (admin only)
 export async function POST(request: Request) {
-  const auth = await requireAuth()
+  const auth = await requirePermission('data-enrichment:write')
   if (!auth.authenticated) return auth.response
 
   try {

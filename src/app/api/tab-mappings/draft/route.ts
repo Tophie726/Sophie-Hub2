@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { requireAuth } from '@/lib/auth/api-auth'
+import { requirePermission } from '@/lib/auth/api-auth'
 
 // Initialize Supabase client
 const supabase = createClient(
@@ -23,9 +23,9 @@ interface DraftState {
   timestamp: number
 }
 
-// GET - Load draft state for a tab
+// GET - Load draft state for a tab (admin only)
 export async function GET(request: Request) {
-  const auth = await requireAuth()
+  const auth = await requirePermission('data-enrichment:read')
   if (!auth.authenticated) return auth.response
 
   try {
@@ -75,9 +75,9 @@ export async function GET(request: Request) {
   }
 }
 
-// POST - Save draft state for a tab
+// POST - Save draft state for a tab (admin only)
 export async function POST(request: Request) {
-  const auth = await requireAuth()
+  const auth = await requirePermission('data-enrichment:write')
   if (!auth.authenticated) return auth.response
 
   try {
@@ -144,9 +144,9 @@ export async function POST(request: Request) {
   }
 }
 
-// DELETE - Clear draft state for a tab
+// DELETE - Clear draft state for a tab (admin only)
 export async function DELETE(request: Request) {
-  const auth = await requireAuth()
+  const auth = await requirePermission('data-enrichment:write')
   if (!auth.authenticated) return auth.response
 
   try {

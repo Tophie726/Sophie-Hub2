@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { requireAuth } from '@/lib/auth/api-auth'
+import { requirePermission } from '@/lib/auth/api-auth'
 import {
   SaveMappingRequest,
   SaveMappingResponse,
@@ -13,8 +13,9 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
+// POST - Save field mappings (admin only)
 export async function POST(request: NextRequest) {
-  const auth = await requireAuth()
+  const auth = await requirePermission('data-enrichment:write')
   if (!auth.authenticated) return auth.response
 
   try {

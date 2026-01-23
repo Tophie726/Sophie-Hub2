@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { requireAuth } from '@/lib/auth/api-auth'
+import { requirePermission } from '@/lib/auth/api-auth'
 
 // Initialize Supabase client
 const supabase = createClient(
@@ -44,9 +44,9 @@ export interface DataSourceWithStats {
   }[]
 }
 
-// POST - Create a new data source
+// POST - Create a new data source (admin only)
 export async function POST(request: Request) {
-  const auth = await requireAuth()
+  const auth = await requirePermission('data-enrichment:write')
   if (!auth.authenticated) return auth.response
 
   try {
@@ -105,9 +105,9 @@ export async function POST(request: Request) {
   }
 }
 
-// GET - Fetch all data sources with stats
+// GET - Fetch all data sources with stats (admin only)
 export async function GET() {
-  const auth = await requireAuth()
+  const auth = await requirePermission('data-enrichment:read')
   if (!auth.authenticated) return auth.response
 
   try {
