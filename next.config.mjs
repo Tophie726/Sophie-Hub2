@@ -1,5 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Hide "X-Powered-By: Next.js" header (server info disclosure)
+  poweredByHeader: false,
+
   allowedDevOrigins: [
     'http://toms-macbook-pro.tail2387f7.ts.net:3000',
   ],
