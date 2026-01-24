@@ -1,13 +1,13 @@
 # Data Enrichment Progress Tracker
 
 > Tracking the implementation of Sophie Hub's data enrichment system.
-> Last updated: 2026-01-24 (Phase 6.1 AI SDK Complete)
+> Last updated: 2026-01-24 (Phase 6 AI Assistant Complete)
 
 ---
 
-## Current Phase: Phase 6.1 - AI Mapping Assistant SDK (Complete)
+## Current Phase: Phase 6 - AI Mapping Assistant (Complete)
 
-### Status: SDK + API Routes Done, Ready for UI Integration
+### Status: SDK + Column UI + Bulk UI All Done
 
 ---
 
@@ -169,9 +169,9 @@ In-app AI co-pilot for column mapping at multiple granularity levels.
 | POST /api/ai/suggest-all | Done | Bulk suggestions with stats |
 | Rate limiting | Done | 20/min single, 5/hr bulk |
 | Audit logging | Done | Integrated with audit service |
-| Sparkle button UI | Pending | Phase 6.2 |
-| Suggestion popover | Pending | Phase 6.2 |
-| "AI Suggest All" button | Pending | Phase 6.3 |
+| Sparkle button UI | Done | `src/components/data-enrichment/ai-suggestion-button.tsx` |
+| Suggestion popover | Done | Popover with confidence + reasoning |
+| "AI Suggest All" button | Done | `src/components/data-enrichment/ai-suggest-all-dialog.tsx` |
 
 ---
 
@@ -190,22 +190,25 @@ In-app AI co-pilot for column mapping at multiple granularity levels.
 | Audit logging integration | Done | 2026-01-24 | All suggestions logged |
 | Learn from existing mappings | Done | 2026-01-24 | Loads patterns from DB |
 
-### 6.2 Column-Level UI: Pending
+### 6.2 Column-Level UI: Complete
 
-| Task | Status | Priority | Notes |
-|------|--------|----------|-------|
-| Sparkle button per column | Pending | HIGH | In ColumnMappingRow |
-| Suggestion popover | Pending | HIGH | Shows category, target, confidence |
-| Accept/reject UI | Pending | HIGH | One-click apply |
-| Loading state | Pending | MEDIUM | Subtle spinner |
+| Task | Status | Date | Notes |
+|------|--------|------|-------|
+| Sparkle button per column | Done | 2026-01-24 | `AISuggestionButton` component |
+| Suggestion popover | Done | 2026-01-24 | Shows category, target, confidence, reasoning |
+| Accept/reject UI | Done | 2026-01-24 | One-click apply with key confirmation |
+| Loading state | Done | 2026-01-24 | Spinner in button, loading state in popover |
+| Popover component | Done | 2026-01-24 | Added via shadcn/ui |
 
-### 6.3 Tab-Level UI: Pending
+### 6.3 Tab-Level UI: Complete
 
-| Task | Status | Priority | Notes |
-|------|--------|----------|-------|
-| "AI Suggest All" button | Pending | MEDIUM | Tab header action |
-| Progress indicator | Pending | MEDIUM | Shows columns processed |
-| Bulk review dialog | Pending | MEDIUM | Review all suggestions at once |
+| Task | Status | Date | Notes |
+|------|--------|------|-------|
+| "AI Suggest All" button | Done | 2026-01-24 | Purple button in SmartMapper header |
+| Progress indicator | Done | 2026-01-24 | Progress bar during analysis |
+| Bulk review dialog | Done | 2026-01-24 | `AISuggestAllDialog` component |
+| Confidence grouping | Done | 2026-01-24 | High/medium/low sections |
+| Select all/none | Done | 2026-01-24 | Quick selection controls |
 
 ---
 
@@ -255,6 +258,9 @@ In-app AI co-pilot for column mapping at multiple granularity levels.
 - `src/lib/ai/mapping-sdk.ts` - MappingAssistantSDK with Claude tool-use
 - `src/app/api/ai/suggest-mapping/route.ts` - Single column suggestion
 - `src/app/api/ai/suggest-all/route.ts` - Bulk suggestions
+- `src/components/data-enrichment/ai-suggestion-button.tsx` - Sparkle button + popover
+- `src/components/data-enrichment/ai-suggest-all-dialog.tsx` - Bulk review dialog
+- `src/components/ui/popover.tsx` - Popover component (shadcn/ui)
 
 ### Database Migrations
 - `supabase/migrations/20260124_connector_config.sql` - Connection config backfill
@@ -290,9 +296,11 @@ In-app AI co-pilot for column mapping at multiple granularity levels.
 3. [x] Rate limiting - DONE
 4. [ ] Apply audit_log migration via Supabase dashboard
 5. [x] AI SDK implementation (Phase 6.1) - DONE
-6. [ ] AI sparkle button + suggestion popover (Phase 6.2)
-7. [ ] AI "Suggest All" button + bulk review (Phase 6.3)
+6. [x] AI sparkle button + suggestion popover (Phase 6.2) - DONE
+7. [x] AI "Suggest All" button + bulk review (Phase 6.3) - DONE
 8. [ ] Nested sheet extraction UX design (Phase 5)
+9. [ ] Phase 4: Additional connectors (Close.io, Typeform, etc.)
+10. [ ] Phase 2: Visual data map component
 
 ---
 

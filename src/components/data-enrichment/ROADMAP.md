@@ -663,7 +663,7 @@ const duration = {
 - [ ] Template: Market & Comp Analysis
 - [ ] Template: Campaign Structure
 
-### Phase 6 Progress (AI-Assisted)
+### Phase 6 Progress (AI-Assisted) - COMPLETE
 - [x] Claude API integration design (Tool-use pattern)
 - [x] API key management (env var ANTHROPIC_API_KEY)
 - [x] Mapping suggestion endpoint (`/api/ai/suggest-mapping`)
@@ -671,9 +671,9 @@ const duration = {
 - [x] MappingAssistantSDK class (`src/lib/ai/mapping-sdk.ts`)
 - [x] Rate limiting (20/min single, 5/hr bulk)
 - [x] Audit logging integration
-- [ ] UI: Sparkle button per column (Phase 6.2)
-- [ ] UI: Suggestion popover (Phase 6.2)
-- [ ] UI: "AI Suggest All" button (Phase 6.3)
+- [x] UI: Sparkle button per column (`ai-suggestion-button.tsx`)
+- [x] UI: Suggestion popover with confidence + reasoning
+- [x] UI: "AI Suggest All" button + bulk review dialog (`ai-suggest-all-dialog.tsx`)
 
 ---
 
@@ -734,5 +734,5 @@ const duration = {
 
 ---
 
-*Last updated: 2026-01-24 (Phase 6.1 AI SDK Complete)*
+*Last updated: 2026-01-24 (Phase 6 AI Assistant Complete)*
 *Architecture audit by Claude Opus 4.5*

@@ -439,19 +439,20 @@ const AI_LIMITS = {
 - [x] Audit logging integration
 - [x] Learn from existing mappings (loads patterns from DB)
 
-### Phase 6.2: Column-Level UI
-- [ ] Sparkle button per column
-- [ ] Suggestion popover component
-- [ ] Apply/dismiss actions
-- [ ] Loading states
+### Phase 6.2: Column-Level UI ✅ COMPLETE
+- [x] Sparkle button per column (`ai-suggestion-button.tsx`)
+- [x] Suggestion popover component (using shadcn Popover)
+- [x] Apply/dismiss actions with smooth animations
+- [x] Loading states (spinner in button + popover)
 
-### Phase 6.3: Tab-Level UI
-- [ ] "AI Suggest All" button
-- [ ] Progress indicator
-- [ ] Bulk review modal
-- [ ] Confidence filtering
+### Phase 6.3: Tab-Level UI ✅ COMPLETE
+- [x] "AI Suggest All" button (purple, in SmartMapper header)
+- [x] Progress indicator (Progress bar during analysis)
+- [x] Bulk review modal (`ai-suggest-all-dialog.tsx`)
+- [x] Confidence filtering (high/medium/low grouping)
+- [x] Select all/none/high-confidence controls
 
-### Phase 6.4: Learning & Patterns
+### Phase 6.4: Learning & Patterns (Future)
 - [ ] Store accepted suggestions
 - [ ] Use patterns in future suggestions
 - [ ] "Why did you suggest this?" explainer
