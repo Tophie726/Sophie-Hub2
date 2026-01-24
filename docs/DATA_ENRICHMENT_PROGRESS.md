@@ -58,7 +58,7 @@
 | Task | Status | Priority | Notes |
 |------|--------|----------|-------|
 | Apply database migrations | Pending | HIGH | Run connector_config + field_lineage migrations |
-| Sync button in TabOverviewDashboard | Pending | HIGH | "Sync Now" button with progress |
+| Sync button in TabOverviewDashboard | Done | HIGH | "Sync Now" button with tooltip status |
 | Sync history panel | Pending | MEDIUM | Show recent sync runs for a tab |
 | Authority toggle UI | Pending | MEDIUM | Switch field from source_of_truth → reference |
 | Visual data map component | Pending | LOW | Canvas/SVG visualization |
@@ -200,7 +200,7 @@ In-app AI co-pilot for column mapping at multiple granularity levels.
 ## Next Session Priorities
 
 1. [ ] Apply database migrations (`supabase migration up` for connector_config + field_lineage)
-2. [ ] Add Sync button to TabOverviewDashboard
+2. [x] Add Sync button to TabOverviewDashboard - DONE
 3. [ ] Create SyncHistoryPanel component
 4. [ ] Design nested sheet extraction UX
 5. [ ] Evaluate Claude API integration approach
