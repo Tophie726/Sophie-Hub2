@@ -68,13 +68,13 @@
 
 ## Phase 3: Security Hardening
 
-### In Progress
+### Complete (Credential Storage Deferred)
 
 | Task | Status | Priority | Notes |
 |------|--------|----------|-------|
 | Audit logging | Done | HIGH | `mapping_audit_log` table + `src/lib/audit/index.ts` |
 | Rate limiting | Done | MEDIUM | `src/lib/rate-limit/index.ts` - sliding window algorithm |
-| Credential storage | Pending | MEDIUM | Secure API keys for connectors |
+| Credential storage | Deferred | MEDIUM | Deferred until Phase 4 (API connectors need API keys) |
 
 ### Audit Logging Details
 
