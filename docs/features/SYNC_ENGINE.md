@@ -431,8 +431,8 @@ Get detailed sync run results.
 - [x] POST /api/sync/tab endpoint
 - [x] GET /api/sync/runs endpoint
 - [x] GET /api/sync/runs/[id] endpoint
-- [ ] Sync button in TabOverviewDashboard
-- [ ] Sync progress indicator
+- [x] Sync button in TabOverviewDashboard
+- [x] Sync progress indicator (loading state + tooltip)
 - [ ] Sync history panel
 
 ### Phase 2.3: Lineage Tracking (IN PROGRESS)

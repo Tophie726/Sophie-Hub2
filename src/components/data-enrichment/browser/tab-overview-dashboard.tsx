@@ -31,6 +31,7 @@ import {
 } from '@/components/ui/tooltip'
 import { TabCard } from './tab-card'
 import { TabListRow } from './tab-list-row'
+import { SyncHistoryPanel } from '../sync-history-panel'
 import type { CategoryStats, TabStatus, EntityType } from '@/types/entities'
 
 type EntityTypeOrNull = EntityType | null
@@ -59,6 +60,7 @@ interface SyncStatus {
 
 interface TabOverviewDashboardProps {
   sourceName: string
+  sourceId?: string
   tabs: Tab[]
   onSelectTab: (tabId: string) => void
   onTabStatusChange?: (tabId: string, status: 'active' | 'reference' | 'hidden' | 'flagged', notes?: string) => void
@@ -109,6 +111,7 @@ function formatRelativeTime(dateString: string): string {
 
 export function TabOverviewDashboard({
   sourceName,
+  sourceId,
   tabs,
   onSelectTab,
   onTabStatusChange,
@@ -120,6 +123,8 @@ export function TabOverviewDashboard({
 }: TabOverviewDashboardProps) {
   const [showHidden, setShowHidden] = useState(false)
   const [showFlagged, setShowFlagged] = useState(true)
+  const [showSyncHistory, setShowSyncHistory] = useState(false)
+  const [syncHistoryKey, setSyncHistoryKey] = useState(0) // For refreshing after sync
 
   // Split tabs into categories
   const mainTabs = tabs.filter(t => !t.status || t.status === 'active' || t.status === 'reference')
@@ -233,6 +238,38 @@ export function TabOverviewDashboard({
         </div>
         <Progress value={overallProgress} className="h-2" />
       </div>
+
+      {/* Sync history collapsible */}
+      {sourceId && onSync && (
+        <Collapsible open={showSyncHistory} onOpenChange={setShowSyncHistory}>
+          <div className="rounded-lg border bg-muted/30 overflow-hidden">
+            <CollapsibleTrigger asChild>
+              <button className="w-full flex items-center justify-between px-4 py-2.5 text-sm hover:bg-muted/50 transition-colors">
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Clock className="h-3.5 w-3.5" />
+                  <span className="text-xs font-medium">Sync History</span>
+                </div>
+                <motion.div
+                  animate={{ rotate: showSyncHistory ? 180 : 0 }}
+                  transition={{ duration: 0.2, ease: easeOut }}
+                >
+                  <ChevronDown className="h-3.5 w-3.5 text-muted-foreground/50" />
+                </motion.div>
+              </button>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div className="px-4 pb-4">
+                <SyncHistoryPanel
+                  key={syncHistoryKey}
+                  dataSourceId={sourceId}
+                  limit={5}
+                  onRefresh={() => setSyncHistoryKey(k => k + 1)}
+                />
+              </div>
+            </CollapsibleContent>
+          </div>
+        </Collapsible>
+      )}
 
       {/* Main tabs section */}
       <AnimatePresence mode="wait">

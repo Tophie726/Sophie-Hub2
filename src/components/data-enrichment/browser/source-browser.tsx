@@ -890,6 +890,7 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
           >
             <TabOverviewDashboard
               sourceName={activeSource?.name || ''}
+              sourceId={activeSource?.id}
               tabs={sheetTabs.map(t => {
                 // Find matching DB tab for additional data
                 const dbTab = activeSource?.tabs?.find(dt => dt.tab_name === t.name)
