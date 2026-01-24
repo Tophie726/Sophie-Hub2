@@ -266,24 +266,288 @@ const navigation: NavSection[] = [...]
 
 ---
 
+## Enterprise Sweep Summary (2025-01-24)
+
+### Completed
+
+| Area | Improvement | Impact |
+|------|-------------|--------|
+| **Performance** | N+1 query fix in data-sources API | 500+ queries → 3 queries |
+| **Performance** | Supabase client singleton pattern | Prevents connection exhaustion |
+| **Performance** | React.memo on TabCard, TabListRow | Reduces unnecessary re-renders |
+| **Stability** | ErrorBoundary component | Prevents full app crashes |
+| **Observability** | Health check endpoint `/api/health` | Ready for monitoring/load balancers |
+| **Code Quality** | Removed 8 debug console.log statements | Production-ready logging |
+| **Code Quality** | Fixed 12+ TypeScript errors | Type-safe codebase |
+| **Code Quality** | Added proper types to navigation | Sidebar type safety |
+
+### Remaining from Task List
+
+| Task | Priority | Effort | Notes |
+|------|----------|--------|-------|
+| Enterprise ESLint rules | Medium | 1-2 hrs | Stricter linting for consistency |
+| Centralize TypeScript interfaces | Medium | 2-3 hrs | DRY - CategoryStats duplicated in 4+ files |
+
+---
+
 ## Future Improvements
 
-### Pending Tasks
+### High Priority (Before Production)
 
-| Task | Priority | Notes |
-|------|----------|-------|
-| Add enterprise ESLint rules | Medium | Stricter linting for code consistency |
-| Centralize shared TypeScript interfaces | Medium | DRY principle for types |
-| Add Zod input validation | Medium | Runtime validation on API routes |
-| Smart-mapper refactor | Low | Split 2700-line file into smaller modules |
+#### 1. Input Validation with Zod
+**Why:** Runtime validation prevents malformed data from reaching the database.
 
-### Recommended Monitoring
+```typescript
+// src/lib/validations/data-source.ts
+import { z } from 'zod'
 
-| Tool | Purpose | Priority |
-|------|---------|----------|
-| Sentry | Error tracking | High |
-| Vercel Analytics | Performance monitoring | Medium |
-| Upstash | Rate limiting | Medium (for production) |
+export const CreateDataSourceSchema = z.object({
+  name: z.string().min(1).max(255),
+  spreadsheet_id: z.string().min(1),
+  spreadsheet_url: z.string().url().optional(),
+})
+
+// In API route
+const result = CreateDataSourceSchema.safeParse(body)
+if (!result.success) {
+  return NextResponse.json({ error: result.error.flatten() }, { status: 400 })
+}
+```
+
+**Files to add validation:**
+- `POST /api/data-sources`
+- `POST /api/tab-mappings`
+- `POST /api/mappings/save`
+
+---
+
+#### 2. API Response Standardization
+**Why:** Consistent response format makes frontend error handling predictable.
+
+```typescript
+// src/lib/api/response.ts
+interface ApiResponse<T> {
+  success: boolean
+  data?: T
+  error?: {
+    code: string
+    message: string
+    details?: unknown
+  }
+  meta?: {
+    timestamp: string
+    requestId?: string
+  }
+}
+
+export function success<T>(data: T): ApiResponse<T> {
+  return { success: true, data, meta: { timestamp: new Date().toISOString() } }
+}
+
+export function error(code: string, message: string): ApiResponse<never> {
+  return { success: false, error: { code, message }, meta: { timestamp: new Date().toISOString() } }
+}
+```
+
+---
+
+#### 3. Centralized Type Definitions
+**Why:** `CategoryStats` is defined in 4+ files. Single source of truth prevents drift.
+
+```typescript
+// src/types/entities.ts
+export interface CategoryStats {
+  partner: number
+  staff: number
+  asin: number
+  weekly: number
+  computed: number
+  skip: number
+  unmapped: number
+}
+
+export type TabStatus = 'active' | 'reference' | 'hidden' | 'flagged'
+export type EntityType = 'partners' | 'staff' | 'asins'
+```
+
+**Files with duplicated types:**
+- `src/app/api/data-sources/route.ts`
+- `src/components/data-enrichment/browser/tab-card.tsx`
+- `src/components/data-enrichment/browser/tab-list-row.tsx`
+- `src/components/data-enrichment/browser/tab-overview-dashboard.tsx`
+
+---
+
+### Medium Priority (Post-Launch)
+
+#### 4. Code Splitting / Lazy Loading
+**Why:** smart-mapper.tsx is 2,700+ lines. Splitting reduces initial bundle size.
+
+```typescript
+// Lazy load heavy components
+const SmartMapper = dynamic(
+  () => import('@/components/data-enrichment/smart-mapper'),
+  { loading: () => <MapperSkeleton /> }
+)
+```
+
+**Candidates for splitting:**
+- SmartMapper (2,700 lines)
+- SourceBrowser (800+ lines)
+- Heavy modal components
+
+---
+
+#### 5. Request/Response Caching
+**Why:** Reduce database load for frequently accessed, rarely changed data.
+
+```typescript
+// Using Next.js fetch caching
+const data = await fetch('/api/field-tags', {
+  next: { revalidate: 300 } // Cache for 5 minutes
+})
+
+// Or SWR for client-side
+const { data } = useSWR('/api/field-tags', fetcher, {
+  revalidateOnFocus: false,
+  dedupingInterval: 60000,
+})
+```
+
+**Good candidates for caching:**
+- Field tags (rarely change)
+- Table stats (revalidate on mutation)
+- Data source list (short TTL)
+
+---
+
+#### 6. Database Indexing Review
+**Why:** As data grows, queries slow down without proper indexes.
+
+**Recommended indexes:**
+```sql
+-- For N+1 fix queries
+CREATE INDEX idx_tab_mappings_data_source_id ON tab_mappings(data_source_id);
+CREATE INDEX idx_column_mappings_tab_mapping_id ON column_mappings(tab_mapping_id);
+
+-- For common lookups
+CREATE INDEX idx_staff_email ON staff(email);
+CREATE INDEX idx_partners_status ON partners(status);
+```
+
+---
+
+#### 7. Retry Logic for External APIs
+**Why:** Google Sheets API can have transient failures.
+
+```typescript
+// src/lib/utils/retry.ts
+export async function withRetry<T>(
+  fn: () => Promise<T>,
+  options: { retries?: number; delay?: number } = {}
+): Promise<T> {
+  const { retries = 3, delay = 1000 } = options
+
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      return await fn()
+    } catch (error) {
+      if (attempt === retries) throw error
+      await new Promise(r => setTimeout(r, delay * attempt))
+    }
+  }
+  throw new Error('Unreachable')
+}
+
+// Usage
+const data = await withRetry(() => sheets.spreadsheets.get({ spreadsheetId }))
+```
+
+---
+
+### Low Priority (Nice to Have)
+
+#### 8. Smart-Mapper Refactor
+**Why:** 2,700-line file is hard to maintain and test.
+
+**Proposed structure:**
+```
+src/components/data-enrichment/smart-mapper/
+├── index.tsx              # Main orchestrator
+├── phases/
+│   ├── preview-phase.tsx  # Phase 1: Preview
+│   ├── classify-phase.tsx # Phase 2: Classify
+│   └── map-phase.tsx      # Phase 3: Map
+├── hooks/
+│   ├── use-column-state.ts
+│   └── use-draft-persistence.ts
+└── components/
+    ├── column-table.tsx
+    └── field-picker.tsx
+```
+
+---
+
+#### 9. Test Infrastructure
+**Why:** No tests = no confidence in refactors.
+
+**Recommended setup:**
+```bash
+npm install -D vitest @testing-library/react @testing-library/jest-dom
+```
+
+**Priority test targets:**
+1. `src/lib/auth/roles.ts` - Permission logic
+2. `src/lib/google/sheets.ts` - Header detection
+3. API routes - Integration tests
+
+---
+
+#### 10. ESLint Enterprise Rules
+**Why:** Enforce consistency across codebase.
+
+```javascript
+// .eslintrc.js additions
+rules: {
+  'no-console': ['error', { allow: ['error', 'warn'] }],
+  '@typescript-eslint/explicit-function-return-type': 'warn',
+  '@typescript-eslint/no-floating-promises': 'error',
+  'import/order': ['error', { 'newlines-between': 'always' }],
+  'react/jsx-no-leaked-render': 'error',
+}
+```
+
+---
+
+### Monitoring & Observability
+
+| Tool | Purpose | Priority | Setup Effort |
+|------|---------|----------|--------------|
+| **Sentry** | Error tracking with stack traces | High | 30 min |
+| **Vercel Analytics** | Core Web Vitals, performance | Medium | 5 min |
+| **Upstash Redis** | Rate limiting, caching | Medium | 1 hr |
+| **Axiom/Logtail** | Structured logging | Low | 1 hr |
+
+**Sentry integration example:**
+```typescript
+// src/components/error-boundary.tsx
+<ErrorBoundary onError={(error, info) => {
+  Sentry.captureException(error, { extra: { componentStack: info.componentStack } })
+}}>
+```
+
+---
+
+### Performance Benchmarks
+
+Track these metrics as the app scales:
+
+| Metric | Current | Target | Tool |
+|--------|---------|--------|------|
+| Data sources API (GET) | ~3 queries | Maintain | Supabase logs |
+| Time to Interactive | TBD | < 3s | Lighthouse |
+| Largest Contentful Paint | TBD | < 2.5s | Vercel Analytics |
+| API response time (p95) | TBD | < 500ms | Health endpoint |
 
 ---
 
@@ -292,6 +556,23 @@ const navigation: NavSection[] = [...]
 | Date | Type | Changes |
 |------|------|---------|
 | 2025-01-24 | Enterprise Sweep | N+1 fix, singleton pattern, React.memo, ErrorBoundary, health endpoint, TypeScript fixes, console.log cleanup |
+| 2025-01-24 | Security Audit | Open redirect fix, query injection fix, RBAC implementation |
+
+---
+
+## Best Practices Checklist
+
+### Before Each PR
+- [ ] No `console.log` (only `console.error` for actual errors)
+- [ ] No `any` types (use `unknown` if truly unknown)
+- [ ] API routes have auth checks
+- [ ] New components have proper TypeScript props interface
+
+### Before Production Deploy
+- [ ] All high-priority items from this doc addressed
+- [ ] SECURITY.md production checklist completed
+- [ ] Health endpoint returning 200
+- [ ] Error tracking (Sentry) configured
 
 ---
 
@@ -301,3 +582,4 @@ const navigation: NavSection[] = [...]
 - **Database:** [docs/DATABASE_SCHEMA.md](docs/DATABASE_SCHEMA.md)
 - **Authorization:** [docs/AUTHORIZATION.md](docs/AUTHORIZATION.md)
 - **Roadmap:** [docs/ROADMAP.md](docs/ROADMAP.md)
+- **Project Context:** [CLAUDE.md](CLAUDE.md)
