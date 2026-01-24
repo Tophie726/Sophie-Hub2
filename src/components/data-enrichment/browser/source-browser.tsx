@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowLeft, Loader2, Search, Table, ChevronUp } from 'lucide-react'
 import { SourceTabBar } from './source-tab-bar'
@@ -69,6 +69,9 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
   const [activeSourceId, setActiveSourceIdInternal] = useState<string | null>(initialSourceId || null)
   const [activeTabId, setActiveTabIdInternal] = useState<string | null>(initialTabId || OVERVIEW_TAB_ID) // Default to Overview or initial
 
+  // Track if user has manually selected a tab - prevents race condition with fetch
+  const userHasSelectedTab = useRef(!!initialTabId)
+
   // Wrapper to propagate source changes up
   const setActiveSourceId = (sourceId: string | null) => {
     setActiveSourceIdInternal(sourceId)
@@ -77,6 +80,7 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
 
   // Wrapper to propagate tab changes up
   const setActiveTabId = (tabId: string | null) => {
+    userHasSelectedTab.current = true // Mark that user made a selection
     setActiveTabIdInternal(tabId)
     onTabChange?.(tabId)
   }
@@ -111,10 +115,11 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
               loadPreviewForSource(sourceToSelect.id, sourceToSelect.spreadsheet_id)
             }
 
-            // Only default to Overview if no initial tab was specified
-            // This preserves the tab selection from URL params on page reload
-            if (!initialTabId) {
-              setActiveTabId(OVERVIEW_TAB_ID)
+            // Only default to Overview if user hasn't already selected a tab
+            // This prevents race condition where user clicks tab before fetch completes
+            if (!userHasSelectedTab.current) {
+              setActiveTabIdInternal(OVERVIEW_TAB_ID)
+              onTabChange?.(OVERVIEW_TAB_ID)
             }
           }
         }
@@ -141,10 +146,10 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
           [sourceId]: preview,
         }))
 
-        // Only auto-select if no tab is currently selected
-        // (DB tabs are already selected in fetchSources if available)
-        if (!activeTabId && preview.tabs.length > 0) {
-          setActiveTabId(String(preview.tabs[0].sheetId))
+        // Only auto-select if user hasn't already selected a tab
+        if (!userHasSelectedTab.current && preview.tabs.length > 0) {
+          setActiveTabIdInternal(String(preview.tabs[0].sheetId))
+          onTabChange?.(String(preview.tabs[0].sheetId))
         }
       }
     } catch (error) {
