@@ -59,6 +59,7 @@ import {
 } from 'lucide-react'
 import { MobileColumnCard } from './mobile-column-card'
 import { AISuggestionButton, type AISuggestion } from './ai-suggestion-button'
+import { AISuggestAllDialog, type BulkSuggestion } from './ai-suggest-all-dialog'
 
 // ============ ANIMATED LOCK ICON ============
 // Custom animated lock that shows shackle closing
@@ -1171,6 +1172,9 @@ function ClassifyPhase({
     action: 'set' | 'change' | 'remove'
   }>({ open: false, columnIndex: null, columnName: '', category: null, currentKeyName: null, action: 'set' })
 
+  // State for AI Suggest All dialog
+  const [showAISuggestAll, setShowAISuggestAll] = useState(false)
+
   const sampleRows = rawData.rows.slice(headerRow + 1, headerRow + 2)
   const allValidColumns = columns.filter(c => c.sourceColumn.trim())
 
@@ -1387,9 +1391,21 @@ function ClassifyPhase({
                 {embedded ? 'Set keys and categories for each column.' : <>Classify columns and mark which one is the <strong>key identifier</strong> for each entity type.</>}
               </CardDescription>
             </div>
-            <div className="text-right">
-              <div className="text-2xl font-bold tabular-nums">{totalClassified}/{totalColumns}</div>
-              <div className="text-xs text-muted-foreground">classified</div>
+            <div className="flex items-center gap-4">
+              {/* AI Suggest All button */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowAISuggestAll(true)}
+                className="h-8 text-xs bg-purple-500/5 border-purple-500/30 text-purple-600 hover:bg-purple-500/10"
+              >
+                <Sparkles className="h-3.5 w-3.5 mr-1.5" />
+                AI Suggest All
+              </Button>
+              <div className="text-right">
+                <div className="text-2xl font-bold tabular-nums">{totalClassified}/{totalColumns}</div>
+                <div className="text-xs text-muted-foreground">classified</div>
+              </div>
             </div>
           </div>
 
@@ -2233,6 +2249,42 @@ function ClassifyPhase({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* AI Suggest All Dialog */}
+      <AISuggestAllDialog
+        open={showAISuggestAll}
+        onOpenChange={setShowAISuggestAll}
+        columns={allValidColumns.map((col) => ({
+          name: col.sourceColumn,
+          sample_values: sampleRows[0] ? [sampleRows[0][col.sourceIndex]].filter(Boolean) : [],
+          position: col.sourceIndex,
+        }))}
+        tabName={tabName}
+        onApplyAll={(suggestions: BulkSuggestion[]) => {
+          suggestions.forEach((suggestion) => {
+            onCategoryChange(suggestion.position, suggestion.category)
+            // Request key confirmation for key fields
+            if (suggestion.is_key && (suggestion.category === 'partner' || suggestion.category === 'staff')) {
+              const col = allValidColumns.find(c => c.sourceIndex === suggestion.position)
+              if (col) {
+                requestKeyConfirmation(suggestion.position, col.sourceColumn, suggestion.category, false)
+              }
+            }
+          })
+        }}
+        onApplySelected={(suggestions: BulkSuggestion[]) => {
+          suggestions.forEach((suggestion) => {
+            onCategoryChange(suggestion.position, suggestion.category)
+            // Request key confirmation for key fields
+            if (suggestion.is_key && (suggestion.category === 'partner' || suggestion.category === 'staff')) {
+              const col = allValidColumns.find(c => c.sourceIndex === suggestion.position)
+              if (col) {
+                requestKeyConfirmation(suggestion.position, col.sourceColumn, suggestion.category, false)
+              }
+            }
+          })
+        }}
+      />
       </div>
     </motion.div>
   )
