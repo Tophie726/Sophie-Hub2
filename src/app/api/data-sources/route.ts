@@ -3,6 +3,7 @@ import { requirePermission } from '@/lib/auth/api-auth'
 import { apiSuccess, apiError, apiValidationError, ApiErrors } from '@/lib/api/response'
 import { DataSourceSchemaV2 } from '@/lib/validations/schemas'
 import { getConnectorRegistry } from '@/lib/connectors'
+import { audit } from '@/lib/audit'
 import {
   CategoryStats,
   DataSourceWithStats,
@@ -108,6 +109,15 @@ export async function POST(request: Request) {
       console.error('Error creating data source:', error)
       return ApiErrors.database(error.message)
     }
+
+    // Audit log the data source creation
+    await audit.logDataSource(
+      'create',
+      source.id,
+      name,
+      auth.user?.id,
+      auth.user?.email || undefined
+    )
 
     return apiSuccess({ source }, 201)
   } catch (error) {

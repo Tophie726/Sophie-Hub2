@@ -5,6 +5,7 @@ import { apiSuccess, apiValidationError, ApiErrors } from '@/lib/api/response'
 import { SaveMappingSchemaV2 } from '@/lib/validations/schemas'
 import { DEFAULT_WEEKLY_PATTERN } from '@/types/enrichment'
 import { getConnectorRegistry } from '@/lib/connectors'
+import { audit } from '@/lib/audit'
 
 // Use singleton Supabase client
 const supabase = getAdminClient()
@@ -275,6 +276,19 @@ export async function POST(request: NextRequest) {
 
     // Count what was saved
     const patternsCount = hasWeeklyColumns ? 1 : 0
+
+    // Audit log the mapping save
+    await audit.logMappingSave(
+      tabMappingId,
+      `${dataSource.name} → ${tabMapping.tab_name}`,
+      auth.user?.id,
+      auth.user?.email || undefined,
+      {
+        column_mappings_count: regularMappings.length,
+        patterns_count: patternsCount,
+        computed_fields_count: computedFieldsCount,
+      }
+    )
 
     return apiSuccess({
       data_source_id: dataSourceId,

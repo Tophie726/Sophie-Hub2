@@ -7,6 +7,7 @@
 
 import { getAdminClient } from '@/lib/supabase/admin'
 import { getConnector, type GoogleSheetConnectorConfig } from '@/lib/connectors'
+import { audit } from '@/lib/audit'
 import { applyTransform } from './transforms'
 import type {
   SyncOptions,
@@ -47,6 +48,16 @@ export class SyncEngine {
       options.triggeredBy
     )
 
+    // Log sync start
+    await audit.logSync(
+      'sync_start',
+      syncRunId,
+      `${config.dataSource.name} → ${config.tabMapping.tab_name}`,
+      options.triggeredBy,
+      undefined,
+      { dry_run: options.dryRun }
+    )
+
     try {
       // 3. Fetch source data
       // Cast connection_config through unknown since it's stored as Record<string, unknown> in DB
@@ -74,18 +85,50 @@ export class SyncEngine {
       const stats = this.calculateStats(changes, errors)
       await this.completeSyncRun(syncRunId, stats)
 
+      const durationMs = Date.now() - startTime
+
+      // Log sync completion
+      await audit.logSync(
+        'sync_complete',
+        syncRunId,
+        `${config.dataSource.name} → ${config.tabMapping.tab_name}`,
+        options.triggeredBy,
+        undefined,
+        {
+          rows_affected: stats.rowsProcessed,
+          rows_created: stats.rowsCreated,
+          rows_updated: stats.rowsUpdated,
+          rows_skipped: stats.rowsSkipped,
+          dry_run: options.dryRun,
+          duration_ms: durationMs,
+        }
+      )
+
       return {
         success: true,
         syncRunId,
         stats,
         changes: options.dryRun ? changes : [],
-        durationMs: Date.now() - startTime,
+        durationMs,
       }
     } catch (error) {
-      await this.failSyncRun(
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      await this.failSyncRun(syncRunId, errorMessage)
+
+      // Log sync failure
+      await audit.logSync(
+        'sync_fail',
         syncRunId,
-        error instanceof Error ? error.message : 'Unknown error'
+        `${config.dataSource.name} → ${config.tabMapping.tab_name}`,
+        options.triggeredBy,
+        undefined,
+        {
+          error_message: errorMessage,
+          dry_run: options.dryRun,
+          duration_ms: Date.now() - startTime,
+        }
       )
+
       throw error
     }
   }

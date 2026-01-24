@@ -68,13 +68,23 @@
 
 ## Phase 3: Security Hardening
 
-### Not Started
+### In Progress
 
 | Task | Status | Priority | Notes |
 |------|--------|----------|-------|
-| Audit logging | Pending | HIGH | mapping_audit_log table |
+| Audit logging | Done | HIGH | `mapping_audit_log` table + `src/lib/audit/index.ts` |
 | Rate limiting | Pending | MEDIUM | Protect external APIs |
 | Credential storage | Pending | MEDIUM | Secure API keys for connectors |
+
+### Audit Logging Details
+
+- **Migration:** `supabase/migrations/20260124_audit_log.sql`
+- **Service:** `src/lib/audit/index.ts` - singleton with convenience methods
+- **API:** `GET /api/audit` - retrieve logs with filtering
+- **Integrated in:**
+  - Sync engine (sync_start, sync_complete, sync_fail)
+  - Mappings save API (mapping_save)
+  - Data sources API (create)
 
 ---
 
@@ -175,9 +185,15 @@ In-app AI co-pilot for column mapping at multiple granularity levels.
 - `src/app/api/mappings/save/route.ts` - Save mappings
 - `src/app/api/sheets/*` - Google Sheets specific
 
+### Audit System
+- `src/lib/audit/index.ts` - AuditService singleton with logging methods
+- `src/app/api/audit/route.ts` - GET endpoint for retrieving logs
+- `supabase/migrations/20260124_audit_log.sql` - mapping_audit_log table
+
 ### Database Migrations
 - `supabase/migrations/20260124_connector_config.sql` - Connection config backfill
 - `supabase/migrations/20260124_field_lineage.sql` - Field lineage tracking
+- `supabase/migrations/20260124_audit_log.sql` - Audit logging table
 
 ### Documentation
 - `ARCHITECTURE.md` - Connector architecture
