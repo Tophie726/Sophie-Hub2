@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, Loader2, Search, Table, ChevronUp } from 'lucide-react'
+import { ArrowLeft, Loader2, Search, Table, ChevronUp, RefreshCw, AlertCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { SourceTabBar } from './source-tab-bar'
 import { SheetTabBar, OVERVIEW_TAB_ID } from './sheet-tab-bar'
@@ -58,6 +58,7 @@ const easeOut: [number, number, number, number] = [0.22, 1, 0.36, 1]
 export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceChange, onTabChange }: SourceBrowserProps) {
   const [sources, setSources] = useState<DataSource[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [authError, setAuthError] = useState(false)
   const [activeSourceId, setActiveSourceIdInternal] = useState<string | null>(initialSourceId || null)
   const [activeTabId, setActiveTabIdInternal] = useState<string | null>(initialTabId || OVERVIEW_TAB_ID) // Default to Overview or initial
 
@@ -93,49 +94,8 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
   const [sheetPreviews, setSheetPreviews] = useState<Record<string, SheetPreview>>({})
   const [isLoadingPreview, setIsLoadingPreview] = useState(false)
 
-  // Fetch existing sources
-  useEffect(() => {
-    async function fetchSources() {
-      try {
-        const response = await fetch('/api/data-sources')
-        if (response.ok) {
-          const json = await response.json()
-          // Handle both old format (data.sources) and new standardized format (data.data.sources)
-          const fetchedSources = json.data?.sources || json.sources || []
-          setSources(fetchedSources)
-
-          // Use initialSourceId if provided, otherwise auto-select first
-          const sourceToSelect = initialSourceId
-            ? fetchedSources.find((s: DataSource) => s.id === initialSourceId)
-            : fetchedSources[0]
-
-          if (sourceToSelect) {
-            setActiveSourceId(sourceToSelect.id)
-
-            // Always load preview from Google Sheets to get full tab list
-            if (sourceToSelect.spreadsheet_id) {
-              loadPreviewForSource(sourceToSelect.id, sourceToSelect.spreadsheet_id)
-            }
-
-            // Only default to Overview if user hasn't already selected a tab
-            // This prevents race condition where user clicks tab before fetch completes
-            if (!userHasSelectedTab.current) {
-              setActiveTabIdInternal(OVERVIEW_TAB_ID)
-              onTabChange?.(OVERVIEW_TAB_ID)
-            }
-          }
-        }
-      } catch (error) {
-        console.error('Error fetching sources:', error)
-      } finally {
-        setIsLoading(false)
-      }
-    }
-    fetchSources()
-  }, [initialSourceId])
-
   // Load preview for a source that has no tabs yet
-  const loadPreviewForSource = async (sourceId: string, spreadsheetId: string) => {
+  const loadPreviewForSource = useCallback(async (sourceId: string, spreadsheetId: string) => {
     setIsLoadingPreview(true)
     try {
       const response = await fetch(`/api/sheets/preview?id=${spreadsheetId}`)
@@ -159,7 +119,55 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
     } finally {
       setIsLoadingPreview(false)
     }
-  }
+  }, [onTabChange])
+
+  // Fetch existing sources
+  const fetchSources = useCallback(async () => {
+    setIsLoading(true)
+    setAuthError(false)
+    try {
+      const response = await fetch('/api/data-sources')
+      if (response.status === 401) {
+        setAuthError(true)
+        return
+      }
+      if (response.ok) {
+        const json = await response.json()
+        // Handle both old format (data.sources) and new standardized format (data.data.sources)
+        const fetchedSources = json.data?.sources || json.sources || []
+        setSources(fetchedSources)
+
+        // Use initialSourceId if provided, otherwise auto-select first
+        const sourceToSelect = initialSourceId
+          ? fetchedSources.find((s: DataSource) => s.id === initialSourceId)
+          : fetchedSources[0]
+
+        if (sourceToSelect) {
+          setActiveSourceId(sourceToSelect.id)
+
+          // Always load preview from Google Sheets to get full tab list
+          if (sourceToSelect.spreadsheet_id) {
+            loadPreviewForSource(sourceToSelect.id, sourceToSelect.spreadsheet_id)
+          }
+
+          // Only default to Overview if user hasn't already selected a tab
+          // This prevents race condition where user clicks tab before fetch completes
+          if (!userHasSelectedTab.current) {
+            setActiveTabIdInternal(OVERVIEW_TAB_ID)
+            onTabChange?.(OVERVIEW_TAB_ID)
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching sources:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }, [initialSourceId, loadPreviewForSource, onTabChange])
+
+  useEffect(() => {
+    fetchSources()
+  }, [fetchSources])
 
   // Get active source and tab data
   const activeSource = sources.find(s => s.id === activeSourceId)
@@ -642,6 +650,42 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
     } catch (error) {
       console.error('Error saving mappings:', error)
     }
+  }
+
+  // Auth error state - session not ready or expired
+  if (authError) {
+    return (
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="space-y-6"
+      >
+        <div className="flex items-center gap-3 md:gap-4 px-4 md:px-0">
+          <Button variant="ghost" size="icon" onClick={onBack}>
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div>
+            <h2 className="text-lg md:text-xl font-semibold">Google Sheets</h2>
+            <p className="text-sm text-muted-foreground">Session not ready</p>
+          </div>
+        </div>
+        <div className="border rounded-xl p-8 md:p-12 text-center mx-4 md:mx-0">
+          <div className="max-w-md mx-auto space-y-4">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500/10 mx-auto">
+              <AlertCircle className="h-7 w-7 text-amber-600" />
+            </div>
+            <h3 className="text-lg font-semibold">Session Loading</h3>
+            <p className="text-sm text-muted-foreground">
+              Your session is still being established. Click retry to try again.
+            </p>
+            <Button onClick={fetchSources} variant="outline" className="gap-2">
+              <RefreshCw className="h-4 w-4" />
+              Retry
+            </Button>
+          </div>
+        </div>
+      </motion.div>
+    )
   }
 
   if (isLoading) {
