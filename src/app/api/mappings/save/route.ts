@@ -10,7 +10,7 @@ import { getConnectorRegistry } from '@/lib/connectors'
 const supabase = getAdminClient()
 
 // POST - Save field mappings (admin only)
-// Supports both legacy format { spreadsheet_id } and new format { type, connector_config }
+// Supports both legacy format { spreadsheet_id } and new format { type, connection_config }
 export async function POST(request: NextRequest) {
   const auth = await requirePermission('data-enrichment:write')
   if (!auth.authenticated) return auth.response
@@ -28,41 +28,41 @@ export async function POST(request: NextRequest) {
 
     // Determine the connector type and config
     let connectorType: string
-    let connectorConfigObj: Record<string, unknown>
+    let connectionConfigObj: Record<string, unknown>
     let legacySpreadsheetId: string | null = null
     let legacySpreadsheetUrl: string | null = null
 
-    if (dataSource.connector_config) {
-      // New format: use provided connector_config
-      connectorType = dataSource.connector_config.type
-      connectorConfigObj = dataSource.connector_config as Record<string, unknown>
+    if (dataSource.connection_config) {
+      // New format: use provided connection_config
+      connectorType = dataSource.connection_config.type
+      connectionConfigObj = dataSource.connection_config as Record<string, unknown>
 
       // Extract legacy fields for backward compatibility (dual-write)
-      if (dataSource.connector_config.type === 'google_sheet') {
-        legacySpreadsheetId = dataSource.connector_config.spreadsheet_id
-        legacySpreadsheetUrl = dataSource.connector_config.spreadsheet_url ?? null
+      if (dataSource.connection_config.type === 'google_sheet') {
+        legacySpreadsheetId = dataSource.connection_config.spreadsheet_id
+        legacySpreadsheetUrl = dataSource.connection_config.spreadsheet_url ?? null
       }
 
       // Validate config using the connector registry
       if (getConnectorRegistry().has(connectorType as 'google_sheet')) {
         const connector = getConnectorRegistry().get(connectorType as 'google_sheet')
-        const configValidation = connector.validateConfig(dataSource.connector_config)
+        const configValidation = connector.validateConfig(dataSource.connection_config)
         if (configValidation !== true) {
           throw new Error(configValidation)
         }
       }
     } else if (dataSource.spreadsheet_id) {
-      // Legacy format: construct connector_config from spreadsheet_id
+      // Legacy format: construct connection_config from spreadsheet_id
       connectorType = dataSource.type || 'google_sheet'
       legacySpreadsheetId = dataSource.spreadsheet_id
       legacySpreadsheetUrl = dataSource.spreadsheet_url ?? null
-      connectorConfigObj = {
+      connectionConfigObj = {
         type: 'google_sheet',
         spreadsheet_id: dataSource.spreadsheet_id,
         spreadsheet_url: dataSource.spreadsheet_url ?? null,
       }
     } else {
-      throw new Error('Either spreadsheet_id or connector_config is required')
+      throw new Error('Either spreadsheet_id or connection_config is required')
     }
 
     // 1. Create or update data_source
@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
         .update({
           name: dataSource.name,
           spreadsheet_url: legacySpreadsheetUrl,
-          connector_config: connectorConfigObj,
+          connection_config: connectionConfigObj,
           updated_at: new Date().toISOString(),
         })
         .eq('id', existingSource.id)
@@ -103,8 +103,8 @@ export async function POST(request: NextRequest) {
           // Legacy columns (for backward compatibility)
           spreadsheet_id: legacySpreadsheetId,
           spreadsheet_url: legacySpreadsheetUrl,
-          // New connector_config column
-          connector_config: connectorConfigObj,
+          // New connection_config column
+          connection_config: connectionConfigObj,
         })
         .select('id')
         .single()

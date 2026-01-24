@@ -271,7 +271,7 @@ export const ConnectorConfigSchema = z.discriminatedUnion('type', [
 
 /**
  * Extended data source creation schema with connector support
- * Supports both legacy format (spreadsheet_id) and new format (type + connector_config)
+ * Supports both legacy format (spreadsheet_id) and new format (type + connection_config)
  */
 export const DataSourceSchemaV2 = {
   create: z.object({
@@ -291,16 +291,16 @@ export const DataSourceSchemaV2 = {
       .nullable(),
     // New connector fields
     type: ConnectorTypeSchema.optional(),
-    connector_config: ConnectorConfigSchema.optional(),
+    connection_config: ConnectorConfigSchema.optional(),
   }).refine(
     (data) => {
-      // Either legacy spreadsheet_id OR new connector_config must be provided
+      // Either legacy spreadsheet_id OR new connection_config must be provided
       const hasLegacy = !!data.spreadsheet_id
-      const hasNew = !!data.connector_config
+      const hasNew = !!data.connection_config
       return hasLegacy || hasNew
     },
     {
-      message: 'Either spreadsheet_id or connector_config must be provided',
+      message: 'Either spreadsheet_id or connection_config must be provided',
       path: ['spreadsheet_id'],
     }
   ),
@@ -317,15 +317,15 @@ export const SaveMappingSchemaV2 = z.object({
     spreadsheet_url: z.string().url().optional().nullable(),
     // New connector fields
     type: ConnectorTypeSchema.optional(),
-    connector_config: ConnectorConfigSchema.optional(),
+    connection_config: ConnectorConfigSchema.optional(),
   }).refine(
     (data) => {
       const hasLegacy = !!data.spreadsheet_id
-      const hasNew = !!data.connector_config
+      const hasNew = !!data.connection_config
       return hasLegacy || hasNew
     },
     {
-      message: 'Either spreadsheet_id or connector_config must be provided',
+      message: 'Either spreadsheet_id or connection_config must be provided',
       path: ['spreadsheet_id'],
     }
   ),

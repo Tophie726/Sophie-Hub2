@@ -32,7 +32,7 @@ export interface SyncConfig {
     id: string
     name: string
     type: string
-    connector_config: Record<string, unknown>
+    connection_config: Record<string, unknown>
   }
   tabMapping: {
     id: string

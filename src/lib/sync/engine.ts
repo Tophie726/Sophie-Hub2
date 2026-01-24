@@ -49,9 +49,9 @@ export class SyncEngine {
 
     try {
       // 3. Fetch source data
-      // Cast connector_config through unknown since it's stored as Record<string, unknown> in DB
+      // Cast connection_config through unknown since it's stored as Record<string, unknown> in DB
       const connector = getConnector<GoogleSheetConnectorConfig>('google_sheet')
-      const connectorConfig = config.dataSource.connector_config as unknown as GoogleSheetConnectorConfig
+      const connectorConfig = config.dataSource.connection_config as unknown as GoogleSheetConnectorConfig
       const sourceData = await connector.getData(
         accessToken,
         connectorConfig,
@@ -153,7 +153,7 @@ export class SyncEngine {
           id,
           name,
           type,
-          connector_config
+          connection_config
         )
       `)
       .eq('id', tabMappingId)

@@ -15,7 +15,7 @@ const supabase = getAdminClient()
 export type { CategoryStats, DataSourceWithStats }
 
 // POST - Create a new data source (admin only)
-// Supports both legacy format { spreadsheet_id } and new format { type, connector_config }
+// Supports both legacy format { spreadsheet_id } and new format { type, connection_config }
 export async function POST(request: Request) {
   const auth = await requirePermission('data-enrichment:write')
   if (!auth.authenticated) return auth.response
@@ -29,45 +29,45 @@ export async function POST(request: Request) {
       return apiValidationError(validation.error)
     }
 
-    const { name, spreadsheet_id, spreadsheet_url, type, connector_config } = validation.data
+    const { name, spreadsheet_id, spreadsheet_url, type, connection_config } = validation.data
 
     // Determine the connector type and config
     let connectorType: string
-    let connectorConfigObj: Record<string, unknown>
+    let connectionConfigObj: Record<string, unknown>
     let legacySpreadsheetId: string | null = null
     let legacySpreadsheetUrl: string | null = null
 
-    if (connector_config) {
-      // New format: use provided connector_config
-      connectorType = connector_config.type
-      connectorConfigObj = connector_config as Record<string, unknown>
+    if (connection_config) {
+      // New format: use provided connection_config
+      connectorType = connection_config.type
+      connectionConfigObj = connection_config as Record<string, unknown>
 
       // Extract legacy fields for backward compatibility (dual-write)
-      if (connector_config.type === 'google_sheet') {
-        legacySpreadsheetId = connector_config.spreadsheet_id
-        legacySpreadsheetUrl = connector_config.spreadsheet_url ?? null
+      if (connection_config.type === 'google_sheet') {
+        legacySpreadsheetId = connection_config.spreadsheet_id
+        legacySpreadsheetUrl = connection_config.spreadsheet_url ?? null
       }
 
       // Validate config using the connector registry
       if (getConnectorRegistry().has(connectorType as 'google_sheet')) {
         const connector = getConnectorRegistry().get(connectorType as 'google_sheet')
-        const configValidation = connector.validateConfig(connector_config)
+        const configValidation = connector.validateConfig(connection_config)
         if (configValidation !== true) {
           return apiError('VALIDATION_ERROR', configValidation, 400)
         }
       }
     } else if (spreadsheet_id) {
-      // Legacy format: construct connector_config from spreadsheet_id
+      // Legacy format: construct connection_config from spreadsheet_id
       connectorType = type || 'google_sheet'
       legacySpreadsheetId = spreadsheet_id
       legacySpreadsheetUrl = spreadsheet_url ?? null
-      connectorConfigObj = {
+      connectionConfigObj = {
         type: 'google_sheet',
         spreadsheet_id,
         spreadsheet_url: spreadsheet_url ?? null,
       }
     } else {
-      return apiError('VALIDATION_ERROR', 'Either spreadsheet_id or connector_config is required', 400)
+      return apiError('VALIDATION_ERROR', 'Either spreadsheet_id or connection_config is required', 400)
     }
 
     // Check if this source is already connected (by spreadsheet_id for sheets)
@@ -97,8 +97,8 @@ export async function POST(request: Request) {
         // Legacy columns (for backward compatibility)
         spreadsheet_id: legacySpreadsheetId,
         spreadsheet_url: legacySpreadsheetUrl,
-        // New connector_config column
-        connector_config: connectorConfigObj,
+        // New connection_config column
+        connection_config: connectionConfigObj,
         status: 'active',
       })
       .select()

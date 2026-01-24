@@ -21,8 +21,8 @@
 | Create base connector interface | Done | 2026-01-24 | `src/lib/connectors/base.ts` |
 | Create connector registry | Done | 2026-01-24 | Singleton pattern |
 | Implement Google Sheets connector | Done | 2026-01-24 | Wraps existing sheets.ts |
-| Add Zod validation schemas | Done | 2026-01-24 | V2 schemas with connector_config |
-| Database migration | Done | 2026-01-24 | `connector_config` JSONB column |
+| Add Zod validation schemas | Done | 2026-01-24 | V2 schemas with connection_config |
+| Database migration | Done | 2026-01-24 | `connection_config` JSONB column (backfilled) |
 | Update data-sources API | Done | 2026-01-24 | Accepts both legacy and new format |
 | Update mappings/save API | Done | 2026-01-24 | Dual-write for backward compat |
 | Type consolidation | Done | 2026-01-24 | Single source of truth in entities.ts |
@@ -57,7 +57,7 @@
 
 | Task | Status | Priority | Notes |
 |------|--------|----------|-------|
-| Apply database migrations | Pending | HIGH | Run connector_config + field_lineage migrations |
+| Apply database migrations | Done | HIGH | `connection_config` backfilled via REST API |
 | Sync button in TabOverviewDashboard | Done | HIGH | "Sync Now" button with tooltip status |
 | Sync history panel | Done | MEDIUM | Collapsible panel with expandable error details |
 | Authority toggle UI | Done | MEDIUM | Already implemented in SmartMapper MapPhase |
@@ -176,7 +176,7 @@ In-app AI co-pilot for column mapping at multiple granularity levels.
 - `src/app/api/sheets/*` - Google Sheets specific
 
 ### Database Migrations
-- `supabase/migrations/20260124_connector_config.sql` - Connector config column
+- `supabase/migrations/20260124_connector_config.sql` - Connection config backfill
 - `supabase/migrations/20260124_field_lineage.sql` - Field lineage tracking
 
 ### Documentation
@@ -191,7 +191,7 @@ In-app AI co-pilot for column mapping at multiple granularity levels.
 
 | Date | Decision | Rationale |
 |------|----------|-----------|
-| 2026-01-24 | Dual-write legacy + connector_config | Backward compatibility |
+| 2026-01-24 | Dual-write legacy + connection_config | Backward compatibility |
 | 2026-01-24 | Singleton registry pattern | Matches getAdminClient() pattern |
 | 2026-01-24 | Type consolidation to entities.ts | Reduce drift, single source of truth |
 | 2026-01-24 | Keep SmartMapper connector-agnostic | Already uses generic TabRawData |
@@ -203,7 +203,7 @@ In-app AI co-pilot for column mapping at multiple granularity levels.
 
 ## Next Session Priorities
 
-1. [ ] Apply database migrations (`supabase migration up` for connector_config + field_lineage)
+1. [x] Apply database migrations - DONE (`connection_config` backfilled via REST API)
 2. [x] Add Sync button to TabOverviewDashboard - DONE
 3. [x] Create SyncHistoryPanel component - DONE
 4. [x] Authority toggle UI - ALREADY EXISTS in SmartMapper MapPhase

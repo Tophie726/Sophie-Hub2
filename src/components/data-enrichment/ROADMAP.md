@@ -25,7 +25,7 @@
 | Hardcoded `type: 'google_sheet'` | `api/data-sources/route.ts:53` | [x] DONE |
 | Hardcoded `type: 'google_sheet'` | `api/mappings/save/route.ts:57` | [x] DONE |
 | No Connector Registry/Interface | `src/lib/connectors/` | [x] DONE |
-| No connector config storage | `data_sources.connector_config` | [x] DONE |
+| No connector config storage | `data_sources.connection_config` | [x] DONE |
 | Monolithic search modal | `sheet-search-modal.tsx` | [ ] TODO |
 | No audit logging | N/A | [ ] TODO |
 | No rate limiting | API routes | [ ] TODO |
@@ -83,9 +83,10 @@
 
 ### 1.2 Database Schema Updates
 
-- [x] Add `connector_config` JSONB column to `data_sources` table
+- [x] Add `connection_config` JSONB column to `data_sources` table
   - Stores: API keys, webhook URLs, refresh tokens, connector-specific settings
   - Encrypted at rest for sensitive data
+  - Note: Column existed in initial schema, just needed backfilling
 
 - [ ] Consider renaming `tab_mappings` to `scope_mappings` (optional, for clarity)
   - "Scope" = tab (sheets), form (typeform), list (clickup), project (asana)
