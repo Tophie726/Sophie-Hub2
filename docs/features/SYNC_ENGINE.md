@@ -443,7 +443,12 @@ Get detailed sync run results.
 ### Phase 2.4: Scheduling
 - [ ] Cron job for scheduled sync
 - [ ] Per-source sync schedule config
-- [ ] Sync queue for rate limiting
+- [x] Rate limiting (implemented in `src/lib/rate-limit/index.ts`)
+
+### Phase 2.5: Security (COMPLETE)
+- [x] Audit logging (`src/lib/audit/index.ts`)
+- [x] Rate limiting for API protection
+- [x] sync_start, sync_complete, sync_fail events logged
 
 ---
 
