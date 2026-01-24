@@ -179,13 +179,29 @@ All animations use `ease-out` curve from `@/lib/animations`: `[0.22, 1, 0.36, 1]
 
 | Element | Duration | Effect |
 |---------|----------|--------|
-| Tab switch | 200ms | opacity fade |
+| Tab switch | 400ms | Sliding background via `layoutId` (spring) |
 | Card hover | 200ms | scale(1.02), y: -2 |
 | Card click | 150ms | scale(0.98) |
 | Progress ring | 400ms | strokeDashoffset change |
 | State transitions | 150-200ms | opacity + scale |
 | Lock animation | 350ms | scale + rotate with easeOutBack |
 | Action sheet | 300ms | y: 100% → 0 |
+
+### Tab Sliding Indicator
+
+SheetTabBar uses a **sliding background pill** that moves between tabs:
+
+```tsx
+{isActive && (
+  <motion.div
+    layoutId="activeSheetTab"
+    className="absolute inset-0 bg-background shadow-md rounded-lg ring-1 ring-border/50"
+    transition={{ type: 'spring', bounce: 0.15, duration: 0.4 }}
+  />
+)}
+```
+
+This matches the sidebar's navigation pattern for visual consistency.
 
 ## Mobile Long-Press Action Sheet
 

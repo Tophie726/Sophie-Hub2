@@ -456,10 +456,11 @@ function handleKeyDown(e) {
 
 **Always use `<button>`, never clickable divs.**
 
-**Press feel:**
+**Press feel** is built into our Button component:
 
-```css
-.button:active { transform: scale(0.97); }
+```tsx
+// Already applied in src/components/ui/button.tsx
+active:scale-[0.97] transition-[color,background-color,border-color,transform]
 ```
 
 **Show shortcuts in tooltips:**
@@ -471,6 +472,24 @@ function handleKeyDown(e) {
 ```
 
 **Disable after submit** to prevent double-submits.
+
+### Tabs - Sliding Indicator
+
+Tabs should have a **sliding background** that moves between selections:
+
+```tsx
+// Use layoutId for spring-physics animation between tabs
+{isActive && (
+  <motion.div
+    layoutId="activeTab"
+    className="absolute inset-0 bg-background shadow-md rounded-lg"
+    transition={{ type: 'spring', bounce: 0.15, duration: 0.4 }}
+  />
+)}
+<span className="relative z-10">{label}</span>
+```
+
+This creates a connected, fluid experience. See SheetTabBar and Sidebar for examples.
 
 ### Checkboxes - No Dead Zones
 

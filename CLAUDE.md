@@ -582,6 +582,32 @@ For elements that appear on page load (not user-triggered), use `initial={false}
 - List items that exist in the initial data
 - Elements that re-render frequently
 
+### Sliding Tab Indicators
+
+Tabs use `layoutId` for smooth spring-physics transitions:
+
+```tsx
+{isActive && (
+  <motion.div
+    layoutId="activeTab"
+    className="absolute inset-0 bg-background shadow-md rounded-lg"
+    transition={{ type: 'spring', bounce: 0.15, duration: 0.4 }}
+  />
+)}
+<span className="relative z-10">{label}</span>
+```
+
+See SheetTabBar and Sidebar for implementations.
+
+### Button Press Feedback
+
+All buttons have tactile press feedback built-in:
+
+```tsx
+// Already in src/components/ui/button.tsx
+active:scale-[0.97]
+```
+
 ---
 
 ## Commands
