@@ -1265,21 +1265,6 @@ function ClassifyPhase({
   const totalClassified = stats.partner + stats.staff + stats.asin + stats.weekly + stats.computed + stats.skip
   const totalColumns = allValidColumns.length
 
-  // Progress milestone celebration
-  const progressPercent = totalColumns > 0 ? Math.round((totalClassified / totalColumns) * 100) : 0
-  const [lastMilestone, setLastMilestone] = useState(0)
-  const [showCelebration, setShowCelebration] = useState(false)
-
-  useEffect(() => {
-    const milestones = [25, 50, 75, 100]
-    const currentMilestone = milestones.filter(m => progressPercent >= m).pop() || 0
-
-    if (currentMilestone > lastMilestone && currentMilestone > 0) {
-      setLastMilestone(currentMilestone)
-      setShowCelebration(true)
-      setTimeout(() => setShowCelebration(false), 1500)
-    }
-  }, [progressPercent, lastMilestone])
 
   // Category shortcuts mapping (ASIN is sub-option under Partner, no direct shortcut)
   const categoryShortcuts: Record<string, ColumnCategory> = {
@@ -1395,181 +1380,57 @@ function ClassifyPhase({
                 {embedded ? 'Set keys and categories for each column.' : <>Classify columns and mark which one is the <strong>key identifier</strong> for each entity type.</>}
               </CardDescription>
             </div>
-            <div className="text-right relative">
-              <motion.div
-                animate={showCelebration ? { scale: [1, 1.1, 1] } : {}}
-                transition={{ duration: 0.3 }}
-                className="relative"
-              >
-                <div className="text-2xl font-bold">{totalClassified}/{totalColumns}</div>
-                {showCelebration && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0 }}
-                    className="absolute -top-6 right-0 text-xs font-medium text-primary flex items-center gap-1"
-                  >
-                    <Sparkles className="h-3 w-3" />
-                    {lastMilestone}%!
-                  </motion.div>
-                )}
-              </motion.div>
+            <div className="text-right">
+              <div className="text-2xl font-bold tabular-nums">{totalClassified}/{totalColumns}</div>
               <div className="text-xs text-muted-foreground">classified</div>
             </div>
           </div>
 
-          {/* Stats badges with animated counts */}
+          {/* Stats badges - static, no animation noise */}
           <div className="flex flex-wrap gap-2 mt-4">
-            <AnimatePresence mode="popLayout">
-              {stats.partner > 0 && (
-                <motion.div
-                  key="partner-badge"
-                  initial={{ scale: 0.8, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  exit={{ scale: 0.8, opacity: 0 }}
-                  transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                >
-                  <Badge variant="outline" className="bg-blue-500/10 text-blue-600 border-blue-500/30">
-                    <Building2 className="h-3 w-3 mr-1" />
-                    <motion.span
-                      key={stats.partner}
-                      initial={{ y: -8, opacity: 0 }}
-                      animate={{ y: 0, opacity: 1 }}
-                      transition={{ duration: 0.15 }}
-                    >
-                      {stats.partner}
-                    </motion.span>{' '}Partner
-                    {partnerKey && <Key className="h-3 w-3 ml-1 text-amber-500" />}
-                  </Badge>
-                </motion.div>
-              )}
-              {stats.staff > 0 && (
-                <motion.div
-                  key="staff-badge"
-                  initial={{ scale: 0.8, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  exit={{ scale: 0.8, opacity: 0 }}
-                  transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                >
-                  <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/30">
-                    <Users className="h-3 w-3 mr-1" />
-                    <motion.span
-                      key={stats.staff}
-                      initial={{ y: -8, opacity: 0 }}
-                      animate={{ y: 0, opacity: 1 }}
-                      transition={{ duration: 0.15 }}
-                    >
-                      {stats.staff}
-                    </motion.span>{' '}Staff
-                    {staffKey && <Key className="h-3 w-3 ml-1 text-amber-500" />}
-                  </Badge>
-                </motion.div>
-              )}
-              {stats.asin > 0 && (
-                <motion.div
-                  key="asin-badge"
-                  initial={{ scale: 0.8, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  exit={{ scale: 0.8, opacity: 0 }}
-                  transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                >
-                  <Badge variant="outline" className="bg-orange-500/10 text-orange-600 border-orange-500/30">
-                    <Package className="h-3 w-3 mr-1" />
-                    <motion.span
-                      key={stats.asin}
-                      initial={{ y: -8, opacity: 0 }}
-                      animate={{ y: 0, opacity: 1 }}
-                      transition={{ duration: 0.15 }}
-                    >
-                      {stats.asin}
-                    </motion.span>{' '}ASIN
-                  </Badge>
-                </motion.div>
-              )}
-              {stats.weekly > 0 && (
-                <motion.div
-                  key="weekly-badge"
-                  initial={{ scale: 0.8, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  exit={{ scale: 0.8, opacity: 0 }}
-                  transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                >
-                  <Badge variant="outline" className="bg-purple-500/10 text-purple-600 border-purple-500/30">
-                    <Calendar className="h-3 w-3 mr-1" />
-                    <motion.span
-                      key={stats.weekly}
-                      initial={{ y: -8, opacity: 0 }}
-                      animate={{ y: 0, opacity: 1 }}
-                      transition={{ duration: 0.15 }}
-                    >
-                      {stats.weekly}
-                    </motion.span>{' '}Weekly
-                  </Badge>
-                </motion.div>
-              )}
-              {stats.computed > 0 && (
-                <motion.div
-                  key="computed-badge"
-                  initial={{ scale: 0.8, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  exit={{ scale: 0.8, opacity: 0 }}
-                  transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                >
-                  <Badge variant="outline" className="bg-cyan-500/10 text-cyan-600 border-cyan-500/30">
-                    <Calculator className="h-3 w-3 mr-1" />
-                    <motion.span
-                      key={stats.computed}
-                      initial={{ y: -8, opacity: 0 }}
-                      animate={{ y: 0, opacity: 1 }}
-                      transition={{ duration: 0.15 }}
-                    >
-                      {stats.computed}
-                    </motion.span>{' '}Computed
-                  </Badge>
-                </motion.div>
-              )}
-              {stats.skip > 0 && (
-                <motion.div
-                  key="skip-badge"
-                  initial={{ scale: 0.8, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  exit={{ scale: 0.8, opacity: 0 }}
-                  transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                >
-                  <Badge variant="outline" className="bg-gray-500/10 text-gray-600 border-gray-500/30">
-                    <SkipForward className="h-3 w-3 mr-1" />
-                    <motion.span
-                      key={stats.skip}
-                      initial={{ y: -8, opacity: 0 }}
-                      animate={{ y: 0, opacity: 1 }}
-                      transition={{ duration: 0.15 }}
-                    >
-                      {stats.skip}
-                    </motion.span>{' '}Skip
-                  </Badge>
-                </motion.div>
-              )}
-              {stats.unclassified > 0 && (
-                <motion.div
-                  key="unclassified-badge"
-                  initial={{ scale: 0.8, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  exit={{ scale: 0.8, opacity: 0 }}
-                  transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                >
-                  <Badge variant="outline" className="text-muted-foreground">
-                    <motion.span
-                      key={stats.unclassified}
-                      initial={{ y: -8, opacity: 0 }}
-                      animate={{ y: 0, opacity: 1 }}
-                      transition={{ duration: 0.15 }}
-                    >
-                      {stats.unclassified}
-                    </motion.span>{' '}unclassified
-                  </Badge>
-                </motion.div>
-              )}
-            </AnimatePresence>
+            {stats.partner > 0 && (
+              <Badge variant="outline" className="bg-blue-500/10 text-blue-600 border-blue-500/30">
+                <Building2 className="h-3 w-3 mr-1" />
+                <span className="tabular-nums">{stats.partner}</span> Partner
+                {partnerKey && <Key className="h-3 w-3 ml-1 text-amber-500" />}
+              </Badge>
+            )}
+            {stats.staff > 0 && (
+              <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/30">
+                <Users className="h-3 w-3 mr-1" />
+                <span className="tabular-nums">{stats.staff}</span> Staff
+                {staffKey && <Key className="h-3 w-3 ml-1 text-amber-500" />}
+              </Badge>
+            )}
+            {stats.asin > 0 && (
+              <Badge variant="outline" className="bg-orange-500/10 text-orange-600 border-orange-500/30">
+                <Package className="h-3 w-3 mr-1" />
+                <span className="tabular-nums">{stats.asin}</span> ASIN
+              </Badge>
+            )}
+            {stats.weekly > 0 && (
+              <Badge variant="outline" className="bg-purple-500/10 text-purple-600 border-purple-500/30">
+                <Calendar className="h-3 w-3 mr-1" />
+                <span className="tabular-nums">{stats.weekly}</span> Weekly
+              </Badge>
+            )}
+            {stats.computed > 0 && (
+              <Badge variant="outline" className="bg-cyan-500/10 text-cyan-600 border-cyan-500/30">
+                <Calculator className="h-3 w-3 mr-1" />
+                <span className="tabular-nums">{stats.computed}</span> Computed
+              </Badge>
+            )}
+            {stats.skip > 0 && (
+              <Badge variant="outline" className="bg-gray-500/10 text-gray-600 border-gray-500/30">
+                <SkipForward className="h-3 w-3 mr-1" />
+                <span className="tabular-nums">{stats.skip}</span> Skip
+              </Badge>
+            )}
+            {stats.unclassified > 0 && (
+              <Badge variant="outline" className="text-muted-foreground">
+                <span className="tabular-nums">{stats.unclassified}</span> unclassified
+              </Badge>
+            )}
           </div>
 
           {/* Bulk action bar */}
@@ -1774,16 +1635,12 @@ function ClassifyPhase({
                         : isSelected
                         ? 'border-primary/50'
                         : isFocused
-                        ? 'border-primary ring-2 ring-primary/30 ring-offset-1'
+                        ? 'border-primary/60 bg-accent/30'
                         : col.category
                         ? 'border-border'
                         : 'border-border hover:bg-accent/50'
                     }`}
                   >
-                    {/* Focused row indicator */}
-                    {isFocused && (
-                      <div className="absolute -left-1 top-1/2 -translate-y-1/2 w-1 h-8 rounded-full bg-primary" />
-                    )}
                     {/* Checkbox */}
                     <button
                       onClick={(e) => handleSelectionClick(idx, e)}
@@ -2183,62 +2040,27 @@ function ClassifyPhase({
 
           {/* Keyboard shortcuts legend - hidden on mobile */}
           <div className="hidden md:block p-3 rounded-lg bg-muted/30 border border-border">
-            <div className="flex items-center gap-2 mb-3">
-              <Sparkles className="h-3.5 w-3.5 text-amber-500" />
-              <span className="text-xs font-semibold">Keyboard Shortcuts</span>
-            </div>
-            <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-xs">
-              {/* Categories row 1 */}
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-1.5">
-                  <kbd className="px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-600 text-[10px] font-mono font-medium">1</kbd>
-                  <span className="text-blue-600 font-medium">Partner</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <kbd className="px-1.5 py-0.5 rounded bg-green-500/20 text-green-600 text-[10px] font-mono font-medium">2</kbd>
-                  <span className="text-green-600 font-medium">Staff</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <kbd className="px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-600 text-[10px] font-mono font-medium">3</kbd>
-                  <span className="text-purple-600 font-medium">Weekly</span>
-                </div>
+            <div className="text-xs text-muted-foreground mb-2">Shortcuts</div>
+            <div className="flex flex-wrap gap-x-6 gap-y-1.5 text-xs text-muted-foreground">
+              <div className="flex items-center gap-1.5">
+                <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono">1-5</kbd>
+                <span>Classify</span>
               </div>
-              {/* Categories row 2 */}
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-1.5">
-                  <kbd className="px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-600 text-[10px] font-mono font-medium">4</kbd>
-                  <span className="text-cyan-600 font-medium">Computed</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <kbd className="px-1.5 py-0.5 rounded bg-gray-500/20 text-gray-500 text-[10px] font-mono font-medium">5</kbd>
-                  <span className="text-gray-500 font-medium">Skip</span>
-                </div>
+              <div className="flex items-center gap-1.5">
+                <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono">↑↓</kbd>
+                <span>Navigate</span>
               </div>
-              {/* Navigation */}
-              <div className="flex items-center gap-3 text-muted-foreground">
-                <div className="flex items-center gap-1.5">
-                  <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono">↑↓</kbd>
-                  <span>Navigate</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono">Tab</kbd>
-                  <span>Next unclassified</span>
-                </div>
+              <div className="flex items-center gap-1.5">
+                <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono">Tab</kbd>
+                <span>Next unclassified</span>
               </div>
-              {/* Actions */}
-              <div className="flex items-center gap-3 text-muted-foreground">
-                <div className="flex items-center gap-1.5">
-                  <kbd className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-600 text-[10px] font-mono">K</kbd>
-                  <span>Set as Key</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono">⇧+click</kbd>
-                  <span>Range</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono">⌘Z</kbd>
-                  <span>Undo</span>
-                </div>
+              <div className="flex items-center gap-1.5">
+                <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono">K</kbd>
+                <span>Set key</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono">⇧+click</kbd>
+                <span>Range select</span>
               </div>
             </div>
           </div>

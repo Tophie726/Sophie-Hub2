@@ -242,13 +242,9 @@ export function SheetTabBar({
             isHidden && 'opacity-40'
           )}
         >
-          {/* Sliding background indicator */}
+          {/* Active background - simple, no layout animation to avoid flicker */}
           {isActive && (
-            <motion.div
-              layoutId="activeSheetTab"
-              className="absolute inset-0 bg-background shadow-md rounded-lg ring-1 ring-border/50"
-              transition={{ type: 'spring', bounce: 0.15, duration: 0.4 }}
-            />
+            <div className="absolute inset-0 bg-background shadow-sm rounded-lg border border-border/60" />
           )}
           {/* Tab content - above sliding background */}
           <span className="relative z-10 flex items-center gap-2">
@@ -388,13 +384,9 @@ export function SheetTabBar({
                 : 'text-muted-foreground hover:text-foreground'
             )}
           >
-            {/* Sliding background indicator */}
+            {/* Active background - simple, no layout animation to avoid flicker */}
             {isOverviewActive && (
-              <motion.div
-                layoutId="activeSheetTab"
-                className="absolute inset-0 bg-background shadow-md rounded-lg ring-1 ring-border/50"
-                transition={{ type: 'spring', bounce: 0.15, duration: 0.4 }}
-              />
+              <div className="absolute inset-0 bg-background shadow-sm rounded-lg border border-border/60" />
             )}
             <span className="relative z-10 flex items-center gap-2">
               <LayoutDashboard className="h-3.5 w-3.5" />
