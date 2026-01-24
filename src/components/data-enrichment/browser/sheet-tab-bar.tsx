@@ -231,62 +231,50 @@ export function SheetTabBar({
           data-tab-id={tab.id}
           onClick={() => onSelectTab(tab.id)}
           initial={false}
-          whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
           transition={{ duration: 0.15, ease: easeOut }}
           className={cn(
-            'relative flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all',
+            'relative flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium',
             isActive
-              ? 'bg-background shadow-md text-foreground ring-2 ring-primary/20'
-              : 'text-muted-foreground hover:text-foreground hover:bg-background/50',
+              ? 'text-foreground'
+              : 'text-muted-foreground hover:text-foreground',
             isReference && 'opacity-70',
-            isHidden && 'opacity-40 border border-dashed'
+            isHidden && 'opacity-40'
           )}
         >
-          {/* Flagged indicator - animated */}
-          {isFlagged && (
+          {/* Sliding background indicator */}
+          {isActive && (
             <motion.div
-              initial={{ scale: 0, rotate: -20 }}
-              animate={{ scale: 1, rotate: 0 }}
-              transition={{
-                type: 'spring',
-                stiffness: 500,
-                damping: 25,
-              }}
-              className="flex items-center"
-            >
+              layoutId="activeSheetTab"
+              className="absolute inset-0 bg-background shadow-md rounded-lg ring-1 ring-border/50"
+              transition={{ type: 'spring', bounce: 0.15, duration: 0.4 }}
+            />
+          )}
+          {/* Tab content - above sliding background */}
+          <span className="relative z-10 flex items-center gap-2">
+            {/* Flagged indicator */}
+            {isFlagged && (
               <Flag className="h-3 w-3 flex-shrink-0 text-amber-500" />
-            </motion.div>
-          )}
+            )}
 
-          {/* Header status indicator (replaces entity dot) - orange=auto, green=confirmed with progress ring */}
-          {!isFlagged && (
-            <HeaderStatusIndicator tab={tab} />
-          )}
+            {/* Header status indicator - orange=auto, green=confirmed with progress ring */}
+            {!isFlagged && (
+              <HeaderStatusIndicator tab={tab} />
+            )}
 
-          {/* Tab name */}
-          <span className="truncate max-w-[80px] md:max-w-[120px]">{tab.name}</span>
+            {/* Tab name */}
+            <span className="truncate max-w-[80px] md:max-w-[120px]">{tab.name}</span>
 
-          {/* Reference badge */}
-          {isReference && (
-            <BookOpen className="h-3 w-3 flex-shrink-0 text-blue-500" />
-          )}
+            {/* Reference badge */}
+            {isReference && (
+              <BookOpen className="h-3 w-3 flex-shrink-0 text-blue-500" />
+            )}
 
-          {/* Hidden indicator - animated */}
-          {isHidden && (
-            <motion.div
-              initial={{ scale: 0, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{
-                type: 'spring',
-                stiffness: 500,
-                damping: 25,
-              }}
-              className="flex items-center"
-            >
+            {/* Hidden indicator */}
+            {isHidden && (
               <EyeOff className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
-            </motion.div>
-          )}
+            )}
+          </span>
         </motion.button>
 
         {/* Status dropdown - shows on hover */}
@@ -391,18 +379,27 @@ export function SheetTabBar({
             data-tab-id={OVERVIEW_TAB_ID}
             onClick={() => onSelectTab(OVERVIEW_TAB_ID)}
             initial={false}
-            whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
             transition={{ duration: 0.15, ease: easeOut }}
             className={cn(
-              'relative flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all',
+              'relative flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium',
               isOverviewActive
-                ? 'bg-background shadow-md text-foreground ring-2 ring-primary/20'
-                : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+                ? 'text-foreground'
+                : 'text-muted-foreground hover:text-foreground'
             )}
           >
-            <LayoutDashboard className="h-3.5 w-3.5" />
-            <span>Overview</span>
+            {/* Sliding background indicator */}
+            {isOverviewActive && (
+              <motion.div
+                layoutId="activeSheetTab"
+                className="absolute inset-0 bg-background shadow-md rounded-lg ring-1 ring-border/50"
+                transition={{ type: 'spring', bounce: 0.15, duration: 0.4 }}
+              />
+            )}
+            <span className="relative z-10 flex items-center gap-2">
+              <LayoutDashboard className="h-3.5 w-3.5" />
+              <span>Overview</span>
+            </span>
           </motion.button>
 
           {/* Divider */}

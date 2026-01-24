@@ -1,6 +1,3 @@
-'use client'
-
-import { motion } from 'framer-motion'
 import { PageHeader } from '@/components/layout/page-header'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -21,11 +18,7 @@ export default function StaffPage() {
       </PageHeader>
 
       <div className="p-8">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
-        >
+        <div>
           <Card className="border-dashed">
             <CardContent className="flex flex-col items-center justify-center py-16">
               <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-green-500/10 mb-6">
@@ -50,7 +43,7 @@ export default function StaffPage() {
               </div>
             </CardContent>
           </Card>
-        </motion.div>
+        </div>
       </div>
     </div>
   )

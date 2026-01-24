@@ -59,12 +59,7 @@ export default function AdminPage() {
       />
 
       <div className="p-8">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, ease: easeOut }}
-          className="max-w-3xl mx-auto space-y-4"
-        >
+        <div className="max-w-3xl mx-auto space-y-4">
           <AdminCard
             title="Data Enrichment"
             description="Connect external data sources, map fields to your database, and manage data flow"
@@ -97,7 +92,7 @@ export default function AdminPage() {
             icon={<Shield className="h-6 w-6 text-green-600" />}
             iconBg="bg-green-500/10"
           />
-        </motion.div>
+        </div>
       </div>
     </div>
   )

@@ -295,14 +295,11 @@ function MobileSidebar() {
 
 function DesktopSidebar() {
   return (
-    <motion.aside
-      initial={{ x: -20, opacity: 0 }}
-      animate={{ x: 0, opacity: 1 }}
-      transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
+    <aside
       className="hidden md:block fixed left-0 top-0 z-40 h-screen w-64 border-r border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60"
     >
       <SidebarContent layoutId="activeNavDesktop" />
-    </motion.aside>
+    </aside>
   )
 }
 

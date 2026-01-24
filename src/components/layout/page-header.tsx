@@ -1,6 +1,3 @@
-'use client'
-
-import { motion } from 'framer-motion'
 import { cn } from '@/lib/utils'
 
 interface PageHeaderProps {
@@ -12,10 +9,7 @@ interface PageHeaderProps {
 
 export function PageHeader({ title, description, children, className }: PageHeaderProps) {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: -10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
+    <div
       className={cn('border-b border-border/40 bg-background/95 backdrop-blur sticky top-0 z-30', className)}
     >
       <div className="flex h-16 items-center justify-between px-8">
@@ -31,6 +25,6 @@ export function PageHeader({ title, description, children, className }: PageHead
           </div>
         )}
       </div>
-    </motion.div>
+    </div>
   )
 }
