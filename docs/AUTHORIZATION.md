@@ -15,6 +15,21 @@ This document covers how to implement secure data isolation.
 
 ---
 
+## Implementation Status
+
+| Layer | Status | Notes |
+|-------|--------|-------|
+| Roles & Permissions | ✅ Done | `src/lib/auth/roles.ts` |
+| API Auth Helpers | ✅ Done | `requirePermission()`, `requireRole()`, `canAccessPartner()` |
+| /api/me endpoint | ✅ Done | Returns user role and permissions |
+| Admin route protection | ✅ Done | All data-enrichment routes use `requirePermission()` |
+| Frontend components | ⏳ Future | `<RequireRole>`, `useUserRole` - build when needed |
+| Supabase RLS | ⏳ Future | Enable when building multi-tenant features |
+| Partner portal | ⏳ Future | Separate auth flow for external partners |
+| Admin role management UI | ⏳ Future | UI for admins to manage user roles |
+
+---
+
 ## The Three Layers of Defense
 
 ```
@@ -66,123 +81,107 @@ CREATE TABLE partner_users (
 );
 ```
 
-### Role Hierarchy
+### Role Hierarchy (Implemented)
 
 ```typescript
-// src/lib/auth/roles.ts
+// src/lib/auth/roles.ts (ACTUAL IMPLEMENTATION)
 export const ROLES = {
   ADMIN: 'admin',
   POD_LEADER: 'pod_leader',
   STAFF: 'staff',
-  PARTNER: 'partner', // External users
+  PARTNER: 'partner',
 } as const
 
 export type Role = typeof ROLES[keyof typeof ROLES]
 
-// Permission definitions
+// Actual permissions in use
 export const PERMISSIONS = {
   // Partners
-  'partners:read:all': ['admin'],
-  'partners:read:assigned': ['admin', 'pod_leader', 'staff'],
-  'partners:read:own': ['partner'],
-  'partners:write:all': ['admin'],
-  'partners:write:assigned': ['admin', 'pod_leader'],
+  'partners:read:all': [ROLES.ADMIN],
+  'partners:read:assigned': [ROLES.ADMIN, ROLES.POD_LEADER, ROLES.STAFF],
+  'partners:read:own': [ROLES.PARTNER],
+  'partners:write:all': [ROLES.ADMIN],
+  'partners:write:assigned': [ROLES.ADMIN, ROLES.POD_LEADER],
 
   // Staff
-  'staff:read:all': ['admin'],
-  'staff:read:own': ['admin', 'pod_leader', 'staff'],
-  'staff:write:all': ['admin'],
-  'staff:write:own': ['admin', 'pod_leader', 'staff'],
+  'staff:read:all': [ROLES.ADMIN],
+  'staff:read:own': [ROLES.ADMIN, ROLES.POD_LEADER, ROLES.STAFF],
+  'staff:write:all': [ROLES.ADMIN],
+  'staff:write:own': [ROLES.ADMIN, ROLES.POD_LEADER, ROLES.STAFF],
+
+  // Data Enrichment (admin only)
+  'data-enrichment:read': [ROLES.ADMIN],
+  'data-enrichment:write': [ROLES.ADMIN],
 
   // Admin functions
-  'admin:data-enrichment': ['admin'],
-  'admin:settings': ['admin'],
+  'admin:settings': [ROLES.ADMIN],
+  'admin:users': [ROLES.ADMIN],
 } as const
 
-export function hasPermission(userRole: Role, permission: keyof typeof PERMISSIONS): boolean {
-  return PERMISSIONS[permission]?.includes(userRole) ?? false
-}
+// Check if role has permission
+export function hasPermission(role: Role | undefined, permission: Permission): boolean
+
+// Check if role meets minimum level
+export function isRoleAtLeast(role: Role | undefined, minimumRole: Role): boolean
+
+// Get all permissions for a role
+export function getPermissionsForRole(role: Role): Permission[]
 ```
 
 ---
 
-## 2. API Layer Authorization
+## 2. API Layer Authorization (Implemented)
 
-### Enhanced Auth Helper
+### Auth Helpers in `src/lib/auth/api-auth.ts`
 
 ```typescript
-// src/lib/auth/api-auth.ts
-import { getServerSession } from 'next-auth'
-import { NextResponse } from 'next/server'
-import { authOptions } from './config'
-import { hasPermission, Role, PERMISSIONS } from './roles'
+// ACTUAL IMPLEMENTATION
 
-interface AuthResult {
-  authenticated: true
-  session: Session
-  user: {
-    id: string
-    email: string
-    role: Role
-  }
-}
+// Basic authentication - returns user with role from staff table
+export async function requireAuth(): Promise<AuthResult>
+// Returns: { authenticated: true, user: { id, email, name, role }, session }
+// Or: { authenticated: false, response: 401 Unauthorized }
 
-interface AuthFailure {
-  authenticated: false
-  response: NextResponse
-}
+// Permission-based access - checks if user's role has permission
+export async function requirePermission(permission: Permission): Promise<AuthResult>
+// Returns: { authenticated: true, user: {...} }
+// Or: { authenticated: false, response: 403 Forbidden }
 
-export async function requireAuth(): Promise<AuthResult | AuthFailure> {
-  const session = await getServerSession(authOptions)
+// Role-based access - checks if user has one of the allowed roles
+export async function requireRole(...roles: Role[]): Promise<AuthResult>
 
-  if (!session?.user?.email) {
-    return {
-      authenticated: false,
-      response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
-    }
-  }
+// Partner access check - for future multi-tenant features
+export async function canAccessPartner(
+  userId: string,
+  userRole: Role,
+  partnerId: string
+): Promise<boolean>
+// Admin: always true
+// Pod Leader/Staff: checks partner_assignments table
+// Partner: checks if partnerId matches their partner
 
-  // Fetch user role from database
-  const { data: staffUser } = await supabase
-    .from('staff')
-    .select('id, role')
-    .eq('email', session.user.email)
-    .single()
-
-  if (!staffUser) {
-    return {
-      authenticated: false,
-      response: NextResponse.json({ error: 'User not found' }, { status: 401 }),
-    }
-  }
-
-  return {
-    authenticated: true,
-    session,
-    user: {
-      id: staffUser.id,
-      email: session.user.email,
-      role: staffUser.role as Role,
-    },
-  }
-}
-
-export async function requirePermission(
-  permission: keyof typeof PERMISSIONS
-): Promise<AuthResult | AuthFailure> {
-  const auth = await requireAuth()
-  if (!auth.authenticated) return auth
-
-  if (!hasPermission(auth.user.role, permission)) {
-    return {
-      authenticated: false,
-      response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
-    }
-  }
-
-  return auth
-}
+// Role lookup with fallback
+function mapRoleToAccessLevel(dbRole: string | null): Role
+// Maps staff.role field to ROLES enum
+// Defaults to STAFF if not found or not in staff table
 ```
+
+### How Role Lookup Works
+
+```
+User logs in with Google OAuth
+  ↓
+requireAuth() gets session email
+  ↓
+Looks up email in staff table
+  ↓
+If found: uses staff.role field (admin, pod_leader, staff)
+If not found: defaults to STAFF role
+  ↓
+Returns user object with role attached
+```
+
+**Note:** Users not in the staff table get STAFF role by default. Add hardcoded admin emails in `mapRoleToAccessLevel()` if needed.
 
 ### Example: Pod Leader Partners API
 
@@ -386,24 +385,26 @@ RESET request.jwt.claims;
 
 ---
 
-## 4. Frontend Guards (UX Only)
+## 4. Frontend Guards (UX Only) - PLANNED
 
-### Role-Based UI Components
+**Status:** Not yet implemented. Build when multi-tenant features are needed.
+
+The `/api/me` endpoint is ready and returns:
+```json
+{
+  "id": "uuid",
+  "email": "user@sophiesociety.com",
+  "name": "User Name",
+  "role": "admin",
+  "permissions": ["data-enrichment:read", "data-enrichment:write", ...]
+}
+```
+
+### Planned: RequireRole Component
 
 ```typescript
-// src/components/auth/require-role.tsx
+// src/components/auth/require-role.tsx (TO BUILD)
 'use client'
-
-import { useSession } from 'next-auth/react'
-import { useUserRole } from '@/hooks/use-user-role'
-import { Role, hasPermission, PERMISSIONS } from '@/lib/auth/roles'
-
-interface RequireRoleProps {
-  roles?: Role[]
-  permission?: keyof typeof PERMISSIONS
-  children: React.ReactNode
-  fallback?: React.ReactNode
-}
 
 export function RequireRole({
   roles,
@@ -411,81 +412,88 @@ export function RequireRole({
   children,
   fallback = null
 }: RequireRoleProps) {
-  const { data: session } = useSession()
   const { role, isLoading } = useUserRole()
 
   if (isLoading) return null
-  if (!session) return fallback
-
-  // Check by specific roles
-  if (roles && !roles.includes(role)) {
-    return fallback
-  }
-
-  // Check by permission
-  if (permission && !hasPermission(role, permission)) {
-    return fallback
-  }
+  if (roles && !roles.includes(role)) return fallback
+  if (permission && !hasPermission(role, permission)) return fallback
 
   return <>{children}</>
 }
 
-// Usage in components
-function Sidebar() {
-  return (
-    <nav>
-      <Link href="/dashboard">Dashboard</Link>
-      <Link href="/partners">Partners</Link>
-
-      {/* Only admins see this */}
-      <RequireRole roles={['admin']}>
-        <Link href="/admin/data-enrichment">Data Enrichment</Link>
-        <Link href="/admin/settings">Settings</Link>
-      </RequireRole>
-
-      {/* Pod leaders and admins */}
-      <RequireRole permission="partners:write:assigned">
-        <Link href="/partners/manage">Manage Partners</Link>
-      </RequireRole>
-    </nav>
-  )
-}
+// Usage:
+<RequireRole roles={['admin']}>
+  <Link href="/admin/data-enrichment">Data Enrichment</Link>
+</RequireRole>
 ```
 
-### useUserRole Hook
+### Planned: useUserRole Hook
 
 ```typescript
-// src/hooks/use-user-role.ts
-import { useSession } from 'next-auth/react'
-import { useQuery } from '@tanstack/react-query'
-import { Role, ROLES } from '@/lib/auth/roles'
-
+// src/hooks/use-user-role.ts (TO BUILD)
 export function useUserRole() {
-  const { data: session } = useSession()
-
-  const { data, isLoading } = useQuery({
-    queryKey: ['user-role', session?.user?.email],
-    queryFn: async () => {
-      const res = await fetch('/api/me')
-      if (!res.ok) throw new Error('Failed to fetch user')
-      return res.json()
-    },
-    enabled: !!session?.user?.email,
+  const { data } = useQuery({
+    queryKey: ['user-role'],
+    queryFn: () => fetch('/api/me').then(r => r.json()),
   })
 
   return {
-    role: (data?.role ?? ROLES.STAFF) as Role,
-    user: data,
-    isLoading,
+    role: data?.role ?? ROLES.STAFF,
+    permissions: data?.permissions ?? [],
     isAdmin: data?.role === ROLES.ADMIN,
     isPodLeader: data?.role === ROLES.POD_LEADER,
   }
 }
 ```
 
+### Planned: Sidebar Visibility
+
+| Nav Item | Visible To |
+|----------|-----------|
+| Dashboard | All |
+| Partners (All) | Admin |
+| My Partners | Pod Leader, Staff |
+| Data Enrichment | Admin |
+| Settings | Admin |
+| User Management | Admin |
+| My Dashboard | Partner |
+
+**Remember:** Frontend hiding is UX only. API + RLS enforce actual security.
+
 ---
 
 ## 5. Partner Portal Architecture (Future)
+
+### Automatic Access via Email Matching
+
+The core concept: **partners get access based on the email we have on file**.
+
+```
+Partner Onboarding Flow:
+1. Admin adds partner contact email to partner_users table
+2. Partner receives invite/magic link
+3. Partner logs in with that email
+4. System automatically grants access to their partner's data
+
+partner_users table:
+| id | partner_id | email | name |
+|----|------------|-------|------|
+| 1  | abc-123    | john@acmebrand.com | John Smith |
+| 2  | abc-123    | jane@acmebrand.com | Jane Doe |
+| 3  | def-456    | bob@otherbrand.com | Bob Wilson |
+
+When john@acmebrand.com logs in:
+→ Lookup in partner_users → finds partner_id = abc-123
+→ User gets PARTNER role
+→ RLS ensures they can ONLY see partner abc-123's data
+→ API checks partnerId matches their assigned partner
+```
+
+### Key Benefits
+- **No manual access granting** - email match is automatic
+- **Multiple contacts per partner** - just add more rows
+- **Revoke access easily** - delete row from partner_users
+- **Audit trail** - all access logged
 
 For external partner access, use a separate auth flow:
 
@@ -724,6 +732,64 @@ describe('GET /api/partners', () => {
 
 ---
 
+---
+
+## 8. Admin Role Management UI (Future)
+
+Admins need a UI to manage who can do what.
+
+### User Management Page (`/admin/users`)
+
+**Features needed:**
+- List all staff with their current roles
+- Change user roles (admin, pod_leader, staff)
+- View partner assignments per staff
+- Add/remove partner assignments
+- Add partner portal users (partner_users table)
+
+### Security Considerations
+
+```typescript
+// Prevent self-demotion (lockout prevention)
+if (targetUserId === currentUser.id && newRole !== 'admin') {
+  return { error: "Cannot demote yourself" }
+}
+
+// Require at least one admin
+const adminCount = await countAdminsExcluding(targetUserId)
+if (adminCount === 0 && currentRole === 'admin') {
+  return { error: "Cannot remove the last admin" }
+}
+
+// Audit log all role changes
+await logAuditEvent({
+  action: 'role_change',
+  targetUser: targetUserId,
+  oldRole: currentRole,
+  newRole: newRole,
+  changedBy: currentUser.id,
+})
+```
+
+### Partner User Management
+
+For adding partner portal users:
+
+```typescript
+// Admin adds partner contact
+POST /api/admin/partner-users
+{
+  partner_id: "abc-123",
+  email: "contact@thebrand.com",
+  name: "Brand Contact"
+}
+
+// This person can now log in and see their partner's data
+// No role assignment needed - email match handles it
+```
+
+---
+
 ## Summary
 
 | Layer | What It Does | Fails Gracefully? |
@@ -733,3 +799,19 @@ describe('GET /api/partners', () => {
 | RLS | Database-level enforcement | Yes (final defense) |
 
 **Always implement all three layers.** Defense in depth means even if one layer has a bug, the others catch it.
+
+---
+
+## Implementation Checklist
+
+When building multi-tenant features, follow this order:
+
+1. ✅ **Define roles and permissions** - `src/lib/auth/roles.ts`
+2. ✅ **Create API auth helpers** - `src/lib/auth/api-auth.ts`
+3. ✅ **Create /api/me endpoint** - returns user info for frontend
+4. ✅ **Protect admin routes** - use `requirePermission()`
+5. ⏳ **Build frontend components** - `<RequireRole>`, `useUserRole`
+6. ⏳ **Add sidebar role filtering** - hide nav items by role
+7. ⏳ **Enable Supabase RLS** - policies per table
+8. ⏳ **Build admin user management UI** - `/admin/users`
+9. ⏳ **Build partner portal** - separate auth, email matching

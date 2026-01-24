@@ -33,12 +33,30 @@ function GoogleLogo({ className }: { className?: string }) {
   )
 }
 
+// Validate callback URL to prevent open redirect attacks
+function getSafeCallbackUrl(url: string | null): string {
+  if (!url) return '/dashboard'
+
+  // Only allow relative paths (starting with /)
+  // Block absolute URLs, protocol-relative URLs, and javascript:
+  if (
+    url.startsWith('/') &&
+    !url.startsWith('//') &&
+    !url.toLowerCase().startsWith('/\\') &&
+    !url.toLowerCase().includes('javascript:')
+  ) {
+    return url
+  }
+
+  return '/dashboard'
+}
+
 export default function SignInPage() {
   const [isLoading, setIsLoading] = useState(false)
   const searchParams = useSearchParams()
 
-  // Get the callback URL from search params (where user was trying to go)
-  const callbackUrl = searchParams.get('callbackUrl') || '/dashboard'
+  // Get the callback URL from search params (validated to prevent open redirect)
+  const callbackUrl = getSafeCallbackUrl(searchParams.get('callbackUrl'))
 
   const handleSignIn = async () => {
     setIsLoading(true)

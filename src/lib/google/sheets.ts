@@ -27,6 +27,14 @@ export interface SheetPreview {
 }
 
 /**
+ * Escape single quotes for Google Drive API query strings
+ * Google Drive uses single quotes for string literals, so we need to escape them
+ */
+function escapeQueryString(str: string): string {
+  return str.replace(/\\/g, '\\\\').replace(/'/g, "\\'")
+}
+
+/**
  * Search for spreadsheets in user's Google Drive
  */
 export async function searchSheets(accessToken: string, query: string): Promise<GoogleSheet[]> {
@@ -35,9 +43,10 @@ export async function searchSheets(accessToken: string, query: string): Promise<
 
   const drive = google.drive({ version: 'v3', auth })
 
-  // Build search query
+  // Build search query (escape user input to prevent query injection)
+  const safeQuery = escapeQueryString(query)
   const searchQuery = query
-    ? `mimeType='application/vnd.google-apps.spreadsheet' and name contains '${query}' and trashed=false`
+    ? `mimeType='application/vnd.google-apps.spreadsheet' and name contains '${safeQuery}' and trashed=false`
     : `mimeType='application/vnd.google-apps.spreadsheet' and trashed=false`
 
   const response = await drive.files.list({
