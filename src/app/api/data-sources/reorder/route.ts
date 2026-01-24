@@ -1,6 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { requirePermission } from '@/lib/auth/api-auth'
+import { apiSuccess, apiValidationError, ApiErrors } from '@/lib/api/response'
+import { DataSourceSchema } from '@/lib/validations/schemas'
 
 // Use singleton Supabase client
 const supabase = getAdminClient()
@@ -11,14 +13,15 @@ export async function POST(request: NextRequest) {
   if (!auth.authenticated) return auth.response
 
   try {
-    const { sourceIds } = await request.json()
+    const body = await request.json()
 
-    if (!Array.isArray(sourceIds) || sourceIds.length === 0) {
-      return NextResponse.json(
-        { error: 'sourceIds must be a non-empty array' },
-        { status: 400 }
-      )
+    // Validate input
+    const validation = DataSourceSchema.reorder.safeParse(body)
+    if (!validation.success) {
+      return apiValidationError(validation.error)
     }
+
+    const { sourceIds } = validation.data
 
     // Update each source with its new display_order
     const updates = sourceIds.map((id, index) =>
@@ -30,12 +33,9 @@ export async function POST(request: NextRequest) {
 
     await Promise.all(updates)
 
-    return NextResponse.json({ success: true })
+    return apiSuccess({ reordered: true })
   } catch (error) {
     console.error('Error reordering sources:', error)
-    return NextResponse.json(
-      { error: 'Failed to reorder sources' },
-      { status: 500 }
-    )
+    return ApiErrors.database('Failed to reorder sources')
   }
 }

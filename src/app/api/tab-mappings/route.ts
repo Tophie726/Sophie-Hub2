@@ -1,6 +1,7 @@
-import { NextResponse } from 'next/server'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { requirePermission } from '@/lib/auth/api-auth'
+import { apiSuccess, apiValidationError, ApiErrors } from '@/lib/api/response'
+import { TabMappingSchema } from '@/lib/validations/schemas'
 
 // Use singleton Supabase client
 const supabase = getAdminClient()
@@ -12,14 +13,14 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json()
-    const { data_source_id, tab_name, status, notes } = body
 
-    if (!data_source_id || !tab_name) {
-      return NextResponse.json(
-        { error: 'data_source_id and tab_name are required' },
-        { status: 400 }
-      )
+    // Validate input
+    const validation = TabMappingSchema.create.safeParse(body)
+    if (!validation.success) {
+      return apiValidationError(validation.error)
     }
+
+    const { data_source_id, tab_name, status, notes } = validation.data
 
     // Check if this tab mapping already exists
     const { data: existing } = await supabase
@@ -43,7 +44,7 @@ export async function POST(request: Request) {
         .single()
 
       if (error) throw error
-      return NextResponse.json({ tabMapping: data })
+      return apiSuccess({ tabMapping: data })
     }
 
     // Create new tab mapping
@@ -62,18 +63,12 @@ export async function POST(request: Request) {
 
     if (error) {
       console.error('Error creating tab mapping:', error)
-      return NextResponse.json(
-        { error: error.message },
-        { status: 500 }
-      )
+      return ApiErrors.database(error.message)
     }
 
-    return NextResponse.json({ tabMapping })
+    return apiSuccess({ tabMapping }, 201)
   } catch (error) {
     console.error('Error in POST /api/tab-mappings:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return ApiErrors.internal()
   }
 }

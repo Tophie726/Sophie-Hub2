@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils'
 import { Progress } from '@/components/ui/progress'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import { easeOut, easeOutBack, duration, springPop } from '@/lib/animations'
+import { easeOut, duration, springPop } from '@/lib/animations'
 
 // Haptic feedback helper (works on Android, not iOS Safari)
 function haptic(intensity: 'light' | 'medium' | 'heavy' = 'medium') {
@@ -155,7 +155,7 @@ export const TabCard = memo(function TabCard({
     clearLongPress()
   }, [clearLongPress])
 
-  const handleClick = useCallback((e: React.MouseEvent) => {
+  const handleClick = useCallback(() => {
     if ('ontouchstart' in window) return
     onClick()
   }, [onClick])

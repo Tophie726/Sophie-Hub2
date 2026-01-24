@@ -22,8 +22,6 @@ interface HealthStatus {
  * No authentication required (needed for external health checks)
  */
 export async function GET() {
-  const startTime = Date.now()
-
   const health: HealthStatus = {
     status: 'healthy',
     timestamp: new Date().toISOString(),

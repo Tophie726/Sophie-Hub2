@@ -1,11 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { requirePermission } from '@/lib/auth/api-auth'
-import {
-  SaveMappingRequest,
-  SaveMappingResponse,
-  DEFAULT_WEEKLY_PATTERN,
-} from '@/types/enrichment'
+import { apiSuccess, apiValidationError, ApiErrors } from '@/lib/api/response'
+import { SaveMappingSchema } from '@/lib/validations/schemas'
+import { DEFAULT_WEEKLY_PATTERN } from '@/types/enrichment'
 
 // Use singleton Supabase client
 const supabase = getAdminClient()
@@ -16,8 +14,15 @@ export async function POST(request: NextRequest) {
   if (!auth.authenticated) return auth.response
 
   try {
-    const body: SaveMappingRequest = await request.json()
-    const { dataSource, tabMapping, columnMappings, weeklyPattern, computedFields } = body
+    const body = await request.json()
+
+    // Validate input
+    const validation = SaveMappingSchema.safeParse(body)
+    if (!validation.success) {
+      return apiValidationError(validation.error)
+    }
+
+    const { dataSource, tabMapping, columnMappings, weeklyPattern, computedFields } = validation.data
 
     // 1. Create or update data_source
     const { data: existingSource } = await supabase
@@ -223,24 +228,15 @@ export async function POST(request: NextRequest) {
     // Count what was saved
     const patternsCount = hasWeeklyColumns ? 1 : 0
 
-    const response: SaveMappingResponse = {
-      success: true,
+    return apiSuccess({
       data_source_id: dataSourceId,
       tab_mapping_id: tabMappingId,
       column_mappings_count: regularMappings.length,
       patterns_count: patternsCount,
       computed_fields_count: computedFieldsCount,
-    }
-
-    return NextResponse.json(response)
+    })
   } catch (error) {
     console.error('Error saving mapping:', error)
-    return NextResponse.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
-      },
-      { status: 500 }
-    )
+    return ApiErrors.database(error instanceof Error ? error.message : 'Failed to save mapping')
   }
 }

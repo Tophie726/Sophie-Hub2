@@ -5,6 +5,10 @@ import GoogleProvider from 'next-auth/providers/google'
 // Helper to refresh the access token
 async function refreshAccessToken(token: JWT) {
   try {
+    if (!token.refreshToken) {
+      throw new Error('No refresh token available')
+    }
+
     const response = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },

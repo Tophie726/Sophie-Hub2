@@ -1,6 +1,7 @@
-import { NextResponse } from 'next/server'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { requirePermission } from '@/lib/auth/api-auth'
+import { apiSuccess, apiValidationError, ApiErrors } from '@/lib/api/response'
+import { TabMappingSchema } from '@/lib/validations/schemas'
 
 // Use singleton Supabase client
 const supabase = getAdminClient()
@@ -13,14 +14,14 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json()
-    const { data_source_id, tab_name, header_row } = body
 
-    if (!data_source_id || !tab_name || header_row === undefined) {
-      return NextResponse.json(
-        { error: 'data_source_id, tab_name, and header_row are required' },
-        { status: 400 }
-      )
+    // Validate input
+    const validation = TabMappingSchema.confirmHeader.safeParse(body)
+    if (!validation.success) {
+      return apiValidationError(validation.error)
     }
+
+    const { data_source_id, tab_name, header_row } = validation.data
 
     // Check if tab mapping already exists
     const { data: existing } = await supabase
@@ -44,7 +45,7 @@ export async function POST(request: Request) {
         .single()
 
       if (error) throw error
-      return NextResponse.json({ tabMapping: data, created: false })
+      return apiSuccess({ tabMapping: data, created: false })
     }
 
     // Create new tab mapping with header confirmed
@@ -63,18 +64,12 @@ export async function POST(request: Request) {
 
     if (error) {
       console.error('Error creating tab mapping:', error)
-      return NextResponse.json(
-        { error: error.message },
-        { status: 500 }
-      )
+      return ApiErrors.database(error.message)
     }
 
-    return NextResponse.json({ tabMapping, created: true })
+    return apiSuccess({ tabMapping, created: true }, 201)
   } catch (error) {
     console.error('Error in POST /api/tab-mappings/confirm-header:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return ApiErrors.internal()
   }
 }

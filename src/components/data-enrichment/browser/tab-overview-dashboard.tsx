@@ -274,7 +274,7 @@ export function TabOverviewDashboard({
             </CollapsibleTrigger>
             <CollapsibleContent>
               <div className="p-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {flaggedTabs.map((tab, index) => (
+                {flaggedTabs.map((tab) => (
                   <TabCard
                     key={tab.id}
                     id={tab.id}

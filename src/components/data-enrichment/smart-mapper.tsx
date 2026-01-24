@@ -5,7 +5,6 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Checkbox } from '@/components/ui/checkbox'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   Select,
@@ -196,7 +195,8 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
   const [columns, setColumns] = useState<ColumnClassification[]>([])
   const [columnsHistory, setColumnsHistory] = useState<ColumnClassification[][]>([])
   const [draftRestored, setDraftRestored] = useState(false)
-  const [_isSavingDraft, setIsSavingDraft] = useState(false) // TODO: Show saving indicator
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [isSavingDraft, setIsSavingDraft] = useState(false) // TODO: Show saving indicator in UI
   const [availableTags, setAvailableTags] = useState<FieldTag[]>([])
   const draftKey = getDraftKey(spreadsheetId, tabName)
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -742,7 +742,7 @@ function PreviewPhase({
   rawData,
   headerRow,
   headerConfidence,
-  headerReasons,
+  headerReasons, // Reserved for future tooltip/explanation feature
   onHeaderRowChange,
   onConfirm,
   onBack,
@@ -752,13 +752,16 @@ function PreviewPhase({
   rawData: TabRawData
   headerRow: number
   headerConfidence: number
-  headerReasons: string[]
+  headerReasons: string[] // Why this header was detected (for future feature) - currently unused
   onHeaderRowChange: (row: number) => void
   onConfirm: () => void
   onBack: () => void
   embedded?: boolean
   tabName?: string
 }) {
+  // Reserved for future tooltip feature showing why header was detected
+  void headerReasons
+
   const scrollRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const rowRefs = useRef<(HTMLTableRowElement | null)[]>([])
@@ -2133,7 +2136,7 @@ function ClassifyPhase({
             <DialogDescription className="pt-2">
               {keyConfirmation.action === 'set' && (
                 <>
-                  Set <span className="font-medium text-foreground">"{keyConfirmation.columnName}"</span> as the{' '}
+                  Set <span className="font-medium text-foreground">&quot;{keyConfirmation.columnName}&quot;</span> as the{' '}
                   <span className={`font-medium ${
                     keyConfirmation.category === 'partner' ? 'text-blue-600' :
                     keyConfirmation.category === 'staff' ? 'text-green-600' : 'text-orange-600'
@@ -2154,13 +2157,13 @@ function ClassifyPhase({
                     {keyConfirmation.category === 'partner' ? 'Partner' :
                      keyConfirmation.category === 'staff' ? 'Staff' : 'ASIN'} Key
                   </span>{' '}
-                  from <span className="font-medium text-foreground">"{keyConfirmation.currentKeyName}"</span> to{' '}
-                  <span className="font-medium text-foreground">"{keyConfirmation.columnName}"</span>?
+                  from <span className="font-medium text-foreground">&quot;{keyConfirmation.currentKeyName}&quot;</span> to{' '}
+                  <span className="font-medium text-foreground">&quot;{keyConfirmation.columnName}&quot;</span>?
                 </>
               )}
               {keyConfirmation.action === 'remove' && (
                 <>
-                  Remove <span className="font-medium text-foreground">"{keyConfirmation.columnName}"</span> as the{' '}
+                  Remove <span className="font-medium text-foreground">&quot;{keyConfirmation.columnName}&quot;</span> as the{' '}
                   <span className={`font-medium ${
                     keyConfirmation.category === 'partner' ? 'text-blue-600' :
                     keyConfirmation.category === 'staff' ? 'text-green-600' : 'text-orange-600'
@@ -2168,7 +2171,7 @@ function ClassifyPhase({
                     {keyConfirmation.category === 'partner' ? 'Partner' :
                      keyConfirmation.category === 'staff' ? 'Staff' : 'ASIN'} Key
                   </span>?
-                  <p className="mt-2 text-xs text-amber-600">You'll need to set a new key before continuing.</p>
+                  <p className="mt-2 text-xs text-amber-600">You&apos;ll need to set a new key before continuing.</p>
                 </>
               )}
             </DialogDescription>
@@ -2292,7 +2295,7 @@ function ComputedFieldConfigModal({
               <Calculator className="h-4 w-4 text-cyan-500" />
               Configure Computed Field
             </h3>
-            <p className="text-sm text-muted-foreground">"{column.sourceColumn}"</p>
+            <p className="text-sm text-muted-foreground">&quot;{column.sourceColumn}&quot;</p>
           </div>
           <Button variant="ghost" size="icon" onClick={onClose}>
             <X className="h-4 w-4" />
@@ -2552,7 +2555,7 @@ function ComputedFieldConfigModal({
             <div className="p-3 rounded-lg bg-muted/50 border border-dashed">
               <p className="text-xs text-muted-foreground">
                 <Sparkles className="h-3 w-3 inline mr-1 text-amber-500" />
-                <strong>Future:</strong> You'll be able to hot-swap data sources later (e.g., get timezone from Slack instead of this sheet)
+                <strong>Future:</strong> You&apos;ll be able to hot-swap data sources later (e.g., get timezone from Slack instead of this sheet)
               </p>
             </div>
           </div>
@@ -2633,7 +2636,7 @@ function MapPhase({
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="__none__">
-            <span className="text-muted-foreground">Don't map</span>
+            <span className="text-muted-foreground">Don&apos;t map</span>
           </SelectItem>
           {fields.map(field => (
             <SelectItem key={field.value} value={field.value}>
@@ -2770,7 +2773,7 @@ function MapPhase({
             </span>
             <span className="flex items-center gap-1">
               <FileText className="h-3 w-3 text-slate-400" />
-              Reference = Read-only, don't update master
+              Reference = Read-only, don&apos;t update master
             </span>
           </div>
 

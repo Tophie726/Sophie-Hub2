@@ -286,97 +286,88 @@ const navigation: NavSection[] = [...]
 | Task | Priority | Effort | Notes |
 |------|----------|--------|-------|
 | Enterprise ESLint rules | Medium | 1-2 hrs | Stricter linting for consistency |
-| Centralize TypeScript interfaces | Medium | 2-3 hrs | DRY - CategoryStats duplicated in 4+ files |
+
+---
+
+## Recently Implemented (January 2026)
+
+### High Priority Items Completed
+
+#### 1. Input Validation with Zod ✅
+
+**Location:** `src/lib/validations/schemas.ts`
+
+Runtime validation now prevents malformed data from reaching the database.
+
+**Schemas implemented:**
+- `DataSourceSchema.create` - For creating data sources
+- `DataSourceSchema.reorder` - For reordering data sources
+- `TabMappingSchema.create` - For creating tab mappings
+- `TabMappingSchema.updateStatus` - For updating tab status
+- `TabMappingSchema.confirmHeader` - For confirming headers
+- `TabMappingSchema.draft` - For saving draft state
+- `SaveMappingSchema` - For saving column mappings
+- `SheetsSchema` - For sheets API operations
+
+**Usage pattern:**
+```typescript
+import { DataSourceSchema } from '@/lib/validations/schemas'
+import { apiValidationError } from '@/lib/api/response'
+
+const validation = DataSourceSchema.create.safeParse(body)
+if (!validation.success) {
+  return apiValidationError(validation.error)
+}
+```
+
+#### 2. API Response Standardization ✅
+
+**Location:** `src/lib/api/response.ts`
+
+Consistent response format across all API routes:
+
+```typescript
+// Success: { success: true, data: T, meta: { timestamp } }
+return apiSuccess({ sources: data })
+
+// Error: { success: false, error: { code, message, details? }, meta: { timestamp } }
+return apiError('NOT_FOUND', 'Resource not found', 404)
+
+// Validation error (from Zod)
+return apiValidationError(result.error)
+
+// Convenience methods
+return ApiErrors.notFound('Partner')
+return ApiErrors.database(error.message)
+return ApiErrors.internal()
+```
+
+#### 3. Centralized TypeScript Interfaces ✅
+
+**Location:** `src/types/entities.ts`
+
+Single source of truth for shared types:
+
+```typescript
+import {
+  EntityType,
+  TabStatus,
+  ColumnCategory,
+  CategoryStats,
+  DataSourceWithStats,
+  TabWithStats,
+  emptyCategoryStats,
+  calculateProgress,
+} from '@/types/entities'
+```
+
+**Files updated to use centralized types:**
+- `src/app/api/data-sources/route.ts`
+- All tab-mapping related routes
 
 ---
 
 ## Future Improvements
-
-### High Priority (Before Production)
-
-#### 1. Input Validation with Zod
-**Why:** Runtime validation prevents malformed data from reaching the database.
-
-```typescript
-// src/lib/validations/data-source.ts
-import { z } from 'zod'
-
-export const CreateDataSourceSchema = z.object({
-  name: z.string().min(1).max(255),
-  spreadsheet_id: z.string().min(1),
-  spreadsheet_url: z.string().url().optional(),
-})
-
-// In API route
-const result = CreateDataSourceSchema.safeParse(body)
-if (!result.success) {
-  return NextResponse.json({ error: result.error.flatten() }, { status: 400 })
-}
-```
-
-**Files to add validation:**
-- `POST /api/data-sources`
-- `POST /api/tab-mappings`
-- `POST /api/mappings/save`
-
----
-
-#### 2. API Response Standardization
-**Why:** Consistent response format makes frontend error handling predictable.
-
-```typescript
-// src/lib/api/response.ts
-interface ApiResponse<T> {
-  success: boolean
-  data?: T
-  error?: {
-    code: string
-    message: string
-    details?: unknown
-  }
-  meta?: {
-    timestamp: string
-    requestId?: string
-  }
-}
-
-export function success<T>(data: T): ApiResponse<T> {
-  return { success: true, data, meta: { timestamp: new Date().toISOString() } }
-}
-
-export function error(code: string, message: string): ApiResponse<never> {
-  return { success: false, error: { code, message }, meta: { timestamp: new Date().toISOString() } }
-}
-```
-
----
-
-#### 3. Centralized Type Definitions
-**Why:** `CategoryStats` is defined in 4+ files. Single source of truth prevents drift.
-
-```typescript
-// src/types/entities.ts
-export interface CategoryStats {
-  partner: number
-  staff: number
-  asin: number
-  weekly: number
-  computed: number
-  skip: number
-  unmapped: number
-}
-
-export type TabStatus = 'active' | 'reference' | 'hidden' | 'flagged'
-export type EntityType = 'partners' | 'staff' | 'asins'
-```
-
-**Files with duplicated types:**
-- `src/app/api/data-sources/route.ts`
-- `src/components/data-enrichment/browser/tab-card.tsx`
-- `src/components/data-enrichment/browser/tab-list-row.tsx`
-- `src/components/data-enrichment/browser/tab-overview-dashboard.tsx`
-
----
 
 ### Medium Priority (Post-Launch)
 

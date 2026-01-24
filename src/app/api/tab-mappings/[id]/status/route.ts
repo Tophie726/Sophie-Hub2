@@ -1,6 +1,7 @@
-import { NextResponse } from 'next/server'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { requirePermission } from '@/lib/auth/api-auth'
+import { apiSuccess, apiValidationError, ApiErrors } from '@/lib/api/response'
+import { TabMappingSchema } from '@/lib/validations/schemas'
 
 // Use singleton Supabase client
 const supabase = getAdminClient()
@@ -14,16 +15,15 @@ export async function PATCH(
   if (!auth.authenticated) return auth.response
 
   try {
-    const { status, notes } = await request.json()
+    const body = await request.json()
 
-    // Validate status
-    const validStatuses = ['active', 'reference', 'hidden', 'flagged']
-    if (!validStatuses.includes(status)) {
-      return NextResponse.json(
-        { error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` },
-        { status: 400 }
-      )
+    // Validate input
+    const validation = TabMappingSchema.updateStatus.safeParse(body)
+    if (!validation.success) {
+      return apiValidationError(validation.error)
     }
+
+    const { status, notes } = validation.data
 
     // Update tab mapping
     const { data, error } = await supabase
@@ -39,18 +39,12 @@ export async function PATCH(
 
     if (error) {
       console.error('Error updating tab status:', error)
-      return NextResponse.json(
-        { error: error.message },
-        { status: 500 }
-      )
+      return ApiErrors.database(error.message)
     }
 
-    return NextResponse.json({ tab: data })
+    return apiSuccess({ tab: data })
   } catch (error) {
     console.error('Error in PATCH /api/tab-mappings/[id]/status:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return ApiErrors.internal()
   }
 }

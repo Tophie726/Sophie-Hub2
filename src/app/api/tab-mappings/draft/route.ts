@@ -1,24 +1,10 @@
-import { NextResponse } from 'next/server'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { requirePermission } from '@/lib/auth/api-auth'
+import { apiSuccess, apiValidationError, apiError, ApiErrors } from '@/lib/api/response'
+import { TabMappingSchema } from '@/lib/validations/schemas'
 
 // Use singleton Supabase client
 const supabase = getAdminClient()
-
-interface DraftState {
-  phase: 'preview' | 'classify' | 'map'
-  headerRow: number
-  columns: Array<{
-    sourceIndex: number
-    sourceColumn: string
-    category: string | null
-    targetField: string | null
-    authority: string
-    isKey: boolean
-    computedConfig?: Record<string, unknown>
-  }>
-  timestamp: number
-}
 
 // GET - Load draft state for a tab (admin only)
 export async function GET(request: Request) {
@@ -31,10 +17,7 @@ export async function GET(request: Request) {
     const tabName = searchParams.get('tab_name')
 
     if (!dataSourceId || !tabName) {
-      return NextResponse.json(
-        { error: 'data_source_id and tab_name are required' },
-        { status: 400 }
-      )
+      return apiError('VALIDATION_ERROR', 'data_source_id and tab_name are required', 400)
     }
 
     // Look up the tab mapping
@@ -48,27 +31,21 @@ export async function GET(request: Request) {
     if (error && error.code !== 'PGRST116') {
       // PGRST116 is "not found" which is OK
       console.error('Error loading draft:', error)
-      return NextResponse.json(
-        { error: error.message },
-        { status: 500 }
-      )
+      return ApiErrors.database(error.message)
     }
 
     if (!tabMapping || !tabMapping.draft_state) {
-      return NextResponse.json({ draft: null })
+      return apiSuccess({ draft: null })
     }
 
-    return NextResponse.json({
+    return apiSuccess({
       draft: tabMapping.draft_state,
       updatedBy: tabMapping.draft_updated_by,
       updatedAt: tabMapping.draft_updated_at,
     })
   } catch (error) {
     console.error('Error in GET /api/tab-mappings/draft:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return ApiErrors.internal()
   }
 }
 
@@ -79,19 +56,14 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json()
-    const { data_source_id, tab_name, draft_state, updated_by } = body as {
-      data_source_id: string
-      tab_name: string
-      draft_state: DraftState
-      updated_by?: string
+
+    // Validate input
+    const validation = TabMappingSchema.draft.safeParse(body)
+    if (!validation.success) {
+      return apiValidationError(validation.error)
     }
 
-    if (!data_source_id || !tab_name || !draft_state) {
-      return NextResponse.json(
-        { error: 'data_source_id, tab_name, and draft_state are required' },
-        { status: 400 }
-      )
-    }
+    const { data_source_id, tab_name, draft_state, updated_by } = validation.data
 
     // Check if tab mapping exists
     const { data: existing } = await supabase
@@ -131,13 +103,10 @@ export async function POST(request: Request) {
       if (error) throw error
     }
 
-    return NextResponse.json({ success: true })
+    return apiSuccess({ saved: true })
   } catch (error) {
     console.error('Error in POST /api/tab-mappings/draft:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return ApiErrors.internal()
   }
 }
 
@@ -152,10 +121,7 @@ export async function DELETE(request: Request) {
     const tabName = searchParams.get('tab_name')
 
     if (!dataSourceId || !tabName) {
-      return NextResponse.json(
-        { error: 'data_source_id and tab_name are required' },
-        { status: 400 }
-      )
+      return apiError('VALIDATION_ERROR', 'data_source_id and tab_name are required', 400)
     }
 
     // Clear draft state (don't delete the tab mapping, just the draft)
@@ -174,12 +140,9 @@ export async function DELETE(request: Request) {
       throw error
     }
 
-    return NextResponse.json({ success: true })
+    return apiSuccess({ cleared: true })
   } catch (error) {
     console.error('Error in DELETE /api/tab-mappings/draft:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return ApiErrors.internal()
   }
 }

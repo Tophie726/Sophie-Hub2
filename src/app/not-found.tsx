@@ -2,7 +2,7 @@
 
 import { motion } from 'framer-motion'
 import Link from 'next/link'
-import { Home, ArrowLeft, Search, HelpCircle } from 'lucide-react'
+import { Home, ArrowLeft, HelpCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 const easeOut: [number, number, number, number] = [0.22, 1, 0.36, 1]
@@ -47,8 +47,8 @@ export default function NotFound() {
         >
           <h1 className="text-2xl font-semibold">Page not found</h1>
           <p className="text-muted-foreground">
-            The page you're looking for doesn't exist or has been moved.
-            Let's get you back on track.
+            The page you&apos;re looking for doesn&apos;t exist or has been moved.
+            Let&apos;s get you back on track.
           </p>
         </motion.div>
 

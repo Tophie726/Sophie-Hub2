@@ -155,7 +155,7 @@ export const TabListRow = memo(function TabListRow({
     clearLongPress()
   }, [clearLongPress])
 
-  const handleClick = useCallback((e: React.MouseEvent) => {
+  const handleClick = useCallback(() => {
     if ('ontouchstart' in window) return
     onClick()
   }, [onClick])
