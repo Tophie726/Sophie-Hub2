@@ -427,13 +427,13 @@ Get detailed sync run results.
 - [x] Basic transform pipeline (`src/lib/sync/transforms.ts`)
 - [x] sync_runs tracking
 
-### Phase 2.2: API & UI (IN PROGRESS)
+### Phase 2.2: API & UI (COMPLETE)
 - [x] POST /api/sync/tab endpoint
 - [x] GET /api/sync/runs endpoint
 - [x] GET /api/sync/runs/[id] endpoint
 - [x] Sync button in TabOverviewDashboard
 - [x] Sync progress indicator (loading state + tooltip)
-- [ ] Sync history panel
+- [x] Sync history panel (collapsible with expandable errors)
 
 ### Phase 2.3: Lineage Tracking (IN PROGRESS)
 - [x] field_lineage table migration

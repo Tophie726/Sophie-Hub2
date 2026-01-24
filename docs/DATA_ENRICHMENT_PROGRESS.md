@@ -59,7 +59,7 @@
 |------|--------|----------|-------|
 | Apply database migrations | Pending | HIGH | Run connector_config + field_lineage migrations |
 | Sync button in TabOverviewDashboard | Done | HIGH | "Sync Now" button with tooltip status |
-| Sync history panel | Pending | MEDIUM | Show recent sync runs for a tab |
+| Sync history panel | Done | MEDIUM | Collapsible panel with expandable error details |
 | Authority toggle UI | Pending | MEDIUM | Switch field from source_of_truth → reference |
 | Visual data map component | Pending | LOW | Canvas/SVG visualization |
 | Lineage visualization | Pending | LOW | "Where did this value come from?" |
@@ -201,9 +201,10 @@ In-app AI co-pilot for column mapping at multiple granularity levels.
 
 1. [ ] Apply database migrations (`supabase migration up` for connector_config + field_lineage)
 2. [x] Add Sync button to TabOverviewDashboard - DONE
-3. [ ] Create SyncHistoryPanel component
-4. [ ] Design nested sheet extraction UX
-5. [ ] Evaluate Claude API integration approach
+3. [x] Create SyncHistoryPanel component - DONE
+4. [ ] Authority toggle UI (switch field from source_of_truth → reference)
+5. [ ] Design nested sheet extraction UX
+6. [ ] Evaluate Claude API integration approach
 
 ---
 
