@@ -60,7 +60,7 @@
 | Apply database migrations | Pending | HIGH | Run connector_config + field_lineage migrations |
 | Sync button in TabOverviewDashboard | Done | HIGH | "Sync Now" button with tooltip status |
 | Sync history panel | Done | MEDIUM | Collapsible panel with expandable error details |
-| Authority toggle UI | Pending | MEDIUM | Switch field from source_of_truth → reference |
+| Authority toggle UI | Done | MEDIUM | Already implemented in SmartMapper MapPhase |
 | Visual data map component | Pending | LOW | Canvas/SVG visualization |
 | Lineage visualization | Pending | LOW | "Where did this value come from?" |
 
@@ -157,6 +157,10 @@ In-app AI co-pilot for column mapping at multiple granularity levels.
 - `src/lib/sync/transforms.ts` - Value transforms (date, currency, boolean, number)
 - `src/lib/sync/engine.ts` - SyncEngine class
 
+### Sync UI Components
+- `src/components/data-enrichment/sync-history-panel.tsx` - Collapsible history with expandable errors
+- `src/components/data-enrichment/browser/tab-overview-dashboard.tsx` - Contains Sync button
+
 ### Sync API Routes
 - `src/app/api/sync/tab/[id]/route.ts` - POST to trigger sync
 - `src/app/api/sync/runs/route.ts` - GET list of sync runs
@@ -202,9 +206,9 @@ In-app AI co-pilot for column mapping at multiple granularity levels.
 1. [ ] Apply database migrations (`supabase migration up` for connector_config + field_lineage)
 2. [x] Add Sync button to TabOverviewDashboard - DONE
 3. [x] Create SyncHistoryPanel component - DONE
-4. [ ] Authority toggle UI (switch field from source_of_truth → reference)
-5. [ ] Design nested sheet extraction UX
-6. [ ] Evaluate Claude API integration approach
+4. [x] Authority toggle UI - ALREADY EXISTS in SmartMapper MapPhase
+5. [ ] Design nested sheet extraction UX (Phase 5)
+6. [ ] Evaluate Claude API integration approach (Phase 6)
 
 ---
 
