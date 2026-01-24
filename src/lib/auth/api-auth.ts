@@ -40,10 +40,9 @@ export type AuthResult = AuthSuccess | AuthFailure
  * You can add an `access_level` column to staff table for more control
  */
 function mapRoleToAccessLevel(staffRole: string | null, email: string): Role {
-  // Hardcoded admin emails (until you add access_level to DB)
-  const adminEmails: string[] = [
-    // Add admin emails here
-  ]
+  // Admin emails from environment variable (comma-separated)
+  // Example: ADMIN_EMAILS=admin@example.com,tomas@sophiesociety.com
+  const adminEmails = process.env.ADMIN_EMAILS?.split(',').map(e => e.trim().toLowerCase()).filter(Boolean) ?? []
 
   if (adminEmails.includes(email.toLowerCase())) {
     return ROLES.ADMIN
@@ -87,7 +86,7 @@ export async function requireAuth(): Promise<AuthResult> {
     .single()
 
   // Allow auth even if user not in staff table (for initial setup)
-  // They'll have STAFF access level by default
+  // Role is determined by mapRoleToAccessLevel which checks ADMIN_EMAILS env var
   const user: AuthUser = staffUser
     ? {
         id: staffUser.id,
@@ -101,7 +100,7 @@ export async function requireAuth(): Promise<AuthResult> {
         email: session.user.email,
         name: session.user.name || null,
         staffRole: null,
-        role: ROLES.STAFF, // Default to staff for users not yet in DB
+        role: mapRoleToAccessLevel(null, session.user.email), // Check ADMIN_EMAILS even for users not in DB
       }
 
   return {

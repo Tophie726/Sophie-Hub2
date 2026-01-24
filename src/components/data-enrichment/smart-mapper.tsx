@@ -59,6 +59,53 @@ import {
 } from 'lucide-react'
 import { MobileColumnCard } from './mobile-column-card'
 
+// ============ ANIMATED LOCK ICON ============
+// Custom animated lock that shows shackle closing
+function AnimatedLockIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      {/* Lock body */}
+      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+
+      {/* Animated shackle - starts raised, animates down */}
+      <motion.path
+        d="M7 11V7a5 5 0 0 1 10 0v4"
+        initial={{ y: -4, opacity: 0.5 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{
+          duration: 0.4,
+          ease: [0.34, 1.56, 0.64, 1], // easeOutBack for satisfying bounce
+          delay: 0.1,
+        }}
+      />
+
+      {/* Keyhole that appears after lock closes */}
+      <motion.circle
+        cx="12"
+        cy="16"
+        r="1"
+        fill="currentColor"
+        stroke="none"
+        initial={{ scale: 0, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{
+          duration: 0.2,
+          delay: 0.4,
+          ease: [0.34, 1.56, 0.64, 1],
+        }}
+      />
+    </svg>
+  )
+}
+
 // ============ TYPES ============
 interface TabRawData {
   rows: string[][]
@@ -123,6 +170,8 @@ interface SmartMapperProps {
     primaryEntity: EntityType
   }) => void
   onBack: () => void
+  /** Called when user confirms header row - use to update UI state */
+  onHeaderConfirmed?: () => void
   /** When true, renders in a more compact mode for embedding in browser shell */
   embedded?: boolean
 }
@@ -186,12 +235,13 @@ interface DraftState {
   timestamp: number
 }
 
-export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, onComplete, onBack, embedded = false }: SmartMapperProps) {
+export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, onComplete, onBack, onHeaderConfirmed, embedded = false }: SmartMapperProps) {
   // Simplified: just preview → classify → map
   const [phase, setPhase] = useState<'preview' | 'classify' | 'map'>('preview')
   const [isLoading, setIsLoading] = useState(true)
   const [rawData, setRawData] = useState<TabRawData | null>(null)
   const [headerRow, setHeaderRow] = useState(0)
+  const [initialHeaderRow, setInitialHeaderRow] = useState<number | undefined>(undefined)
   const [columns, setColumns] = useState<ColumnClassification[]>([])
   const [columnsHistory, setColumnsHistory] = useState<ColumnClassification[][]>([])
   const [draftRestored, setDraftRestored] = useState(false)
@@ -284,6 +334,7 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
               // but restore headerRow and columns so progress isn't lost
               setPhase('preview')
               setHeaderRow(data.draft.headerRow)
+              setInitialHeaderRow(data.draft.headerRow) // Track for unsaved changes
               setColumns(data.draft.columns)
               setDraftRestored(true)
               return
@@ -305,6 +356,7 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
             // Always start at preview phase so user can confirm header selection
             setPhase('preview')
             setHeaderRow(draft.headerRow)
+            setInitialHeaderRow(draft.headerRow) // Track for unsaved changes
             setColumns(draft.columns)
             setDraftRestored(true)
             return
@@ -356,6 +408,8 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
             header_row: headerRow,
           }),
         })
+        // Notify parent to update UI state
+        onHeaderConfirmed?.()
       } catch (e) {
         console.warn('Failed to confirm header:', e)
       }
@@ -398,6 +452,7 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
         if (response.ok) {
           setRawData(data)
           setHeaderRow(data.detectedHeaderRow)
+          setInitialHeaderRow(data.detectedHeaderRow) // Track initial for unsaved changes detection
         } else if (response.status === 401) {
           setLoadError('Sign in required to access Google Sheets data')
         } else {
@@ -699,6 +754,7 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
           onBack={onBack}
           embedded={embedded}
           tabName={tabName}
+          initialHeaderRow={initialHeaderRow}
         />
       )}
       {phase === 'classify' && (
@@ -748,6 +804,7 @@ function PreviewPhase({
   onBack,
   embedded = false,
   tabName,
+  initialHeaderRow,
 }: {
   rawData: TabRawData
   headerRow: number
@@ -758,6 +815,7 @@ function PreviewPhase({
   onBack: () => void
   embedded?: boolean
   tabName?: string
+  initialHeaderRow?: number // Track initial auto-detected row for unsaved changes
 }) {
   // Reserved for future tooltip feature showing why header was detected
   void headerReasons
@@ -768,9 +826,32 @@ function PreviewPhase({
   const hasScrolledToDetected = useRef(false)
   const maxRow = Math.min(rawData.rows.length - 1, 19)
 
+  // Track if header row was modified from initial
+  const hasUnsavedChanges = initialHeaderRow !== undefined && headerRow !== initialHeaderRow
+  const [showBackDialog, setShowBackDialog] = useState(false)
+  const [showConfirmAnimation, setShowConfirmAnimation] = useState(false)
+
   useEffect(() => {
     containerRef.current?.focus()
   }, [])
+
+  // Handle back with confirmation if changes made
+  const handleBack = () => {
+    if (hasUnsavedChanges) {
+      setShowBackDialog(true)
+    } else {
+      onBack()
+    }
+  }
+
+  // Handle confirm with lock animation
+  const handleConfirm = () => {
+    setShowConfirmAnimation(true)
+    // Brief delay for animation before proceeding
+    setTimeout(() => {
+      onConfirm()
+    }, 600)
+  }
 
   // Auto-scroll to detected header row on mount (once)
   useEffect(() => {
@@ -885,7 +966,51 @@ function PreviewPhase({
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="rounded-lg border overflow-hidden">
+          <div className="rounded-lg border overflow-hidden relative">
+            {/* Lock animation - only covers table, follows design MD guidelines */}
+            <AnimatePresence>
+              {showConfirmAnimation && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+                  className="absolute inset-0 z-10 flex items-center justify-center bg-background/90 backdrop-blur-md"
+                >
+                  <motion.div
+                    initial={{ scale: 0.8, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0.9, opacity: 0 }}
+                    transition={{
+                      duration: 0.35,
+                      ease: [0.34, 1.56, 0.64, 1], // easeOutBack for playful bounce
+                    }}
+                    className="flex flex-col items-center gap-3"
+                  >
+                    <motion.div
+                      className="p-5 rounded-2xl bg-green-500/15 border border-green-500/20"
+                      initial={{ rotate: -10 }}
+                      animate={{ rotate: 0 }}
+                      transition={{
+                        duration: 0.4,
+                        ease: [0.34, 1.56, 0.64, 1],
+                        delay: 0.1,
+                      }}
+                    >
+                      <AnimatedLockIcon className="h-10 w-10 text-green-500" />
+                    </motion.div>
+                    <motion.span
+                      initial={{ opacity: 0, y: 5 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.25, delay: 0.35, ease: [0.22, 1, 0.36, 1] }}
+                      className="text-base font-medium text-green-600"
+                    >
+                      Header Confirmed
+                    </motion.span>
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>
             <div ref={scrollRef} className="max-h-[400px] overflow-auto scroll-smooth">
               <table className="w-full text-sm">
                 <tbody>
@@ -945,18 +1070,40 @@ function PreviewPhase({
           </div>
 
           <div className="flex items-center justify-between pt-4 border-t">
-            <Button variant="outline" onClick={onBack} className="gap-2">
+            <Button variant="outline" onClick={handleBack} className="gap-2">
               <ArrowLeft className="h-4 w-4" />
               Back
             </Button>
-            <Button onClick={onConfirm} className="gap-2">
-              This looks right
+            <Button onClick={handleConfirm} className="gap-2">
+              Confirm Header
               <ArrowRight className="h-4 w-4" />
             </Button>
           </div>
         </CardContent>
       </Card>
       </div>
+
+
+      {/* Confirmation dialog for back when changes made */}
+      <Dialog open={showBackDialog} onOpenChange={setShowBackDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Discard Changes?</DialogTitle>
+            <DialogDescription>
+              You&apos;ve changed the header row from row {(initialHeaderRow ?? 0) + 1} to row {headerRow + 1}.
+              Going back will discard this change.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setShowBackDialog(false)}>
+              Keep Editing
+            </Button>
+            <Button variant="destructive" onClick={() => { setShowBackDialog(false); onBack() }}>
+              Discard Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </motion.div>
   )
 }
@@ -999,6 +1146,12 @@ function ClassifyPhase({
   const [activeFilter, setActiveFilter] = useState<ColumnCategory | 'all' | 'unclassified'>('all')
   const containerRef = useRef<HTMLDivElement>(null)
   const hasInteracted = useRef(false)
+
+  // State for "Change Header Row" confirmation dialog
+  const [showChangeHeaderDialog, setShowChangeHeaderDialog] = useState(false)
+
+  // Check if any columns have been classified
+  const hasClassifiedColumns = columns.some(col => col.category !== null)
   const [focusedIndex, setFocusedIndex] = useState(0)
 
   // State for key confirmation dialog
@@ -2091,7 +2244,18 @@ function ClassifyPhase({
           </div>
 
           <div className="flex items-center justify-between pt-4 border-t">
-            <Button variant="outline" onClick={onBack} className="gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                if (hasClassifiedColumns) {
+                  setShowChangeHeaderDialog(true)
+                } else {
+                  onBack()
+                }
+              }}
+              className="gap-2"
+            >
               <ArrowLeft className="h-4 w-4" />
               Change Header Row
             </Button>
@@ -2190,6 +2354,36 @@ function ClassifyPhase({
               {keyConfirmation.action === 'set' && 'Set as Key'}
               {keyConfirmation.action === 'change' && 'Change Key'}
               {keyConfirmation.action === 'remove' && 'Remove Key'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Change Header Row Confirmation Dialog */}
+      <Dialog open={showChangeHeaderDialog} onOpenChange={setShowChangeHeaderDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Change Header Row?</DialogTitle>
+            <DialogDescription className="pt-2">
+              You have classified <span className="font-medium text-foreground">{columns.filter(c => c.category !== null).length}</span> columns.
+              Changing the header row will <span className="text-amber-600 font-medium">reset all classifications</span>.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => setShowChangeHeaderDialog(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                setShowChangeHeaderDialog(false)
+                onBack()
+              }}
+            >
+              Change Header Row
             </Button>
           </DialogFooter>
         </DialogContent>

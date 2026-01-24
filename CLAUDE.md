@@ -292,6 +292,133 @@ Data was fragmented with no single source of truth. The old approach crawled she
 
 ---
 
+## Authentication & Authorization
+
+Sophie Hub uses NextAuth.js with Google OAuth for authentication and a role-based access control (RBAC) system.
+
+### Environment Variables
+
+```bash
+# Required in .env.local
+GOOGLE_CLIENT_ID=your-client-id
+GOOGLE_CLIENT_SECRET=your-client-secret
+NEXTAUTH_SECRET=your-secret-key
+
+# Admin emails (comma-separated) - these users get full admin access
+ADMIN_EMAILS=admin@example.com,tomas@sophiesociety.com
+
+# Optional: Restrict to specific email domains
+ALLOWED_EMAIL_DOMAINS=sophiesociety.com
+```
+
+### Role Hierarchy
+
+| Role | Access Level |
+|------|--------------|
+| `admin` | Full access to everything including Data Enrichment |
+| `pod_leader` | Manages assigned partners and team |
+| `staff` | Views assigned partners, manages own profile |
+| `partner` | External users viewing their own data (future) |
+
+### How Roles Are Assigned
+
+1. **ADMIN_EMAILS env var**: Emails listed here automatically get `admin` role
+2. **Staff table lookup**: Users in `staff` table get role based on their `role` column:
+   - `admin` or `operations_admin` → `ROLES.ADMIN`
+   - `pod_leader` → `ROLES.POD_LEADER`
+   - Everything else → `ROLES.STAFF`
+3. **Default**: Users not in staff table get `ROLES.STAFF`
+
+### Protected Routes
+
+- Dashboard layout (`src/app/(dashboard)/layout.tsx`) requires authentication
+- Data Enrichment requires `admin` role
+- API routes use `requireAuth()`, `requirePermission()`, or `requireRole()` from `src/lib/auth/api-auth.ts`
+
+### Debug Endpoint
+
+```
+GET /api/auth/me
+```
+Returns current user info including role assignment. Useful for debugging auth issues.
+
+### Security Considerations
+
+1. **ADMIN_EMAILS for Development**: The `ADMIN_EMAILS` env var is suitable for development and small teams. For production with many admins, consider adding an `access_level` column to the `staff` table.
+
+2. **API Authentication**: All API routes should use `requireAuth()`, `requirePermission()`, or `requireRole()` from `src/lib/auth/api-auth.ts`. Never expose sensitive data without authentication.
+
+3. **Environment Variables**: Never commit `.env.local` to git. The file is in `.gitignore` by default.
+
+4. **OAuth Tokens**: Google OAuth tokens are stored in the NextAuth.js session (JWT strategy). They're refreshed automatically when expired.
+
+---
+
+## Enterprise Code Patterns
+
+### Zod Input Validation
+
+All API inputs are validated with Zod schemas defined in `src/lib/validations/schemas.ts`.
+
+```typescript
+import { DataSourceSchema } from '@/lib/validations/schemas'
+
+export async function POST(request: Request) {
+  const body = await request.json()
+  const validation = DataSourceSchema.create.safeParse(body)
+
+  if (!validation.success) {
+    return apiValidationError(validation.error)
+  }
+
+  // validation.data is now typed and validated
+}
+```
+
+### Standardized API Responses
+
+All API routes use consistent response helpers from `src/lib/api/response.ts`:
+
+```typescript
+import { apiSuccess, apiError, apiValidationError, ApiErrors } from '@/lib/api/response'
+
+// Success response
+return apiSuccess({ source }, 201)
+
+// Validation error (from Zod)
+return apiValidationError(validation.error)
+
+// Standard errors
+return ApiErrors.unauthorized()
+return ApiErrors.forbidden('Missing permission: data-enrichment:write')
+return ApiErrors.notFound('Data source')
+return ApiErrors.database(error)
+```
+
+**Response Format:**
+```typescript
+// Success: { success: true, data: T, meta: { timestamp } }
+// Error: { success: false, error: { code, message, details? }, meta: { timestamp } }
+```
+
+**Client-Side Handling:**
+When fetching from these APIs, access data via `json.data`:
+```typescript
+const json = await response.json()
+const sources = json.data?.sources || json.sources || [] // Support both formats during migration
+```
+
+### Centralized TypeScript Types
+
+Shared entity types are defined in `src/types/entities.ts` to prevent type drift:
+
+```typescript
+import { EntityType, TabStatus, ColumnCategory, CategoryStats } from '@/types/entities'
+import { emptyCategoryStats, calculateProgress } from '@/types/entities'
+```
+
+---
+
 ## Dark Mode
 
 Sophie Hub supports light, dark, and system theme modes.
@@ -315,6 +442,41 @@ function MyComponent() {
   const { theme, setTheme } = useTheme()
   // theme is 'light' | 'dark' | 'system'
 }
+```
+
+---
+
+## UX Standards
+
+**See `src/UX-STANDARDS.md` for the definitive UX reference** — covers:
+
+1. **Design Philosophy** — Core principles, visual consistency, no fake data
+2. **Animation System** — Easing curves, durations, `initial={false}` pattern
+3. **Responsive Design** — Breakpoints, text truncation, touch targets
+4. **Typography & Visual Design** — Spacing scale, colors, z-index
+5. **Forms & Controls** — Input rules, accessibility, button polish
+6. **Error Handling** — Toast notifications, API responses, error hierarchy
+7. **Auth Error Recovery** — SessionMonitor auto-redirects on 401
+8. **Loading & Empty States** — Skeleton loaders, user guidance
+9. **Mobile Patterns** — Long-press action sheets, component variants
+10. **Component Checklist** — Pre-ship verification
+
+### Quick Reference
+
+```tsx
+// Toast notifications
+import { toast } from 'sonner'
+toast.success('Saved')
+toast.error('Failed', { action: { label: 'Retry', onClick: retry } })
+
+// Animation (no mount animation)
+<motion.div initial={false} animate={{ opacity: 1 }} />
+
+// Responsive truncation
+className="truncate max-w-[80px] md:max-w-[120px]"
+
+// Touch-friendly button
+className="h-11 px-4 active:scale-[0.97]"
 ```
 
 ---
@@ -389,6 +551,36 @@ import { fadeInUp, scaleOnHover, springPop } from '@/lib/animations'
 <motion.div {...fadeInUp}>
 <motion.div {...scaleOnHover}>
 ```
+
+### No Animation on Page Load
+
+For elements that appear on page load (not user-triggered), use `initial={false}` to prevent entrance animations. Only animate on **state changes**.
+
+```typescript
+// GOOD - no animation on mount, animates only when state changes
+<motion.div
+  initial={false}
+  animate={{ scale: 1, opacity: 1 }}
+  exit={{ scale: 0.8, opacity: 0 }}
+  transition={{ duration: 0.15, ease: easeOut }}
+/>
+
+// BAD - animates every time component mounts (flickery)
+<motion.div
+  initial={{ scale: 0 }}
+  animate={{ scale: 1 }}
+/>
+```
+
+**When to use entrance animations:**
+- User-triggered actions (clicking a button opens a modal)
+- Progressive disclosure (expanding a section)
+- Drawing attention to new content (toast notifications)
+
+**When NOT to use entrance animations:**
+- Page load / navigation (indicators, badges, status dots)
+- List items that exist in the initial data
+- Elements that re-render frequently
 
 ---
 

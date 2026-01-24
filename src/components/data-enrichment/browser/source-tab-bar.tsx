@@ -70,8 +70,8 @@ function SortableTab({ source, isActive, onSelect, onClose }: SortableTabProps) 
       style={style}
       data-source-id={source.id}
       className={cn(
-        'relative flex items-center gap-1.5 px-3 py-3 text-sm font-medium transition-colors',
-        'border-r border-border/50 min-w-[140px] max-w-[200px]',
+        'relative flex items-center gap-1 md:gap-1.5 px-2 md:px-3 py-2.5 md:py-3 text-sm font-medium transition-colors',
+        'border-r border-border/50 min-w-[100px] md:min-w-[140px] max-w-[150px] md:max-w-[200px]',
         'select-none',
         isActive
           ? 'text-foreground bg-background'

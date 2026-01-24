@@ -17,6 +17,31 @@ SourceBrowser
     └── SmartMapper (when specific tab selected)
 ```
 
+## Critical Principle: Visual Consistency
+
+**All views must show the same data the same way.** The header status indicator appears in three places:
+- SheetTabBar (tab-level navigation)
+- TabCard (grid view in Overview)
+- TabListRow (list view in Overview)
+
+All three MUST use the same visual language. When adding or changing an indicator, update ALL locations together.
+
+## Header Status Indicator (Universal)
+
+The header status dot is shown consistently everywhere:
+
+| State | Dot Color | Meaning |
+|-------|-----------|---------|
+| No headers | Grey (`bg-muted-foreground/30`) | No header row identified |
+| Auto-detected | Orange (`bg-orange-500`) | System detected header, awaiting confirmation |
+| Confirmed | Green (`bg-green-500`) | User confirmed the header row |
+| 100% Mapped | Green checkmark | All columns have been classified |
+
+**Progress Ring** (SheetTabBar only):
+- Confirmed tabs show a green progress ring around the dot
+- Ring fills clockwise as columns are mapped (0-100%)
+- At 100%, the dot is replaced with a checkmark icon
+
 ## Key Components
 
 ### SheetTabBar
@@ -25,33 +50,49 @@ Renders tabs for navigating between sheet tabs within a source. Features:
 - Only shows **active** and **reference** tabs - keeps the bar clean
 - Flagged and hidden tabs are only accessible from Overview dashboard
 - Status dropdown (Active, Reference, Flagged, Hidden) for changing tab status
+- **Header status dot** with progress ring for confirmed tabs
 
 ### TabOverviewDashboard
 Per-source dashboard showing all tabs at a glance. Features:
 - Grid/List view toggle (persisted in state)
 - Overall progress bar (calculated from all tab stats)
-- Tab cards/rows showing: entity type, progress, category breakdown, last edit
+- Tab cards/rows showing: header status, progress, category breakdown, last edit
 - Hidden tabs toggle (only place to access hidden tabs)
 - Flagged tabs collapsible section (subtle styling, only place to access flagged tabs)
 
 ### TabCard
 Card component for grid view. Shows:
-- Entity color dot (blue=partners, green=staff, orange=asins)
-- Tab name and status icons
+- **Header status dot** (grey/orange/green) - NOT entity color
+- Tab name and status icons (flag, hidden)
 - Progress bar with percentage
-- Category breakdown badges
-- Header status indicator
-- Relative timestamp for last edit
+- Category breakdown badges (partner/staff/asin counts)
+- Footer with header status text + last edited time
 
 ### TabListRow
-Table row component for list view. Same data as TabCard in compact format.
+Table row component for list view. Same data as TabCard in compact format:
+- **Header status dot** (grey/orange/green) - NOT entity color
+- Tab name
+- Header status column (text: "Confirmed", "Auto", or "–")
+- Progress bar
+- Category badges
 
 ## Data Flow
 
 1. **Source Selection**: User selects a source → defaults to Overview tab
 2. **Overview Dashboard**: Shows all tabs with real stats from database
 3. **Tab Selection**: User clicks a tab → SmartMapper loads for that tab
-4. **Back Navigation**: SmartMapper's "Back" returns to Overview
+4. **Header Confirmation**: User confirms header → `onHeaderConfirmed` callback updates parent state
+5. **Back Navigation**: SmartMapper's "Back" returns to Overview
+
+### State Update on Header Confirmation
+
+When user confirms a header in SmartMapper:
+1. SmartMapper calls `POST /api/tab-mappings/confirm-header`
+2. SmartMapper calls `onHeaderConfirmed()` callback
+3. SourceBrowser updates local `sources` state to set `header_confirmed: true`
+4. Tab bar and cards immediately reflect the change (orange → green)
+
+This avoids requiring a full page refresh to see updated status.
 
 ## API Integration
 
@@ -62,6 +103,7 @@ Returns sources with per-tab stats:
   sources: [{
     tabs: [{
       id, tab_name, primary_entity, header_row,
+      header_confirmed,  // Boolean - user confirmed header
       columnCount, categoryStats, status, notes, updated_at
     }]
   }]
@@ -79,6 +121,14 @@ Returns header detection with confidence:
 }
 ```
 
+### POST /api/tab-mappings/confirm-header
+Confirms the header row selection:
+```typescript
+// Request
+{ data_source_id, tab_name, header_row }
+// Sets header_confirmed = true in database
+```
+
 ## Header Detection & Confirmation
 
 The `detectHeaderRow()` function in `src/lib/google/sheets.ts` scores rows based on:
@@ -94,26 +144,48 @@ The `detectHeaderRow()` function in `src/lib/google/sheets.ts` scores rows based
 - Shows confidence as subtle hint text below header
 - User can click any row to select as header
 
-### Header Status States
+### Lock Animation
 
-The UI shows three distinct states for header status:
+When user clicks "Confirm Header":
+1. Animated lock icon appears over the table (shackle closes)
+2. Uses `easeOutBack` curve for satisfying bounce
+3. "Header Confirmed" text fades in after lock animation
+4. Auto-dismisses after ~800ms
+5. Tab indicator updates from orange to green
 
-| State | Icon | Label | Meaning |
-|-------|------|-------|---------|
-| Not set | `–` | — | No header row identified yet |
-| Auto-detected | 🟠 | "Auto" | System detected a header row, awaiting user confirmation |
-| Confirmed | ✅🔒 | "Confirmed" | User clicked "This looks right" in Preview phase |
+## Animation Philosophy
 
-**Database:**
-- `tab_mappings.header_confirmed BOOLEAN DEFAULT false`
-- Set to `true` when user confirms header in SmartMapper's Preview phase
-- API endpoint: `POST /api/tab-mappings/confirm-header`
+**No animations on page load.** Use `initial={false}` on motion components to prevent entrance animations when the page renders. Only animate on **state changes** (e.g., when header status changes from auto to confirmed).
 
-**Flow:**
-1. User sees tab with 🟠 "Auto" on Overview (auto-detected but not confirmed)
-2. Clicks tab → Preview: "We detected row X. Does this look right?"
-3. Clicks "This looks right" → saves `header_confirmed = true`
-4. Back on Overview: shows ✅🔒 "Confirmed"
+```typescript
+// GOOD - no animation on mount, only on state change
+<motion.div
+  initial={false}
+  animate={{ scale: 1, opacity: 1 }}
+  exit={{ scale: 0.8, opacity: 0 }}
+  transition={{ duration: 0.15, ease: easeOut }}
+/>
+
+// BAD - animates every time component mounts (flickery on page load)
+<motion.div
+  initial={{ scale: 0, opacity: 0 }}
+  animate={{ scale: 1, opacity: 1 }}
+/>
+```
+
+### Animation Specs
+
+All animations use `ease-out` curve from `@/lib/animations`: `[0.22, 1, 0.36, 1]`
+
+| Element | Duration | Effect |
+|---------|----------|--------|
+| Tab switch | 200ms | opacity fade |
+| Card hover | 200ms | scale(1.02), y: -2 |
+| Card click | 150ms | scale(0.98) |
+| Progress ring | 400ms | strokeDashoffset change |
+| State transitions | 150-200ms | opacity + scale |
+| Lock animation | 350ms | scale + rotate with easeOutBack |
+| Action sheet | 300ms | y: 100% → 0 |
 
 ## Mobile Long-Press Action Sheet
 
@@ -131,37 +203,6 @@ TabCard and TabListRow support **long-press to reveal actions** on mobile:
 - Full-width action buttons: Open, Flag/Unflag, Hide/Unhide
 - Cancel button with muted background
 - Safe area padding for devices with home indicator
-- Smooth slide-up animation using `easeOut` curve
-
-**CSS for preventing text selection:**
-```css
-.select-none
-.touch-manipulation
-[&_*]:select-none
--webkit-touch-callout: none
--webkit-user-select: none
-```
-
-**Animation Specs:**
-| Element | Duration | Effect |
-|---------|----------|--------|
-| Backdrop | 200ms | opacity fade |
-| Action sheet | 300ms | slide up from bottom |
-
-## Animation Specs
-
-All animations use `ease-out` curve from `@/lib/animations`: `[0.22, 1, 0.36, 1]`
-
-| Element | Duration | Effect |
-|---------|----------|--------|
-| Tab switch | 200ms | opacity fade |
-| Card hover | 200ms | scale(1.02), y: -2 |
-| Card click | 150ms | scale(0.98) |
-| Card stagger | 300ms + 50ms delay | y: 10 → 0 |
-| Progress bar | 300ms | width fill |
-| View toggle | 200ms | opacity crossfade |
-| Collapsible | 200ms | height expand |
-| Action sheet | 300ms | y: 100% → 0 |
 
 ## Field Tags (Domain Classification)
 
@@ -172,10 +213,17 @@ SmartMapper's ClassifyPhase supports **field tags** for cross-cutting domain cla
 - Multi-select dropdown in each entity column row
 - Tags saved to `column_mapping_tags` junction table
 
-**UI Pattern:**
-- Tag picker only appears for classified entity columns (partner, staff, asin)
-- Shows selected tags as colored badges
-- Dropdown menu with checkboxes for multi-select
+## Confirmation Dialogs
+
+### Back from Preview (header changed)
+If user changed the header row in Preview phase and clicks "Back", show confirmation:
+- "You have unsaved changes to the header row"
+- Options: Cancel, Discard Changes
+
+### Change Header Row from Classify
+If user has classified columns and clicks "Change Header Row", show confirmation:
+- "You have classified X columns. Changing the header row will reset all classifications."
+- Options: Cancel, Change Header Row (destructive)
 
 ## Constants
 
@@ -187,3 +235,5 @@ const HIGH_CONFIDENCE_THRESHOLD = 80
 ## Critical Constraint
 
 **NO FAKE DATA**: All stats displayed must come from database queries via the API. The dashboard is a window into the database, not static UI. Progress percentages, category counts, and timestamps are all derived from actual `column_mappings` and `tab_mappings` records.
+
+**VISUAL CONSISTENCY**: When the same data is displayed in multiple places, it must look the same everywhere. The header status indicator is the canonical example - grey/orange/green dot appears identically in tab bar, cards, and list rows.

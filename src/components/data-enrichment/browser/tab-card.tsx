@@ -19,7 +19,7 @@ function haptic(intensity: 'light' | 'medium' | 'heavy' = 'medium') {
 
 type TabStatus = 'active' | 'reference' | 'hidden' | 'flagged'
 type EntityType = 'partners' | 'staff' | 'asins' | null
-type FeedbackType = 'flag' | 'unflag' | 'hide' | 'unhide' | null
+type FeedbackType = 'flag' | 'unflag' | 'hide' | 'unhide' | 'confirm' | null
 
 interface CategoryStats {
   partner: number
@@ -192,6 +192,8 @@ export const TabCard = memo(function TabCard({
         return { Icon: EyeOff, color: 'text-muted-foreground', bg: 'bg-muted' }
       case 'unhide':
         return { Icon: Eye, color: 'text-green-500', bg: 'bg-green-500/20' }
+      case 'confirm':
+        return { Icon: Lock, color: 'text-green-500', bg: 'bg-green-500/20' }
       default:
         return null
     }
@@ -250,10 +252,13 @@ export const TabCard = memo(function TabCard({
           )}
         </AnimatePresence>
 
-        {/* Header row: entity dot + name + status icon */}
+        {/* Header row: header status dot + name + status icon */}
         <div className="flex items-center gap-2 mb-3">
-          {entity ? (
-            <div className={cn('h-2.5 w-2.5 rounded-full', entity.color)} />
+          {/* Header status indicator - matches tab bar: grey=none, orange=auto, green=confirmed */}
+          {headerConfirmed ? (
+            <div className="h-2.5 w-2.5 rounded-full bg-green-500" />
+          ) : hasHeaders ? (
+            <div className="h-2.5 w-2.5 rounded-full bg-orange-500" />
           ) : (
             <div className="h-2.5 w-2.5 rounded-full bg-muted-foreground/30" />
           )}

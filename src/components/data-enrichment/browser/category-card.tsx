@@ -39,7 +39,7 @@ export function CategoryCard({
       whileTap={comingSoon ? {} : { scale: 0.98 }}
       transition={{ duration: 0.2, ease: easeOut }}
       className={cn(
-        'relative group w-full p-8 rounded-2xl border text-left transition-all',
+        'relative group w-full p-5 md:p-8 rounded-2xl border text-left transition-all',
         'bg-card hover:shadow-lg hover:shadow-black/5',
         comingSoon
           ? 'opacity-60 cursor-not-allowed border-dashed'
@@ -49,18 +49,18 @@ export function CategoryCard({
       {/* Icon */}
       <div
         className={cn(
-          'flex h-16 w-16 items-center justify-center rounded-2xl mb-6',
+          'flex h-12 w-12 md:h-16 md:w-16 items-center justify-center rounded-xl md:rounded-2xl mb-4 md:mb-6',
           'transition-transform group-hover:scale-110',
           bgColor
         )}
         style={{ transitionDuration: '200ms' }}
       >
-        <Icon className={cn('h-8 w-8', iconColor)} />
+        <Icon className={cn('h-6 w-6 md:h-8 md:w-8', iconColor)} />
       </div>
 
       {/* Title & Description */}
-      <h3 className="text-xl font-semibold mb-2">{title}</h3>
-      <p className="text-sm text-muted-foreground mb-6 line-clamp-2">
+      <h3 className="text-lg md:text-xl font-semibold mb-1.5 md:mb-2">{title}</h3>
+      <p className="text-sm text-muted-foreground mb-4 md:mb-6 line-clamp-2">
         {description}
       </p>
 
@@ -70,20 +70,20 @@ export function CategoryCard({
           Coming Soon
         </div>
       ) : stats ? (
-        <div className="flex items-center gap-4 text-sm">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 md:gap-x-4 text-sm">
           <div className="flex items-center gap-1.5">
             <span className="font-semibold tabular-nums">{stats.sources}</span>
-            <span className="text-muted-foreground">source{stats.sources !== 1 ? 's' : ''}</span>
+            <span className="text-muted-foreground">sources</span>
           </div>
-          <div className="h-4 w-px bg-border" />
+          <div className="hidden md:block h-4 w-px bg-border" />
           <div className="flex items-center gap-1.5">
             <span className="font-semibold tabular-nums">{stats.tabs}</span>
-            <span className="text-muted-foreground">tab{stats.tabs !== 1 ? 's' : ''}</span>
+            <span className="text-muted-foreground">tabs</span>
           </div>
-          <div className="h-4 w-px bg-border" />
+          <div className="hidden md:block h-4 w-px bg-border" />
           <div className="flex items-center gap-1.5">
             <span className="font-semibold tabular-nums">{stats.fields}</span>
-            <span className="text-muted-foreground">field{stats.fields !== 1 ? 's' : ''}</span>
+            <span className="text-muted-foreground">fields</span>
           </div>
         </div>
       ) : (

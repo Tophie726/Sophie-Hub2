@@ -38,6 +38,17 @@ This is non-negotiable. The UI is a **window into the database**, not a separate
 
 Without this principle, you end up playing **whack-a-mole** - updating the UI in multiple places when data changes. The database is the single source of truth. The UI reads from it. Period.
 
+### Visual Consistency Corollary
+
+**When the same data appears in multiple places, it must look identical.**
+
+Example: The header status (`header_confirmed`, `hasHeaders`) is shown in:
+- Tab bar (SheetTabBar)
+- Grid cards (TabCard)
+- List rows (TabListRow)
+
+All three MUST show the same colored dot (grey/orange/green). When adding a new indicator to one view, immediately add it to ALL views that show that data.
+
 ### Example: Sheets Overview Stats
 
 ```
@@ -194,7 +205,7 @@ Following CLAUDE.md animation guidelines:
 
 ## CURRENT IMPLEMENTATION STATUS
 
-> **Last Updated: January 22, 2026**
+> **Last Updated: January 24, 2026**
 
 ### What's Working ✅
 
@@ -214,6 +225,8 @@ Following CLAUDE.md animation guidelines:
 14. **Auto header detection with confidence** - Intelligent header row detection with scoring (≥80% = auto-confirm UI)
 15. **Sheet Overview Dashboard** - Per-source dashboard showing all tabs with progress, grid/list view toggle
 16. **Mapping progress display** - Progress bars and category breakdown from real DB data
+17. **Enterprise API patterns** - Zod validation, standardized responses, centralized types
+18. **Role-based access control** - Admin-only access via ADMIN_EMAILS env var
 
 ### What's TODO 🚧
 
@@ -222,6 +235,22 @@ Following CLAUDE.md animation guidelines:
 3. **Run display_order migration** - Enable persisted source tab ordering
 
 ### Recently Implemented Features
+
+#### Universal Header Status Indicator ✅
+All views (tab bar, cards, list rows) now show the same header status indicator:
+
+| State | Dot Color | Meaning |
+|-------|-----------|---------|
+| No headers | Grey | No header row identified |
+| Auto-detected | Orange | System detected header, awaiting confirmation |
+| Confirmed | Green | User confirmed the header row |
+| 100% Mapped | Checkmark | All columns classified |
+
+**Progress Ring** (tab bar only): Confirmed tabs show a green ring that fills as columns are mapped.
+
+**Lock Animation**: When confirming headers, an animated lock icon (shackle closing) appears over the table.
+
+**Key Principle**: Same data = same visual. Never show entity color in one place and header status in another.
 
 #### Auto Header Detection with Confidence ✅
 Intelligent header row detection using multiple heuristics with confidence scoring:
@@ -240,6 +269,11 @@ Intelligent header row detection using multiple heuristics with confidence scori
 - User can click any row to select as header
 
 **API:** `GET /api/sheets/raw-rows` now returns `headerConfidence` (0-100) and `headerReasons` (string[])
+
+**State Update Pattern**: When user confirms header, SmartMapper:
+1. Calls `POST /api/tab-mappings/confirm-header` to save to database
+2. Calls `onHeaderConfirmed()` callback to update parent state immediately
+3. Tab bar reflects change (orange → green) without requiring page refresh
 
 **Files:**
 - `src/lib/google/sheets.ts` - `detectHeaderRow()` with `HeaderDetectionResult` type
@@ -515,15 +549,38 @@ UNIQUE(tab_mapping_id, source_column)
 |--------|----------|-------------|
 | GET | `/api/data-sources` | List all sources with stats |
 | POST | `/api/data-sources` | Create new data source |
+| POST | `/api/data-sources/reorder` | Reorder source tabs |
 | GET | `/api/sheets/search` | Search Google Drive for sheets |
 | GET | `/api/sheets/preview?id=X` | Get sheet tabs and metadata |
 | GET | `/api/sheets/raw-rows?id=X&tab=Y` | Get raw data from a tab |
 | POST | `/api/tab-mappings` | Create tab mapping (for unmapped tabs) |
 | PATCH | `/api/tab-mappings/[id]/status` | Update tab status/notes |
+| POST | `/api/tab-mappings/confirm-header` | Confirm header row detection |
 | GET | `/api/tab-mappings/draft?data_source_id=X&tab_name=Y` | Load draft state |
 | POST | `/api/tab-mappings/draft` | Save draft state |
 | DELETE | `/api/tab-mappings/draft?data_source_id=X&tab_name=Y` | Clear draft state |
+| GET | `/api/mappings/load` | Load existing column mappings |
 | POST | `/api/mappings/save` | Save column mappings (full payload) |
+
+### API Patterns
+
+All data-enrichment API routes use standardized patterns:
+
+**Input Validation**: Zod schemas from `src/lib/validations/schemas.ts`
+```typescript
+const validation = DataSourceSchema.create.safeParse(body)
+if (!validation.success) {
+  return apiValidationError(validation.error)
+}
+```
+
+**Response Helpers**: From `src/lib/api/response.ts`
+```typescript
+return apiSuccess({ source }, 201)
+return ApiErrors.forbidden('Missing permission: data-enrichment:write')
+```
+
+**Permission Checks**: All routes require `data-enrichment:read` or `data-enrichment:write` permission (admin only)
 
 ---
 
@@ -1166,6 +1223,28 @@ New formulas can be added as needed by implementing them in `src/lib/enrichment/
 - **Hover effects**: Use scale(1.005) with container padding to prevent clipping
 - **Avoid AnimatePresence** on rapidly-updating content (use opacity toggle instead)
 - **Loading states**: Always-rendered with opacity toggle, not conditional render
+
+#### No Animation on Page Load
+
+Use `initial={false}` on motion components to prevent entrance animations when the page renders. Only animate on **state changes** (e.g., header confirmed, column classified).
+
+```typescript
+// GOOD - no animation on mount, only animates when state changes
+<motion.div
+  initial={false}
+  animate={{ scale: 1, opacity: 1 }}
+  exit={{ scale: 0.8, opacity: 0 }}
+  transition={{ duration: 0.15, ease: easeOut }}
+/>
+
+// BAD - animates every mount (flickery on page load/navigation)
+<motion.div
+  initial={{ scale: 0, opacity: 0 }}
+  animate={{ scale: 1, opacity: 1 }}
+/>
+```
+
+**Why?** Initial animations feel gimmicky and slow when loading a page with many elements. Reserve animations for meaningful state transitions that provide feedback.
 
 ### Scroll Container Pattern
 

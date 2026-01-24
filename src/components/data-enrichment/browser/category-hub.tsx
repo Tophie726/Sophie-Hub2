@@ -26,8 +26,9 @@ export function CategoryHub({ onSelectCategory }: CategoryHubProps) {
       try {
         const response = await fetch('/api/data-sources')
         if (response.ok) {
-          const data = await response.json()
-          const sources = data.sources || []
+          const json = await response.json()
+          // Handle both old format and new standardized format
+          const sources = json.data?.sources || json.sources || []
           setSheetsStats({
             sources: sources.length,
             tabs: sources.reduce((sum: number, s: { tabCount: number }) => sum + s.tabCount, 0),
@@ -103,8 +104,10 @@ export function CategoryHub({ onSelectCategory }: CategoryHubProps) {
 
       {/* Quick Stats Footer */}
       {sheetsStats && sheetsStats.sources > 0 && (
-        <p className="text-center text-sm text-muted-foreground">
-          You have {sheetsStats.fields} fields mapped across {sheetsStats.tabs} tabs from {sheetsStats.sources} source{sheetsStats.sources !== 1 ? 's' : ''}
+        <p className="text-center text-sm text-muted-foreground px-4">
+          You have <span className="font-medium tabular-nums">{sheetsStats.fields}</span> fields mapped across{' '}
+          <span className="font-medium tabular-nums">{sheetsStats.tabs}</span> tabs from{' '}
+          <span className="font-medium tabular-nums">{sheetsStats.sources}</span> source{sheetsStats.sources !== 1 ? 's' : ''}
         </p>
       )}
     </motion.div>

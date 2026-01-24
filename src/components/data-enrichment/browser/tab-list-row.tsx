@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, memo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Check, Circle, EyeOff, Flag, Building2, Users, Package, Lock, Eye, ExternalLink, ChevronLeft } from 'lucide-react'
+import { EyeOff, Flag, Building2, Users, Package, Eye, ExternalLink, ChevronLeft } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Progress } from '@/components/ui/progress'
 import { Button } from '@/components/ui/button'
@@ -250,8 +250,11 @@ export const TabListRow = memo(function TabListRow({
         <div className="md:hidden space-y-2">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0 flex-1">
-              {entity ? (
-                <div className={cn('h-2.5 w-2.5 rounded-full flex-shrink-0', entity.color)} />
+              {/* Header status dot - matches tab bar: grey=none, orange=auto, green=confirmed */}
+              {headerConfirmed ? (
+                <div className="h-2.5 w-2.5 rounded-full bg-green-500 flex-shrink-0" />
+              ) : hasHeaders ? (
+                <div className="h-2.5 w-2.5 rounded-full bg-orange-500 flex-shrink-0" />
               ) : (
                 <div className="h-2.5 w-2.5 rounded-full bg-muted-foreground/30 flex-shrink-0" />
               )}
@@ -259,14 +262,17 @@ export const TabListRow = memo(function TabListRow({
               {isFlagged && <Flag className="h-3 w-3 text-amber-500 flex-shrink-0" />}
               {isHidden && <EyeOff className="h-3 w-3 text-muted-foreground flex-shrink-0" />}
             </div>
-            {headerConfirmed ? (
-              <div className="flex items-center gap-0.5 flex-shrink-0">
-                <Check className="h-4 w-4 text-green-500" />
-                <Lock className="h-3 w-3 text-green-500" />
-              </div>
-            ) : hasHeaders ? (
-              <Circle className="h-4 w-4 text-orange-500 fill-orange-500 flex-shrink-0" />
-            ) : null}
+            {/* Entity badge if mapped */}
+            {entity && (
+              <span className={cn(
+                'text-[10px] font-medium px-1.5 py-0.5 rounded flex-shrink-0',
+                primaryEntity === 'partners' && 'bg-blue-500/10 text-blue-600',
+                primaryEntity === 'staff' && 'bg-green-500/10 text-green-600',
+                primaryEntity === 'asins' && 'bg-orange-500/10 text-orange-600'
+              )}>
+                {entity.label}
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
@@ -301,8 +307,11 @@ export const TabListRow = memo(function TabListRow({
 
         {/* Desktop Layout */}
         <div className="hidden md:flex items-center gap-2 min-w-0">
-          {entity ? (
-            <div className={cn('h-2.5 w-2.5 rounded-full flex-shrink-0', entity.color)} />
+          {/* Header status dot - matches tab bar: grey=none, orange=auto, green=confirmed */}
+          {headerConfirmed ? (
+            <div className="h-2.5 w-2.5 rounded-full bg-green-500 flex-shrink-0" />
+          ) : hasHeaders ? (
+            <div className="h-2.5 w-2.5 rounded-full bg-orange-500 flex-shrink-0" />
           ) : (
             <div className="h-2.5 w-2.5 rounded-full bg-muted-foreground/30 flex-shrink-0" />
           )}
@@ -313,12 +322,9 @@ export const TabListRow = memo(function TabListRow({
 
         <div className="hidden md:flex items-center justify-center">
           {headerConfirmed ? (
-            <div className="flex items-center gap-0.5">
-              <Check className="h-4 w-4 text-green-500" />
-              <Lock className="h-3 w-3 text-green-500" />
-            </div>
+            <span className="text-xs text-green-600 font-medium">Confirmed</span>
           ) : hasHeaders ? (
-            <Circle className="h-4 w-4 text-orange-500 fill-orange-500" />
+            <span className="text-xs text-orange-600 font-medium">Auto</span>
           ) : (
             <span className="text-muted-foreground/50">–</span>
           )}

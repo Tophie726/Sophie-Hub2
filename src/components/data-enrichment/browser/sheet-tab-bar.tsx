@@ -1,9 +1,8 @@
 'use client'
 
-import { useRef, useEffect, useState } from 'react'
-import { motion } from 'framer-motion'
+import { useRef, useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Table,
   Check,
   Flag,
   EyeOff,
@@ -42,6 +41,9 @@ interface SheetTab {
   primaryEntity?: 'partners' | 'staff' | 'asins' | null
   status?: TabStatus
   notes?: string | null
+  headerConfirmed?: boolean
+  hasHeaders?: boolean  // Auto-detected but not yet confirmed
+  mappingProgress?: number  // 0-100 percentage for progress ring
 }
 
 interface SheetTabBarProps {
@@ -56,12 +58,6 @@ const easeOut: [number, number, number, number] = [0.22, 1, 0.36, 1]
 // Special tab ID for the Overview dashboard
 export const OVERVIEW_TAB_ID = '__overview__'
 
-const entityColors = {
-  partners: 'bg-blue-500',
-  staff: 'bg-green-500',
-  asins: 'bg-orange-500',
-}
-
 export function SheetTabBar({
   tabs,
   activeTabId,
@@ -69,8 +65,6 @@ export function SheetTabBar({
   onStatusChange,
 }: SheetTabBarProps) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const [indicatorStyle, setIndicatorStyle] = useState<{ left: number; width: number } | null>(null)
-  const [indicatorReady, setIndicatorReady] = useState(false)
   const [flagDialog, setFlagDialog] = useState<{
     open: boolean
     tabId: string | null
@@ -82,28 +76,6 @@ export function SheetTabBar({
   // Only show active and reference tabs in the tab bar
   // Flagged and hidden tabs are only accessible from Overview dashboard
   const visibleTabs = tabs.filter(t => !t.status || t.status === 'active' || t.status === 'reference')
-
-  // Update active indicator position
-  useEffect(() => {
-    if (!activeTabId || !containerRef.current) return
-
-    const activeTab = containerRef.current.querySelector(
-      `[data-tab-id="${activeTabId}"]`
-    ) as HTMLElement
-
-    if (activeTab) {
-      const newStyle = {
-        left: activeTab.offsetLeft,
-        width: activeTab.offsetWidth,
-      }
-      setIndicatorStyle(newStyle)
-      // Mark indicator ready after first measurement (skip initial animation)
-      if (!indicatorReady) {
-        // Use requestAnimationFrame to ensure paint before enabling animations
-        requestAnimationFrame(() => setIndicatorReady(true))
-      }
-    }
-  }, [activeTabId, tabs, indicatorReady])
 
   const handleStatusChange = (tabId: string, status: TabStatus, tab: SheetTab) => {
     if (status === 'flagged') {
@@ -128,6 +100,123 @@ export function SheetTabBar({
     setFlagNotes('')
   }
 
+  // Header status indicator component with progress ring
+  // Grey = no headers, Orange = auto-detected, Green = confirmed with ring, ✓ = 100% mapped
+  const HeaderStatusIndicator = ({ tab }: { tab: SheetTab }) => {
+    const progress = tab.mappingProgress || 0
+    const isConfirmed = tab.headerConfirmed
+    const hasAutoHeaders = tab.hasHeaders && !isConfirmed
+    const isComplete = progress === 100
+
+    // Ring dimensions - visible size
+    const size = 18
+    const strokeWidth = 2.5
+    const radius = (size - strokeWidth) / 2
+    const circumference = 2 * Math.PI * radius
+    const strokeDashoffset = circumference - (progress / 100) * circumference
+
+    // Determine state for animation key
+    const state = !isConfirmed && !hasAutoHeaders ? 'none' :
+                  !isConfirmed ? 'auto' :
+                  isComplete ? 'complete' : 'confirmed'
+
+    return (
+      <div className="relative flex items-center justify-center flex-shrink-0" style={{ width: size, height: size }}>
+        <AnimatePresence mode="wait">
+          {/* No headers detected - grey dot (no ring) */}
+          {state === 'none' && (
+            <motion.div
+              key="none"
+              initial={false}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.8, opacity: 0 }}
+              transition={{ duration: 0.15, ease: easeOut }}
+              className="h-2.5 w-2.5 rounded-full bg-muted-foreground/30"
+            />
+          )}
+
+          {/* Auto-detected but not confirmed - orange dot only (no ring) */}
+          {state === 'auto' && (
+            <motion.div
+              key="auto"
+              initial={false}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.8, opacity: 0 }}
+              transition={{ duration: 0.15, ease: easeOut }}
+              className="h-2.5 w-2.5 rounded-full bg-orange-500"
+            />
+          )}
+
+          {/* Confirmed - green dot with progress ring */}
+          {state === 'confirmed' && (
+            <motion.div
+              key="confirmed"
+              initial={false}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.8, opacity: 0 }}
+              transition={{ duration: 0.2, ease: easeOut }}
+              className="relative flex items-center justify-center"
+              style={{ width: size, height: size }}
+            >
+              {/* Progress ring - always shows background for confirmed tabs */}
+              <svg
+                className="absolute"
+                width={size}
+                height={size}
+                style={{ transform: 'rotate(-90deg)' }}
+              >
+                {/* Background ring (full circle, always visible) */}
+                <circle
+                  cx={size / 2}
+                  cy={size / 2}
+                  r={radius}
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={strokeWidth}
+                  className="text-green-200"
+                />
+                {/* Progress ring (partial, animated) - only animates on change */}
+                {progress > 0 && (
+                  <motion.circle
+                    cx={size / 2}
+                    cy={size / 2}
+                    r={radius}
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={strokeWidth}
+                    strokeLinecap="round"
+                    className="text-green-500"
+                    initial={false}
+                    animate={{ strokeDashoffset }}
+                    transition={{ duration: 0.4, ease: easeOut }}
+                    style={{
+                      strokeDasharray: circumference,
+                    }}
+                  />
+                )}
+              </svg>
+              {/* Green center dot */}
+              <div className="absolute h-2 w-2 rounded-full bg-green-500" />
+            </motion.div>
+          )}
+
+          {/* 100% complete - show checkmark */}
+          {state === 'complete' && (
+            <motion.div
+              key="complete"
+              initial={false}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.8, opacity: 0 }}
+              transition={{ duration: 0.15, ease: easeOut }}
+            >
+              <Check className="h-4 w-4 text-green-500" />
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    )
+  }
+
   // Tab button component to avoid duplication
   const TabButton = ({ tab }: { tab: SheetTab }) => {
     const isActive = tab.id === activeTabId
@@ -146,43 +235,57 @@ export function SheetTabBar({
           whileTap={{ scale: 0.98 }}
           transition={{ duration: 0.15, ease: easeOut }}
           className={cn(
-            'relative flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-colors',
+            'relative flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all',
             isActive
-              ? 'bg-background shadow-sm text-foreground'
+              ? 'bg-background shadow-md text-foreground ring-2 ring-primary/20'
               : 'text-muted-foreground hover:text-foreground hover:bg-background/50',
             isReference && 'opacity-70',
             isHidden && 'opacity-40 border border-dashed'
           )}
         >
-          {/* Flagged indicator */}
+          {/* Flagged indicator - animated */}
           {isFlagged && (
-            <Flag className="h-3 w-3 flex-shrink-0 text-amber-500" />
+            <motion.div
+              initial={{ scale: 0, rotate: -20 }}
+              animate={{ scale: 1, rotate: 0 }}
+              transition={{
+                type: 'spring',
+                stiffness: 500,
+                damping: 25,
+              }}
+              className="flex items-center"
+            >
+              <Flag className="h-3 w-3 flex-shrink-0 text-amber-500" />
+            </motion.div>
           )}
 
-          {/* Entity indicator dot */}
-          {!isFlagged && tab.primaryEntity && (
-            <div className={cn(
-              'h-2 w-2 rounded-full flex-shrink-0',
-              entityColors[tab.primaryEntity]
-            )} />
-          )}
-
-          {/* Tab icon for non-entity tabs */}
-          {!isFlagged && !tab.primaryEntity && (
-            <Table className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
+          {/* Header status indicator (replaces entity dot) - orange=auto, green=confirmed with progress ring */}
+          {!isFlagged && (
+            <HeaderStatusIndicator tab={tab} />
           )}
 
           {/* Tab name */}
-          <span className="truncate max-w-[120px]">{tab.name}</span>
-
-          {/* Mapped indicator */}
-          {tab.isMapped && !isFlagged && (
-            <Check className="h-3 w-3 flex-shrink-0 text-green-500" />
-          )}
+          <span className="truncate max-w-[80px] md:max-w-[120px]">{tab.name}</span>
 
           {/* Reference badge */}
           {isReference && (
             <BookOpen className="h-3 w-3 flex-shrink-0 text-blue-500" />
+          )}
+
+          {/* Hidden indicator - animated */}
+          {isHidden && (
+            <motion.div
+              initial={{ scale: 0, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{
+                type: 'spring',
+                stiffness: 500,
+                damping: 25,
+              }}
+              className="flex items-center"
+            >
+              <EyeOff className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
+            </motion.div>
           )}
         </motion.button>
 
@@ -276,7 +379,7 @@ export function SheetTabBar({
 
   return (
     <>
-      <div className="relative bg-muted/20 px-4">
+      <div className="bg-muted/20 px-4">
         {/* Main Tab Container - scrolls horizontally on overflow */}
         <div
           ref={containerRef}
@@ -292,9 +395,9 @@ export function SheetTabBar({
             whileTap={{ scale: 0.98 }}
             transition={{ duration: 0.15, ease: easeOut }}
             className={cn(
-              'relative flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-colors',
+              'relative flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all',
               isOverviewActive
-                ? 'bg-background shadow-sm text-foreground'
+                ? 'bg-background shadow-md text-foreground ring-2 ring-primary/20'
                 : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
             )}
           >
@@ -310,20 +413,6 @@ export function SheetTabBar({
           ))}
           </div>
         </div>
-
-        {/* Active Tab Indicator - subtle underline */}
-        {indicatorStyle && activeTabId && (isOverviewActive || visibleTabs.some(t => t.id === activeTabId)) && (
-          <motion.div
-            initial={false}
-            animate={{
-              left: indicatorStyle.left,
-              width: indicatorStyle.width,
-              opacity: 1,
-            }}
-            transition={indicatorReady ? { duration: 0.2, ease: easeOut } : { duration: 0 }}
-            className="absolute bottom-0 h-0.5 bg-primary/50 rounded-full"
-          />
-        )}
       </div>
 
       {/* Flag Dialog */}

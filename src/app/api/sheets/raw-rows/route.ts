@@ -14,6 +14,14 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    // Check if token refresh failed - user needs to re-authenticate
+    if (session.error === 'RefreshAccessTokenError') {
+      return NextResponse.json(
+        { error: 'Session expired. Please sign out and sign back in.' },
+        { status: 401 }
+      )
+    }
+
     const searchParams = request.nextUrl.searchParams
     const spreadsheetId = searchParams.get('id')
     const tabName = searchParams.get('tab')

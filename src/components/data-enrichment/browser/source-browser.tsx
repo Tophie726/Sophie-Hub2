@@ -93,8 +93,9 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
       try {
         const response = await fetch('/api/data-sources')
         if (response.ok) {
-          const data = await response.json()
-          const fetchedSources = data.sources || []
+          const json = await response.json()
+          // Handle both old format (data.sources) and new standardized format (data.data.sources)
+          const fetchedSources = json.data?.sources || json.sources || []
           setSources(fetchedSources)
 
           // Use initialSourceId if provided, otherwise auto-select first
@@ -157,6 +158,14 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
   const activeSource = sources.find(s => s.id === activeSourceId)
   const activePreview = activeSourceId ? sheetPreviews[activeSourceId] : null
 
+  // Helper to calculate mapping progress from category stats
+  const calculateMappingProgress = (stats?: CategoryStats): number => {
+    if (!stats) return 0
+    const mapped = stats.partner + stats.staff + stats.asin + stats.weekly + stats.computed + stats.skip
+    const total = mapped + stats.unmapped
+    return total > 0 ? Math.round((mapped / total) * 100) : 0
+  }
+
   // Build tabs list for the active source
   // Merge database tabs with preview tabs - database tabs take precedence
   const sheetTabs = (() => {
@@ -168,6 +177,9 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
       primaryEntity: t.primary_entity,
       status: t.status || 'active',
       notes: t.notes,
+      headerConfirmed: t.header_confirmed || false,
+      hasHeaders: t.header_row >= 0,
+      mappingProgress: calculateMappingProgress(t.categoryStats),
     }))
 
     const previewTabs = (activePreview?.tabs || []).map(t => ({
@@ -179,6 +191,9 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
       primaryEntity: null as 'partners' | 'staff' | 'asins' | null,
       status: 'active' as const,
       notes: null as string | null,
+      headerConfirmed: false,
+      hasHeaders: false,
+      mappingProgress: 0,
     }))
 
     // If no preview tabs, just return db tabs
@@ -406,6 +421,23 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
     setActiveTabId(tabId)
   }
 
+  // Handle header confirmation - update local state to reflect confirmed header
+  const handleHeaderConfirmed = () => {
+    if (!activeSource || !activeTabId) return
+
+    // Update the sources state to mark this tab's header as confirmed
+    setSources(prev => prev.map(source => {
+      if (source.id !== activeSource.id) return source
+      return {
+        ...source,
+        tabs: source.tabs?.map(tab => {
+          if (tab.id !== activeTabId && tab.tab_name !== activeTab?.name) return tab
+          return { ...tab, header_confirmed: true }
+        })
+      }
+    }))
+  }
+
   // Handle mapping completion for a tab
   const handleMappingComplete = async (mappings: {
     headerRow: number
@@ -503,8 +535,8 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
         // Refresh sources to get updated mapping data
         const sourcesResponse = await fetch('/api/data-sources')
         if (sourcesResponse.ok) {
-          const data = await sourcesResponse.json()
-          setSources(data.sources || [])
+          const json = await sourcesResponse.json()
+          setSources(json.data?.sources || json.sources || [])
 
           // Update activeTabId to the new tab mapping ID if available
           if (result.tab_mapping_id) {
@@ -796,7 +828,7 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
               onViewModeChange={setDashboardViewMode}
             />
           </motion.div>
-        ) : activeSourceId && activeTabId && activeTab ? (
+        ) : activeSourceId && activeTabId && activeTab && (activeSource?.spreadsheet_id || activePreview) ? (
           <motion.div
             key={`${activeSourceId}-${activeTabId}`}
             initial={{ opacity: 0, y: 10 }}
@@ -806,14 +838,26 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
             className="p-4"
           >
             <SmartMapper
-              spreadsheetId={activeSource?.spreadsheet_id || activeSourceId.replace('temp-', '')}
+              spreadsheetId={activeSource?.spreadsheet_id || activePreview?.spreadsheetId || ''}
               sheetName={activeSource?.name || activePreview?.title || ''}
               tabName={activeTab.name}
               dataSourceId={activeSource?.id}
               onComplete={handleMappingComplete}
               onBack={() => setActiveTabId(OVERVIEW_TAB_ID)}
+              onHeaderConfirmed={handleHeaderConfirmed}
               embedded
             />
+          </motion.div>
+        ) : activeSourceId && activeTabId && activeTab && !activeSource?.spreadsheet_id && !activePreview ? (
+          /* Loading state - waiting for source data */
+          <motion.div
+            key="loading-source"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="flex items-center justify-center py-32"
+          >
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </motion.div>
         ) : activeSourceId && sheetTabs.length === 0 ? (
           <motion.div

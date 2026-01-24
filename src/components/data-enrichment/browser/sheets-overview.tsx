@@ -188,8 +188,9 @@ export function SheetsOverview({ onBack, onSelectSource, onAddSource }: SheetsOv
       try {
         const response = await fetch('/api/data-sources')
         if (response.ok) {
-          const data = await response.json()
-          setSources(data.sources || [])
+          const json = await response.json()
+          // Handle both old format and new standardized format
+          setSources(json.data?.sources || json.sources || [])
         }
       } catch (error) {
         console.error('Error fetching sources:', error)
