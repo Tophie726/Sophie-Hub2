@@ -183,6 +183,7 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
       status: t.status || 'active',
       notes: t.notes,
       headerConfirmed: t.header_confirmed || false,
+      headerRow: t.header_row,
       hasHeaders: t.header_row >= 0,
       mappingProgress: calculateMappingProgress(t.categoryStats),
     }))
@@ -197,6 +198,7 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
       status: 'active' as const,
       notes: null as string | null,
       headerConfirmed: false,
+      headerRow: undefined as number | undefined,
       hasHeaders: false,
       mappingProgress: 0,
     }))
@@ -850,6 +852,8 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
               onComplete={handleMappingComplete}
               onBack={() => setActiveTabId(OVERVIEW_TAB_ID)}
               onHeaderConfirmed={handleHeaderConfirmed}
+              headerAlreadyConfirmed={activeTab.headerConfirmed}
+              confirmedHeaderRow={activeTab.headerRow}
               embedded
             />
           </motion.div>

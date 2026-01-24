@@ -174,6 +174,10 @@ interface SmartMapperProps {
   onHeaderConfirmed?: () => void
   /** When true, renders in a more compact mode for embedding in browser shell */
   embedded?: boolean
+  /** If header was already confirmed, skip directly to classify phase */
+  headerAlreadyConfirmed?: boolean
+  /** The confirmed header row from database (used when headerAlreadyConfirmed is true) */
+  confirmedHeaderRow?: number
 }
 
 // Field definitions per entity type
@@ -235,9 +239,10 @@ interface DraftState {
   timestamp: number
 }
 
-export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, onComplete, onBack, onHeaderConfirmed, embedded = false }: SmartMapperProps) {
+export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, onComplete, onBack, onHeaderConfirmed, embedded = false, headerAlreadyConfirmed = false, confirmedHeaderRow }: SmartMapperProps) {
   // Simplified: just preview → classify → map
-  const [phase, setPhase] = useState<'preview' | 'classify' | 'map'>('preview')
+  // If header already confirmed, skip preview phase
+  const [phase, setPhase] = useState<'preview' | 'classify' | 'map'>(headerAlreadyConfirmed ? 'classify' : 'preview')
   const [isLoading, setIsLoading] = useState(true)
   const [rawData, setRawData] = useState<TabRawData | null>(null)
   const [headerRow, setHeaderRow] = useState(0)
@@ -330,9 +335,8 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
             // Only restore if draft is less than 7 days old
             const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
             if (data.draft.timestamp > sevenDaysAgo) {
-              // Always start at preview phase so user can confirm header selection
-              // but restore headerRow and columns so progress isn't lost
-              setPhase('preview')
+              // If header already confirmed, go to classify; otherwise preview
+              setPhase(headerAlreadyConfirmed ? 'classify' : 'preview')
               setHeaderRow(data.draft.headerRow)
               setInitialHeaderRow(data.draft.headerRow) // Track for unsaved changes
               setColumns(data.draft.columns)
@@ -353,8 +357,8 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
           // Only restore if draft is less than 7 days old
           const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
           if (draft.timestamp > sevenDaysAgo && draft.columns.length > 0) {
-            // Always start at preview phase so user can confirm header selection
-            setPhase('preview')
+            // If header already confirmed, go to classify; otherwise preview
+            setPhase(headerAlreadyConfirmed ? 'classify' : 'preview')
             setHeaderRow(draft.headerRow)
             setInitialHeaderRow(draft.headerRow) // Track for unsaved changes
             setColumns(draft.columns)
@@ -451,8 +455,10 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
         const data = await response.json()
         if (response.ok) {
           setRawData(data)
-          setHeaderRow(data.detectedHeaderRow)
-          setInitialHeaderRow(data.detectedHeaderRow) // Track initial for unsaved changes detection
+          // Use confirmed header row if available, otherwise use detected
+          const effectiveHeaderRow = confirmedHeaderRow !== undefined ? confirmedHeaderRow : data.detectedHeaderRow
+          setHeaderRow(effectiveHeaderRow)
+          setInitialHeaderRow(effectiveHeaderRow) // Track initial for unsaved changes detection
         } else if (response.status === 401) {
           setLoadError('Sign in required to access Google Sheets data')
         } else {
@@ -466,7 +472,7 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
       }
     }
     loadData()
-  }, [spreadsheetId, tabName])
+  }, [spreadsheetId, tabName, confirmedHeaderRow])
 
   // Track the last headerRow we initialized columns for (to detect user changes)
   const lastInitializedHeaderRow = useRef<number | null>(null)
