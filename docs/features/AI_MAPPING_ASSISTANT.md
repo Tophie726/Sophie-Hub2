@@ -430,11 +430,14 @@ const AI_LIMITS = {
 
 ## Implementation Phases
 
-### Phase 6.1: Foundation
-- [ ] MappingAssistantSDK class
-- [ ] API route: /api/ai/suggest-mapping
-- [ ] Environment: ANTHROPIC_API_KEY
-- [ ] Rate limiting middleware
+### Phase 6.1: Foundation ✅ COMPLETE
+- [x] MappingAssistantSDK class (`src/lib/ai/mapping-sdk.ts`)
+- [x] API route: /api/ai/suggest-mapping
+- [x] API route: /api/ai/suggest-all
+- [x] Environment: ANTHROPIC_API_KEY
+- [x] Rate limiting (20/min single, 5/hr bulk)
+- [x] Audit logging integration
+- [x] Learn from existing mappings (loads patterns from DB)
 
 ### Phase 6.2: Column-Level UI
 - [ ] Sparkle button per column

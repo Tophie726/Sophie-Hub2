@@ -27,8 +27,8 @@
 | No Connector Registry/Interface | `src/lib/connectors/` | [x] DONE |
 | No connector config storage | `data_sources.connection_config` | [x] DONE |
 | Monolithic search modal | `sheet-search-modal.tsx` | [ ] TODO |
-| No audit logging | N/A | [ ] TODO |
-| No rate limiting | API routes | [ ] TODO |
+| No audit logging | N/A | [x] DONE |
+| No rate limiting | API routes | [x] DONE |
 
 ---
 
@@ -189,7 +189,7 @@ const animations = {
 
 ### 3.1 Audit Logging
 
-- [ ] Create `mapping_audit_log` table
+- [x] Create `mapping_audit_log` table
   ```sql
   CREATE TABLE mapping_audit_log (
     id UUID PRIMARY KEY,
@@ -206,8 +206,8 @@ const animations = {
   );
   ```
 
-- [ ] Add audit triggers or API-level logging
-- [ ] Create audit log viewer in admin UI
+- [x] Add audit triggers or API-level logging
+- [x] Create audit log API endpoint (`/api/audit`)
 
 ### 3.2 Credential Storage
 
@@ -221,9 +221,9 @@ const animations = {
 
 ### 3.3 Rate Limiting
 
-- [ ] Add rate limiting middleware to data-enrichment APIs
-- [ ] Per-user limits for expensive operations (sync, preview)
-- [ ] Global limits to protect external APIs
+- [x] Add rate limiting middleware to data-enrichment APIs
+- [x] Per-user limits for expensive operations (sync, preview)
+- [x] Global limits to protect external APIs (GOOGLE_SHEETS preset)
 
 ### 3.4 Input Validation Hardening
 
@@ -644,10 +644,10 @@ const duration = {
 - [ ] Visual data map design (future)
 
 ### Phase 3 Progress
-- [ ] Audit logging implemented
-- [ ] Credential storage secured
-- [ ] Rate limiting added
-- [ ] Validation hardened
+- [x] Audit logging implemented (`src/lib/audit/index.ts`)
+- [ ] Credential storage (deferred - Phase 4 connectors)
+- [x] Rate limiting added (`src/lib/rate-limit/index.ts`)
+- [x] Validation hardened (Zod schemas for all inputs)
 
 ### Phase 4 Progress
 - [ ] Close.io connector
@@ -664,10 +664,16 @@ const duration = {
 - [ ] Template: Campaign Structure
 
 ### Phase 6 Progress (AI-Assisted)
-- [ ] Claude API integration design
-- [ ] API key management
-- [ ] Mapping suggestion endpoint
-- [ ] UI: AI assistant panel
+- [x] Claude API integration design (Tool-use pattern)
+- [x] API key management (env var ANTHROPIC_API_KEY)
+- [x] Mapping suggestion endpoint (`/api/ai/suggest-mapping`)
+- [x] Bulk suggestion endpoint (`/api/ai/suggest-all`)
+- [x] MappingAssistantSDK class (`src/lib/ai/mapping-sdk.ts`)
+- [x] Rate limiting (20/min single, 5/hr bulk)
+- [x] Audit logging integration
+- [ ] UI: Sparkle button per column (Phase 6.2)
+- [ ] UI: Suggestion popover (Phase 6.2)
+- [ ] UI: "AI Suggest All" button (Phase 6.3)
 
 ---
 
@@ -713,6 +719,14 @@ const duration = {
 ### Security
 - `src/lib/auth/api-auth.ts` - Auth middleware
 - `src/lib/auth/roles.ts` - RBAC definitions
+- `src/lib/audit/index.ts` - Audit logging service
+- `src/lib/rate-limit/index.ts` - Rate limiting service
+
+### AI Mapping Assistant
+- `src/lib/ai/index.ts` - Module exports
+- `src/lib/ai/mapping-sdk.ts` - MappingAssistantSDK (Claude tool-use)
+- `src/app/api/ai/suggest-mapping/route.ts` - Single column suggestion
+- `src/app/api/ai/suggest-all/route.ts` - Bulk suggestions
 
 ### Feature Docs
 - `docs/features/AI_MAPPING_ASSISTANT.md` - AI mapping co-pilot design
@@ -720,5 +734,5 @@ const duration = {
 
 ---
 
-*Last updated: 2026-01-24 (Sync Engine Implementation)*
+*Last updated: 2026-01-24 (Phase 6.1 AI SDK Complete)*
 *Architecture audit by Claude Opus 4.5*

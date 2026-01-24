@@ -1,13 +1,13 @@
 # Data Enrichment Progress Tracker
 
 > Tracking the implementation of Sophie Hub's data enrichment system.
-> Last updated: 2026-01-24 (Phase 3 Security Complete)
+> Last updated: 2026-01-24 (Phase 6.1 AI SDK Complete)
 
 ---
 
-## Current Phase: Phase 3 - Security Hardening (Complete)
+## Current Phase: Phase 6.1 - AI Mapping Assistant SDK (Complete)
 
-### Status: Audit Logging + Rate Limiting Done, Ready for Phase 4
+### Status: SDK + API Routes Done, Ready for UI Integration
 
 ---
 
@@ -161,7 +161,51 @@ In-app AI co-pilot for column mapping at multiple granularity levels.
 
 **Full Design:** See `docs/features/AI_MAPPING_ASSISTANT.md`
 
-**Status:** Design complete, implementation pending
+**Implementation Status:**
+| Component | Status | Notes |
+|-----------|--------|-------|
+| MappingAssistantSDK | Done | `src/lib/ai/mapping-sdk.ts` |
+| POST /api/ai/suggest-mapping | Done | Single column suggestion |
+| POST /api/ai/suggest-all | Done | Bulk suggestions with stats |
+| Rate limiting | Done | 20/min single, 5/hr bulk |
+| Audit logging | Done | Integrated with audit service |
+| Sparkle button UI | Pending | Phase 6.2 |
+| Suggestion popover | Pending | Phase 6.2 |
+| "AI Suggest All" button | Pending | Phase 6.3 |
+
+---
+
+## Phase 6: AI-Assisted Mapping
+
+### 6.1 SDK Foundation: Complete
+
+| Task | Status | Date | Notes |
+|------|--------|------|-------|
+| MappingAssistantSDK class | Done | 2026-01-24 | `src/lib/ai/mapping-sdk.ts` |
+| Anthropic SDK integration | Done | 2026-01-24 | Tool-use pattern for structured responses |
+| Module exports | Done | 2026-01-24 | `src/lib/ai/index.ts` |
+| POST /api/ai/suggest-mapping | Done | 2026-01-24 | Single column AI suggestion |
+| POST /api/ai/suggest-all | Done | 2026-01-24 | Bulk suggestions with stats |
+| Rate limiting integration | Done | 2026-01-24 | 20 single/min, 5 bulk/hr |
+| Audit logging integration | Done | 2026-01-24 | All suggestions logged |
+| Learn from existing mappings | Done | 2026-01-24 | Loads patterns from DB |
+
+### 6.2 Column-Level UI: Pending
+
+| Task | Status | Priority | Notes |
+|------|--------|----------|-------|
+| Sparkle button per column | Pending | HIGH | In ColumnMappingRow |
+| Suggestion popover | Pending | HIGH | Shows category, target, confidence |
+| Accept/reject UI | Pending | HIGH | One-click apply |
+| Loading state | Pending | MEDIUM | Subtle spinner |
+
+### 6.3 Tab-Level UI: Pending
+
+| Task | Status | Priority | Notes |
+|------|--------|----------|-------|
+| "AI Suggest All" button | Pending | MEDIUM | Tab header action |
+| Progress indicator | Pending | MEDIUM | Shows columns processed |
+| Bulk review dialog | Pending | MEDIUM | Review all suggestions at once |
 
 ---
 
@@ -206,6 +250,12 @@ In-app AI co-pilot for column mapping at multiple granularity levels.
 ### Rate Limiting
 - `src/lib/rate-limit/index.ts` - RateLimiter with sliding window algorithm
 
+### AI Mapping Assistant
+- `src/lib/ai/index.ts` - Module exports
+- `src/lib/ai/mapping-sdk.ts` - MappingAssistantSDK with Claude tool-use
+- `src/app/api/ai/suggest-mapping/route.ts` - Single column suggestion
+- `src/app/api/ai/suggest-all/route.ts` - Bulk suggestions
+
 ### Database Migrations
 - `supabase/migrations/20260124_connector_config.sql` - Connection config backfill
 - `supabase/migrations/20260124_field_lineage.sql` - Field lineage tracking
@@ -239,8 +289,10 @@ In-app AI co-pilot for column mapping at multiple granularity levels.
 2. [x] Audit logging system - DONE
 3. [x] Rate limiting - DONE
 4. [ ] Apply audit_log migration via Supabase dashboard
-5. [ ] AI-assisted mapping implementation (design complete in `docs/features/AI_MAPPING_ASSISTANT.md`)
-6. [ ] Nested sheet extraction UX design
+5. [x] AI SDK implementation (Phase 6.1) - DONE
+6. [ ] AI sparkle button + suggestion popover (Phase 6.2)
+7. [ ] AI "Suggest All" button + bulk review (Phase 6.3)
+8. [ ] Nested sheet extraction UX design (Phase 5)
 
 ---
 
