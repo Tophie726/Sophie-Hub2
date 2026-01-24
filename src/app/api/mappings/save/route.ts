@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { getAdminClient } from '@/lib/supabase/admin'
 import { requirePermission } from '@/lib/auth/api-auth'
 import {
   SaveMappingRequest,
@@ -7,11 +7,8 @@ import {
   DEFAULT_WEEKLY_PATTERN,
 } from '@/types/enrichment'
 
-// Initialize Supabase client
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+// Use singleton Supabase client
+const supabase = getAdminClient()
 
 // POST - Save field mappings (admin only)
 export async function POST(request: NextRequest) {

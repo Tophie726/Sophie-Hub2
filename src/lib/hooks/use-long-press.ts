@@ -27,7 +27,7 @@ export function useLongPress({ threshold = 500, onLongPress, onPress }: LongPres
     }, threshold)
   }, [onLongPress, threshold])
 
-  const cancel = useCallback((e: React.TouchEvent | React.MouseEvent) => {
+  const cancel = useCallback(() => {
     if (timerRef.current) {
       clearTimeout(timerRef.current)
       timerRef.current = null

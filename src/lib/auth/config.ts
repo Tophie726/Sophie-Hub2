@@ -1,8 +1,9 @@
 import { NextAuthOptions } from 'next-auth'
+import { JWT } from 'next-auth/jwt'
 import GoogleProvider from 'next-auth/providers/google'
 
 // Helper to refresh the access token
-async function refreshAccessToken(token: any) {
+async function refreshAccessToken(token: JWT) {
   try {
     const response = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
@@ -36,7 +37,9 @@ async function refreshAccessToken(token: any) {
   }
 }
 
-export const authOptions: NextAuthOptions = {
+// Use type assertion for trustHost - NextAuth 4 accepts this at runtime
+// even though it's not in the TypeScript types
+export const authOptions = {
   // Trust the host header - allows both localhost and Tailscale to work
   // NextAuth will auto-detect the callback URL from the request
   trustHost: true,
@@ -110,7 +113,7 @@ export const authOptions: NextAuthOptions = {
   session: {
     strategy: 'jwt',
   },
-}
+} satisfies NextAuthOptions & { trustHost?: boolean }
 
 // Extend the built-in session types
 declare module 'next-auth' {

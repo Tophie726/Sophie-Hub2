@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, memo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Check, Circle, EyeOff, Flag, Building2, Users, Package, Lock, Eye, ExternalLink, ChevronLeft } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -89,7 +89,7 @@ function calculateProgress(stats: CategoryStats): number {
   return Math.round((mapped / total) * 100)
 }
 
-export function TabCard({
+export const TabCard = memo(function TabCard({
   name,
   primaryEntity,
   status,
@@ -530,4 +530,4 @@ export function TabCard({
       </AnimatePresence>
     </>
   )
-}
+})

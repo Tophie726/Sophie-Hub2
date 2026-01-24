@@ -29,7 +29,19 @@ import {
 } from 'lucide-react'
 import { useMobileMenu } from './mobile-menu-context'
 
-const navigation = [
+interface NavItem {
+  name: string
+  href: string
+  icon: typeof LayoutDashboard
+  highlight?: boolean
+}
+
+interface NavSection {
+  title: string
+  items: NavItem[]
+}
+
+const navigation: NavSection[] = [
   {
     title: 'Overview',
     items: [

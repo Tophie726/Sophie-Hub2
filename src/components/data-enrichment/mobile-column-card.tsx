@@ -192,7 +192,7 @@ export function MobileColumnCard({
             )}
           >
             <SelectValue placeholder="Select category...">
-              {config ? (
+              {config && Icon ? (
                 <span className="flex items-center gap-2">
                   <Icon className={cn(
                     'h-4 w-4',

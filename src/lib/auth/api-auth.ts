@@ -41,7 +41,7 @@ export type AuthResult = AuthSuccess | AuthFailure
  */
 function mapRoleToAccessLevel(staffRole: string | null, email: string): Role {
   // Hardcoded admin emails (until you add access_level to DB)
-  const adminEmails = [
+  const adminEmails: string[] = [
     // Add admin emails here
   ]
 
@@ -80,7 +80,7 @@ export async function requireAuth(): Promise<AuthResult> {
   }
 
   // Look up user in staff table
-  const { data: staffUser, error } = await supabase
+  const { data: staffUser } = await supabase
     .from('staff')
     .select('id, full_name, email, role')
     .eq('email', session.user.email)

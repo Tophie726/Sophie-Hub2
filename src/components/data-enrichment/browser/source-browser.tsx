@@ -142,13 +142,9 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
 
         // Only auto-select if no tab is currently selected
         // (DB tabs are already selected in fetchSources if available)
-        setActiveTabId(current => {
-          if (current) return current // Don't override existing selection
-          if (preview.tabs.length > 0) {
-            return String(preview.tabs[0].sheetId)
-          }
-          return current
-        })
+        if (!activeTabId && preview.tabs.length > 0) {
+          setActiveTabId(String(preview.tabs[0].sheetId))
+        }
       }
     } catch (error) {
       console.error('Error loading preview:', error)
@@ -309,13 +305,11 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
   }
 
   const handleSelectSheet = async (sheet: { id: string; name: string; url: string }) => {
-    console.log('handleSelectSheet called with:', sheet.name)
     setShowSearchModal(false)
     setIsLoadingPreview(true)
 
     try {
       // First, save the data source to the database
-      console.log('Creating data source...')
       const createResponse = await fetch('/api/data-sources', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -331,11 +325,9 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
       if (createResponse.status === 409) {
         // Already exists - use existing ID
         const data = await createResponse.json()
-        console.log('Source already exists, using ID:', data.existingId)
         sourceId = data.existingId
       } else if (createResponse.ok) {
         const data = await createResponse.json()
-        console.log('Source created with ID:', data.source.id)
         sourceId = data.source.id
       } else {
         const errorData = await createResponse.json()
@@ -345,12 +337,10 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
       }
 
       // Now fetch the preview
-      console.log('Fetching preview for spreadsheet:', sheet.id)
       const previewResponse = await fetch(`/api/sheets/preview?id=${sheet.id}`)
       if (previewResponse.ok) {
         const data = await previewResponse.json()
         const preview = data.preview as SheetPreview
-        console.log('Preview loaded, tabs:', preview.tabs.length)
 
         // Store preview
         setSheetPreviews(prev => ({
@@ -501,8 +491,6 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
           })),
       }
 
-      console.log('Saving mappings:', savePayload)
-
       const response = await fetch('/api/mappings/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -511,7 +499,6 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
 
       if (response.ok) {
         const result = await response.json()
-        console.log('Mappings saved:', result)
 
         // Refresh sources to get updated mapping data
         const sourcesResponse = await fetch('/api/data-sources')

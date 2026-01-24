@@ -61,7 +61,7 @@ export async function searchSheets(accessToken: string, query: string): Promise<
     name: file.name!,
     url: file.webViewLink!,
     modifiedTime: file.modifiedTime!,
-    owner: file.owners?.[0]?.displayName,
+    owner: file.owners?.[0]?.displayName ?? undefined,
   }))
 }
 

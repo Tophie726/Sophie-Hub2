@@ -1,12 +1,9 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { getAdminClient } from '@/lib/supabase/admin'
 import { requirePermission } from '@/lib/auth/api-auth'
 
-// Initialize Supabase client
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+// Use singleton Supabase client
+const supabase = getAdminClient()
 
 export interface CategoryStats {
   partner: number
@@ -106,15 +103,15 @@ export async function POST(request: Request) {
 }
 
 // GET - Fetch all data sources with stats (admin only)
+// Optimized: Uses 3 queries total instead of N+1 pattern (was 1 + N + N*M queries)
 export async function GET() {
   const auth = await requirePermission('data-enrichment:read')
   if (!auth.authenticated) return auth.response
 
   try {
-    // Fetch all data sources, ordered by display_order (fallback to created_at if column doesn't exist)
+    // Query 1: Fetch all data sources
     let sources, sourcesError
 
-    // Try with display_order first
     const result = await supabase
       .from('data_sources')
       .select('*')
@@ -139,108 +136,100 @@ export async function GET() {
       return NextResponse.json({ sources: [] })
     }
 
-    // For each source, get tab mappings with column counts
-    const sourcesWithStats: DataSourceWithStats[] = await Promise.all(
-      sources.map(async (source) => {
-        // Get tab mappings (include all tabs, not just active - filter in UI)
-        const { data: tabs, error: tabsError } = await supabase
-          .from('tab_mappings')
-          .select('id, tab_name, primary_entity, header_row, header_confirmed, status, notes, updated_at')
-          .eq('data_source_id', source.id)
-          .order('tab_name')
+    const sourceIds = sources.map(s => s.id)
 
-        if (tabsError) {
-          console.error('Error fetching tabs:', tabsError)
-          return {
-            ...source,
-            tabCount: 0,
-            totalColumns: 0,
-            mappedFieldsCount: 0,
-            categoryStats: { partner: 0, staff: 0, asin: 0, weekly: 0, computed: 0, skip: 0, unmapped: 0 },
-            tabs: [],
+    // Query 2: Fetch ALL tab mappings for all sources in one query
+    const { data: allTabs, error: tabsError } = await supabase
+      .from('tab_mappings')
+      .select('id, data_source_id, tab_name, primary_entity, header_row, header_confirmed, status, notes, updated_at')
+      .in('data_source_id', sourceIds)
+      .order('tab_name')
+
+    if (tabsError) throw tabsError
+
+    const tabIds = (allTabs || []).map(t => t.id)
+
+    // Query 3: Fetch ALL column mappings for all tabs in one query
+    const { data: allColumns, error: columnsError } = tabIds.length > 0
+      ? await supabase
+          .from('column_mappings')
+          .select('tab_mapping_id, category')
+          .in('tab_mapping_id', tabIds)
+      : { data: [], error: null }
+
+    if (columnsError) throw columnsError
+
+    // Build lookup maps for O(1) access
+    const tabsBySource = new Map<string, typeof allTabs>()
+    for (const tab of allTabs || []) {
+      const existing = tabsBySource.get(tab.data_source_id) || []
+      existing.push(tab)
+      tabsBySource.set(tab.data_source_id, existing)
+    }
+
+    const columnsByTab = new Map<string, typeof allColumns>()
+    for (const col of allColumns || []) {
+      const existing = columnsByTab.get(col.tab_mapping_id) || []
+      existing.push(col)
+      columnsByTab.set(col.tab_mapping_id, existing)
+    }
+
+    // Assemble the response with stats (all in-memory, no more queries)
+    const sourcesWithStats: DataSourceWithStats[] = sources.map((source) => {
+      const tabs = tabsBySource.get(source.id) || []
+
+      let totalColumns = 0
+      let mappedFieldsCount = 0
+      const sourceCategoryStats: CategoryStats = {
+        partner: 0, staff: 0, asin: 0, weekly: 0, computed: 0, skip: 0, unmapped: 0,
+      }
+
+      const tabsWithCounts = tabs.map((tab) => {
+        const columns = columnsByTab.get(tab.id) || []
+        const tabCategoryStats: CategoryStats = {
+          partner: 0, staff: 0, asin: 0, weekly: 0, computed: 0, skip: 0, unmapped: 0,
+        }
+
+        const columnCount = columns.length
+        totalColumns += columnCount
+
+        for (const col of columns) {
+          const cat = col.category as keyof CategoryStats
+          if (cat && cat in tabCategoryStats) {
+            tabCategoryStats[cat]++
+            sourceCategoryStats[cat]++
+            if (cat !== 'skip') {
+              mappedFieldsCount++
+            }
+          } else {
+            tabCategoryStats.unmapped++
+            sourceCategoryStats.unmapped++
           }
         }
 
-        // Get column mappings with category breakdown for each tab
-        let totalColumns = 0
-        let mappedFieldsCount = 0
-        const sourceCategoryStats: CategoryStats = {
-          partner: 0,
-          staff: 0,
-          asin: 0,
-          weekly: 0,
-          computed: 0,
-          skip: 0,
-          unmapped: 0,
-        }
-
-        const tabsWithCounts = await Promise.all(
-          (tabs || []).map(async (tab) => {
-            // Get all column mappings for this tab with their categories
-            const { data: columns, error: columnsError } = await supabase
-              .from('column_mappings')
-              .select('category')
-              .eq('tab_mapping_id', tab.id)
-
-            if (columnsError) {
-              console.error('Error fetching columns:', columnsError)
-              return {
-                ...tab,
-                columnCount: 0,
-                categoryStats: { partner: 0, staff: 0, asin: 0, weekly: 0, computed: 0, skip: 0, unmapped: 0 },
-              }
-            }
-
-            // Count categories for this tab
-            const tabCategoryStats: CategoryStats = {
-              partner: 0,
-              staff: 0,
-              asin: 0,
-              weekly: 0,
-              computed: 0,
-              skip: 0,
-              unmapped: 0,
-            }
-
-            const columnCount = columns?.length || 0
-            totalColumns += columnCount
-
-            columns?.forEach((col) => {
-              const cat = col.category as keyof CategoryStats
-              if (cat && cat in tabCategoryStats) {
-                tabCategoryStats[cat]++
-                sourceCategoryStats[cat]++
-                if (cat !== 'skip') {
-                  mappedFieldsCount++
-                }
-              } else {
-                tabCategoryStats.unmapped++
-                sourceCategoryStats.unmapped++
-              }
-            })
-
-            return {
-              ...tab,
-              columnCount,
-              categoryStats: tabCategoryStats,
-              header_confirmed: tab.header_confirmed || false,
-              status: tab.status || 'active',
-              notes: tab.notes || null,
-              updated_at: tab.updated_at || null,
-            }
-          })
-        )
-
         return {
-          ...source,
-          tabCount: tabs?.length || 0,
-          totalColumns,
-          mappedFieldsCount,
-          categoryStats: sourceCategoryStats,
-          tabs: tabsWithCounts,
+          id: tab.id,
+          tab_name: tab.tab_name,
+          primary_entity: tab.primary_entity,
+          header_row: tab.header_row,
+          header_confirmed: tab.header_confirmed || false,
+          status: (tab.status || 'active') as 'active' | 'reference' | 'hidden' | 'flagged',
+          notes: tab.notes || null,
+          updated_at: tab.updated_at || null,
+          columnCount,
+          categoryStats: tabCategoryStats,
         }
       })
-    )
+
+      return {
+        ...source,
+        tabCount: tabs.length,
+        totalColumns,
+        mappedFieldsCount,
+        categoryStats: sourceCategoryStats,
+        tabs: tabsWithCounts,
+      }
+    })
 
     return NextResponse.json({ sources: sourcesWithStats })
   } catch (error) {
