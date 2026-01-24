@@ -9,6 +9,11 @@ import {
   ChevronDown,
   EyeOff,
   Eye,
+  RefreshCw,
+  Loader2,
+  Clock,
+  CheckCircle2,
+  AlertCircle,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -18,6 +23,12 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { TabCard } from './tab-card'
 import { TabListRow } from './tab-list-row'
 import type { CategoryStats, TabStatus, EntityType } from '@/types/entities'
@@ -38,6 +49,14 @@ interface Tab {
   updated_at: string | null
 }
 
+interface SyncStatus {
+  lastSyncAt?: string | null
+  lastSyncStatus?: 'completed' | 'failed' | null
+  rowsProcessed?: number
+  rowsCreated?: number
+  rowsUpdated?: number
+}
+
 interface TabOverviewDashboardProps {
   sourceName: string
   tabs: Tab[]
@@ -45,6 +64,10 @@ interface TabOverviewDashboardProps {
   onTabStatusChange?: (tabId: string, status: 'active' | 'reference' | 'hidden' | 'flagged', notes?: string) => void
   viewMode: ViewMode
   onViewModeChange: (mode: ViewMode) => void
+  // Sync functionality
+  onSync?: () => Promise<void>
+  isSyncing?: boolean
+  syncStatus?: SyncStatus
 }
 
 const easeOut: [number, number, number, number] = [0.22, 1, 0.36, 1]
@@ -69,6 +92,21 @@ function calculateTotalColumns(tabs: Tab[]): number {
   return tabs.reduce((sum, tab) => sum + tab.columnCount, 0)
 }
 
+function formatRelativeTime(dateString: string): string {
+  const date = new Date(dateString)
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const diffMins = Math.floor(diffMs / 60000)
+  const diffHours = Math.floor(diffMs / 3600000)
+  const diffDays = Math.floor(diffMs / 86400000)
+
+  if (diffMins < 1) return 'just now'
+  if (diffMins < 60) return `${diffMins}m ago`
+  if (diffHours < 24) return `${diffHours}h ago`
+  if (diffDays < 7) return `${diffDays}d ago`
+  return date.toLocaleDateString()
+}
+
 export function TabOverviewDashboard({
   sourceName,
   tabs,
@@ -76,6 +114,9 @@ export function TabOverviewDashboard({
   onTabStatusChange,
   viewMode,
   onViewModeChange,
+  onSync,
+  isSyncing = false,
+  syncStatus,
 }: TabOverviewDashboardProps) {
   const [showHidden, setShowHidden] = useState(false)
   const [showFlagged, setShowFlagged] = useState(true)
@@ -107,24 +148,80 @@ export function TabOverviewDashboard({
           </p>
         </div>
 
-        {/* View toggle */}
-        <div className="flex items-center gap-1 bg-muted rounded-lg p-1 flex-shrink-0">
-          <Button
-            variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
-            size="sm"
-            className="h-8 w-8 p-0"
-            onClick={() => onViewModeChange('grid')}
-          >
-            <LayoutGrid className="h-4 w-4" />
-          </Button>
-          <Button
-            variant={viewMode === 'list' ? 'secondary' : 'ghost'}
-            size="sm"
-            className="h-8 w-8 p-0"
-            onClick={() => onViewModeChange('list')}
-          >
-            <List className="h-4 w-4" />
-          </Button>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {/* Sync button */}
+          {onSync && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={onSync}
+                    disabled={isSyncing}
+                    className="gap-1.5"
+                  >
+                    {isSyncing ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        <span className="hidden sm:inline">Syncing...</span>
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="h-3.5 w-3.5" />
+                        <span className="hidden sm:inline">Sync</span>
+                      </>
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-[200px]">
+                  {syncStatus?.lastSyncAt ? (
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-1.5">
+                        {syncStatus.lastSyncStatus === 'completed' ? (
+                          <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                        ) : syncStatus.lastSyncStatus === 'failed' ? (
+                          <AlertCircle className="h-3.5 w-3.5 text-red-500" />
+                        ) : (
+                          <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+                        )}
+                        <span className="text-xs">
+                          Last sync: {formatRelativeTime(syncStatus.lastSyncAt)}
+                        </span>
+                      </div>
+                      {syncStatus.lastSyncStatus === 'completed' && (
+                        <p className="text-xs text-muted-foreground">
+                          {syncStatus.rowsProcessed} rows · {syncStatus.rowsCreated} created · {syncStatus.rowsUpdated} updated
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="text-xs">Pull data from source to entities</span>
+                  )}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+
+          {/* View toggle */}
+          <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+            <Button
+              variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
+              size="sm"
+              className="h-8 w-8 p-0"
+              onClick={() => onViewModeChange('grid')}
+            >
+              <LayoutGrid className="h-4 w-4" />
+            </Button>
+            <Button
+              variant={viewMode === 'list' ? 'secondary' : 'ghost'}
+              size="sm"
+              className="h-8 w-8 p-0"
+              onClick={() => onViewModeChange('list')}
+            >
+              <List className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </div>
 

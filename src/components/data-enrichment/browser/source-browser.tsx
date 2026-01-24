@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowLeft, Loader2, Search, Table, ChevronUp } from 'lucide-react'
+import { toast } from 'sonner'
 import { SourceTabBar } from './source-tab-bar'
 import { SheetTabBar, OVERVIEW_TAB_ID } from './sheet-tab-bar'
 import { SmartMapper } from '../smart-mapper'
@@ -77,6 +78,16 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
   }
   const [showSearchModal, setShowSearchModal] = useState(false)
   const [dashboardViewMode, setDashboardViewMode] = useState<'grid' | 'list'>('grid')
+
+  // Sync state
+  const [isSyncing, setIsSyncing] = useState(false)
+  const [syncStatus, setSyncStatus] = useState<{
+    lastSyncAt?: string | null
+    lastSyncStatus?: 'completed' | 'failed' | null
+    rowsProcessed?: number
+    rowsCreated?: number
+    rowsUpdated?: number
+  }>({})
 
   // For new sources - store preview data until saved
   const [sheetPreviews, setSheetPreviews] = useState<Record<string, SheetPreview>>({})
@@ -311,6 +322,89 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
       console.error('Error updating tab status:', error)
     }
   }
+
+  // Handle syncing all active tabs for the current source
+  const handleSync = useCallback(async () => {
+    if (!activeSource?.id || isSyncing) return
+
+    // Get all active tabs with mappings
+    const activeTabs = activeSource.tabs?.filter(
+      t => t.status === 'active' || !t.status
+    ) || []
+
+    if (activeTabs.length === 0) {
+      toast.info('No active tabs to sync')
+      return
+    }
+
+    setIsSyncing(true)
+    let totalProcessed = 0
+    let totalCreated = 0
+    let totalUpdated = 0
+    const errors: string[] = []
+
+    try {
+      // Sync each active tab
+      for (const tab of activeTabs) {
+        if (!tab.id) continue
+
+        try {
+          const response = await fetch(`/api/sync/tab/${tab.id}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({}),
+          })
+
+          if (response.ok) {
+            const result = await response.json()
+            const data = result.data
+            totalProcessed += data.stats?.rows_processed || 0
+            totalCreated += data.stats?.rows_created || 0
+            totalUpdated += data.stats?.rows_updated || 0
+          } else {
+            const errorData = await response.json()
+            errors.push(`${tab.tab_name}: ${errorData.error?.message || 'Sync failed'}`)
+          }
+        } catch {
+          errors.push(`${tab.tab_name}: Network error`)
+        }
+      }
+
+      // Update sync status
+      setSyncStatus({
+        lastSyncAt: new Date().toISOString(),
+        lastSyncStatus: errors.length === 0 ? 'completed' : 'failed',
+        rowsProcessed: totalProcessed,
+        rowsCreated: totalCreated,
+        rowsUpdated: totalUpdated,
+      })
+
+      if (errors.length === 0) {
+        toast.success('Sync complete', {
+          description: `${totalProcessed} rows processed · ${totalCreated} created · ${totalUpdated} updated`,
+        })
+      } else if (errors.length < activeTabs.length) {
+        toast.warning('Sync partially complete', {
+          description: `${activeTabs.length - errors.length}/${activeTabs.length} tabs synced`,
+        })
+      } else {
+        toast.error('Sync failed', {
+          description: errors[0],
+        })
+      }
+    } catch (error) {
+      console.error('Sync error:', error)
+      setSyncStatus({
+        lastSyncAt: new Date().toISOString(),
+        lastSyncStatus: 'failed',
+      })
+      toast.error('Sync failed', {
+        description: error instanceof Error ? error.message : 'Unknown error',
+      })
+    } finally {
+      setIsSyncing(false)
+    }
+  }, [activeSource, isSyncing])
 
   // Handle adding a new source via the sheet search modal
   const handleAddSource = () => {
@@ -824,6 +918,9 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
               onTabStatusChange={handleTabStatusChange}
               viewMode={dashboardViewMode}
               onViewModeChange={setDashboardViewMode}
+              onSync={handleSync}
+              isSyncing={isSyncing}
+              syncStatus={syncStatus}
             />
           </motion.div>
         ) : activeSourceId && activeTabId && activeTab && (activeSource?.spreadsheet_id || activePreview) ? (
