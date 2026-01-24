@@ -128,7 +128,7 @@ export default function DashboardPage() {
       <div className="p-6 md:p-8">
         <motion.div
           variants={containerVariants}
-          initial="hidden"
+          initial={false}
           animate="visible"
           className="space-y-6"
         >
@@ -226,25 +226,25 @@ export default function DashboardPage() {
                       <p className="text-base md:text-lg font-semibold text-blue-600 tabular-nums">
                         {dataSources.reduce((s, d) => s + d.categoryStats.partner, 0)}
                       </p>
-                      <p className="text-[11px] md:text-xs text-muted-foreground">Partner</p>
+                      <p className="text-xs text-muted-foreground">Partner</p>
                     </div>
                     <div className="text-center p-3 md:p-3 rounded-lg bg-green-500/5">
                       <p className="text-base md:text-lg font-semibold text-green-600 tabular-nums">
                         {dataSources.reduce((s, d) => s + d.categoryStats.staff, 0)}
                       </p>
-                      <p className="text-[11px] md:text-xs text-muted-foreground">Staff</p>
+                      <p className="text-xs text-muted-foreground">Staff</p>
                     </div>
                     <div className="text-center p-3 md:p-3 rounded-lg bg-orange-500/5">
                       <p className="text-base md:text-lg font-semibold text-orange-600 tabular-nums">
                         {dataSources.reduce((s, d) => s + d.categoryStats.asin, 0)}
                       </p>
-                      <p className="text-[11px] md:text-xs text-muted-foreground">ASIN</p>
+                      <p className="text-xs text-muted-foreground">ASIN</p>
                     </div>
                     <div className="text-center p-3 md:p-3 rounded-lg bg-muted/50">
                       <p className="text-base md:text-lg font-semibold text-muted-foreground tabular-nums">
                         {dataSources.reduce((s, d) => s + d.categoryStats.unmapped, 0)}
                       </p>
-                      <p className="text-[11px] md:text-xs text-muted-foreground">Unmapped</p>
+                      <p className="text-xs text-muted-foreground">Unmapped</p>
                     </div>
                   </div>
                 </CardContent>

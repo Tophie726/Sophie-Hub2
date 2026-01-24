@@ -113,7 +113,7 @@ function SidebarContent({ onNavigate, layoutId = 'activeNav' }: SidebarContentPr
         </div>
         <div className="flex flex-col">
           <span className="text-sm font-semibold">Sophie Hub</span>
-          <span className="text-[10px] text-muted-foreground uppercase tracking-wider">v2.0</span>
+          <span className="text-xs text-muted-foreground uppercase tracking-wider">v2.0</span>
         </div>
       </div>
 
@@ -122,7 +122,7 @@ function SidebarContent({ onNavigate, layoutId = 'activeNav' }: SidebarContentPr
         <nav className="space-y-6">
           {navigation.map((section) => (
             <div key={section.title}>
-              <h4 className="mb-2 px-3 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/70">
+              <h4 className="mb-2 px-3 text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
                 {section.title}
               </h4>
               <div className="space-y-1">

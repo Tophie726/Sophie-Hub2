@@ -43,9 +43,9 @@ function MainLayoutContent({ children }: MainLayoutProps) {
       <MobileHeader />
       <main className="pl-0 md:pl-64">
         <motion.div
-          initial={{ opacity: 0, y: 10 }}
+          initial={false}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, ease: easeOut, delay: 0.1 }}
+          transition={{ duration: 0.3, ease: easeOut }}
           className="min-h-screen pt-14 md:pt-0"
         >
           <ErrorBoundary>
