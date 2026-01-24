@@ -1,8 +1,9 @@
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth/config'
 import { requirePermission } from '@/lib/auth/api-auth'
-import { apiSuccess, apiValidationError, ApiErrors } from '@/lib/api/response'
+import { apiSuccess, apiError, apiValidationError, ApiErrors } from '@/lib/api/response'
 import { getSyncEngine } from '@/lib/sync'
+import { checkSyncRateLimit, rateLimitHeaders } from '@/lib/rate-limit'
 import { z } from 'zod'
 
 // Validation schema for sync options
@@ -53,6 +54,27 @@ export async function POST(
   const session = await getServerSession(authOptions)
   if (!session?.accessToken) {
     return ApiErrors.unauthorized('No access token available. Please re-authenticate.')
+  }
+
+  // Check rate limit
+  const rateLimitResult = checkSyncRateLimit(auth.user.id)
+  if (!rateLimitResult.allowed) {
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: {
+          code: 'RATE_LIMIT_EXCEEDED',
+          message: `Too many sync requests. Please wait ${Math.ceil(rateLimitResult.resetIn / 1000)} seconds.`,
+        },
+      }),
+      {
+        status: 429,
+        headers: {
+          'Content-Type': 'application/json',
+          ...rateLimitHeaders(rateLimitResult),
+        },
+      }
+    )
   }
 
   try {

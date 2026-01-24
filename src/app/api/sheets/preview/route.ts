@@ -2,6 +2,7 @@ import { getServerSession } from 'next-auth'
 import { NextRequest, NextResponse } from 'next/server'
 import { authOptions } from '@/lib/auth/config'
 import { getSheetPreview } from '@/lib/google/sheets'
+import { checkSheetsRateLimit, rateLimitHeaders } from '@/lib/rate-limit'
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,6 +12,16 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         { error: 'Not authenticated' },
         { status: 401 }
+      )
+    }
+
+    // Check rate limit using user email as key
+    const userId = session.user?.email || 'anonymous'
+    const rateLimitResult = checkSheetsRateLimit(userId)
+    if (!rateLimitResult.allowed) {
+      return NextResponse.json(
+        { error: `Rate limit exceeded. Please wait ${Math.ceil(rateLimitResult.resetIn / 1000)} seconds.` },
+        { status: 429, headers: rateLimitHeaders(rateLimitResult) }
       )
     }
 

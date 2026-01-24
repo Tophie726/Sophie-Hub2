@@ -73,7 +73,7 @@
 | Task | Status | Priority | Notes |
 |------|--------|----------|-------|
 | Audit logging | Done | HIGH | `mapping_audit_log` table + `src/lib/audit/index.ts` |
-| Rate limiting | Pending | MEDIUM | Protect external APIs |
+| Rate limiting | Done | MEDIUM | `src/lib/rate-limit/index.ts` - sliding window algorithm |
 | Credential storage | Pending | MEDIUM | Secure API keys for connectors |
 
 ### Audit Logging Details
@@ -85,6 +85,19 @@
   - Sync engine (sync_start, sync_complete, sync_fail)
   - Mappings save API (mapping_save)
   - Data sources API (create)
+
+### Rate Limiting Details
+
+- **Service:** `src/lib/rate-limit/index.ts` - in-memory sliding window
+- **Presets:**
+  - `GOOGLE_SHEETS`: 100 requests per 100 seconds (matches API quota)
+  - `SYNC`: 10 syncs per minute
+  - `API_GENERAL`: 100 requests per minute
+  - `STRICT`: 5 requests per minute (expensive operations)
+- **Protected routes:**
+  - `/api/sync/tab/[id]` - sync operations
+  - `/api/sheets/*` - all Google Sheets API calls
+- **Response headers:** `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`
 
 ---
 
@@ -189,6 +202,9 @@ In-app AI co-pilot for column mapping at multiple granularity levels.
 - `src/lib/audit/index.ts` - AuditService singleton with logging methods
 - `src/app/api/audit/route.ts` - GET endpoint for retrieving logs
 - `supabase/migrations/20260124_audit_log.sql` - mapping_audit_log table
+
+### Rate Limiting
+- `src/lib/rate-limit/index.ts` - RateLimiter with sliding window algorithm
 
 ### Database Migrations
 - `supabase/migrations/20260124_connector_config.sql` - Connection config backfill

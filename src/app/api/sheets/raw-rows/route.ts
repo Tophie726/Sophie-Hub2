@@ -2,6 +2,7 @@ import { getServerSession } from 'next-auth'
 import { NextRequest, NextResponse } from 'next/server'
 import { authOptions } from '@/lib/auth/config'
 import { getSheetRawRows, detectHeaderRow } from '@/lib/google/sheets'
+import { checkSheetsRateLimit, rateLimitHeaders } from '@/lib/rate-limit'
 
 export async function GET(request: NextRequest) {
   try {
@@ -19,6 +20,16 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         { error: 'Session expired. Please sign out and sign back in.' },
         { status: 401 }
+      )
+    }
+
+    // Check rate limit
+    const userId = session.user?.email || 'anonymous'
+    const rateLimitResult = checkSheetsRateLimit(userId)
+    if (!rateLimitResult.allowed) {
+      return NextResponse.json(
+        { error: `Rate limit exceeded. Please wait ${Math.ceil(rateLimitResult.resetIn / 1000)} seconds.` },
+        { status: 429, headers: rateLimitHeaders(rateLimitResult) }
       )
     }
 
