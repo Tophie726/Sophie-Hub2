@@ -20,25 +20,15 @@ import {
 } from '@/components/ui/collapsible'
 import { TabCard } from './tab-card'
 import { TabListRow } from './tab-list-row'
+import type { CategoryStats, TabStatus, EntityType } from '@/types/entities'
 
-type TabStatus = 'active' | 'reference' | 'hidden' | 'flagged'
-type EntityType = 'partners' | 'staff' | 'asins' | null
+type EntityTypeOrNull = EntityType | null
 type ViewMode = 'grid' | 'list'
-
-interface CategoryStats {
-  partner: number
-  staff: number
-  asin: number
-  weekly: number
-  computed: number
-  skip: number
-  unmapped: number
-}
 
 interface Tab {
   id: string
   tab_name: string
-  primary_entity: EntityType
+  primary_entity: EntityTypeOrNull
   header_row: number
   header_confirmed: boolean
   columnCount: number

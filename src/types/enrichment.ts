@@ -1,10 +1,14 @@
 // Data Enrichment Types
 // Corresponds to Supabase tables in migrations/20260115_data_enrichment_mappings.sql
 
+// Import shared types from entities.ts for local use
+import type { ColumnCategory, ColumnCategoryOrNull, EntityType } from './entities'
+
+// Re-export shared types (single source of truth)
+export type { ColumnCategory, ColumnCategoryOrNull, EntityType }
+
 export type DataSourceType = 'google_sheet' | 'google_form' | 'api'
 export type DataSourceStatus = 'active' | 'paused' | 'error'
-export type EntityType = 'partners' | 'staff' | 'asins'
-export type ColumnCategory = 'partner' | 'staff' | 'asin' | 'weekly' | 'computed' | 'skip'
 export type SourceAuthority = 'source_of_truth' | 'reference'
 export type SyncStatus = 'running' | 'completed' | 'failed'
 

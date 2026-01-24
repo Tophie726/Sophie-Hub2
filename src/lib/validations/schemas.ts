@@ -184,3 +184,181 @@ export type CreateTabMappingInput = z.infer<typeof TabMappingSchema.create>
 export type UpdateTabStatusInput = z.infer<typeof TabMappingSchema.updateStatus>
 export type ConfirmHeaderInput = z.infer<typeof TabMappingSchema.confirmHeader>
 export type SaveMappingInput = z.infer<typeof SaveMappingSchema>
+
+// =============================================================================
+// Connector Schemas
+// =============================================================================
+
+/**
+ * Connector type enum - matches ConnectorTypeId in types.ts
+ */
+export const ConnectorTypeSchema = z.enum([
+  'google_sheet',
+  'google_form',
+  'api',
+  'csv',
+])
+
+/**
+ * Google Sheets connector configuration
+ */
+export const GoogleSheetConfigSchema = z.object({
+  type: z.literal('google_sheet'),
+  spreadsheet_id: z
+    .string()
+    .min(10, 'Invalid spreadsheet ID'),
+  spreadsheet_url: z
+    .string()
+    .url('Must be a valid URL')
+    .optional()
+    .nullable(),
+})
+
+/**
+ * Google Forms connector configuration
+ */
+export const GoogleFormConfigSchema = z.object({
+  type: z.literal('google_form'),
+  form_id: z
+    .string()
+    .min(1, 'Form ID is required'),
+  form_url: z
+    .string()
+    .url('Must be a valid URL')
+    .optional()
+    .nullable(),
+})
+
+/**
+ * API connector configuration
+ */
+export const ApiConfigSchema = z.object({
+  type: z.literal('api'),
+  endpoint_url: z
+    .string()
+    .url('Must be a valid URL'),
+  auth_type: z.enum(['bearer', 'api_key', 'basic', 'none']),
+  headers: z.record(z.string(), z.string()).optional(),
+})
+
+/**
+ * CSV connector configuration
+ */
+export const CsvConfigSchema = z.object({
+  type: z.literal('csv'),
+  file_name: z
+    .string()
+    .min(1, 'File name is required'),
+  file_url: z
+    .string()
+    .url('Must be a valid URL')
+    .optional()
+    .nullable(),
+  delimiter: z.string().optional(),
+  encoding: z.string().optional(),
+})
+
+/**
+ * Discriminated union of all connector configurations
+ * Automatically validates based on the 'type' field
+ */
+export const ConnectorConfigSchema = z.discriminatedUnion('type', [
+  GoogleSheetConfigSchema,
+  GoogleFormConfigSchema,
+  ApiConfigSchema,
+  CsvConfigSchema,
+])
+
+/**
+ * Extended data source creation schema with connector support
+ * Supports both legacy format (spreadsheet_id) and new format (type + connector_config)
+ */
+export const DataSourceSchemaV2 = {
+  create: z.object({
+    name: z
+      .string()
+      .min(1, 'Name is required')
+      .max(255, 'Name must be less than 255 characters'),
+    // Legacy fields (still supported for backward compatibility)
+    spreadsheet_id: z
+      .string()
+      .min(1)
+      .optional(),
+    spreadsheet_url: z
+      .string()
+      .url('Must be a valid URL')
+      .optional()
+      .nullable(),
+    // New connector fields
+    type: ConnectorTypeSchema.optional(),
+    connector_config: ConnectorConfigSchema.optional(),
+  }).refine(
+    (data) => {
+      // Either legacy spreadsheet_id OR new connector_config must be provided
+      const hasLegacy = !!data.spreadsheet_id
+      const hasNew = !!data.connector_config
+      return hasLegacy || hasNew
+    },
+    {
+      message: 'Either spreadsheet_id or connector_config must be provided',
+      path: ['spreadsheet_id'],
+    }
+  ),
+}
+
+/**
+ * Extended save mapping schema with connector support
+ */
+export const SaveMappingSchemaV2 = z.object({
+  dataSource: z.object({
+    name: z.string().min(1),
+    // Legacy fields (still supported)
+    spreadsheet_id: z.string().min(1).optional(),
+    spreadsheet_url: z.string().url().optional().nullable(),
+    // New connector fields
+    type: ConnectorTypeSchema.optional(),
+    connector_config: ConnectorConfigSchema.optional(),
+  }).refine(
+    (data) => {
+      const hasLegacy = !!data.spreadsheet_id
+      const hasNew = !!data.connector_config
+      return hasLegacy || hasNew
+    },
+    {
+      message: 'Either spreadsheet_id or connector_config must be provided',
+      path: ['spreadsheet_id'],
+    }
+  ),
+  tabMapping: z.object({
+    tab_name: z.string().min(1),
+    header_row: z.number().int().min(0),
+    primary_entity: z.enum(['partners', 'staff', 'asins']),
+  }),
+  columnMappings: z.array(ColumnMappingSchema),
+  weeklyPattern: z.object({
+    pattern_name: z.string().optional(),
+    match_config: z.record(z.string(), z.unknown()),
+  }).optional(),
+  computedFields: z.array(z.object({
+    target_table: z.string(),
+    target_field: z.string(),
+    display_name: z.string(),
+    computation_type: z.string(),
+    source_column: z.string().optional(),
+    config: z.record(z.string(), z.unknown()),
+    description: z.string().optional(),
+  })).optional(),
+})
+
+// =============================================================================
+// Connector Type exports
+// =============================================================================
+
+export type ConnectorType = z.infer<typeof ConnectorTypeSchema>
+export type GoogleSheetConfig = z.infer<typeof GoogleSheetConfigSchema>
+export type GoogleFormConfig = z.infer<typeof GoogleFormConfigSchema>
+export type ApiConfig = z.infer<typeof ApiConfigSchema>
+export type CsvConfig = z.infer<typeof CsvConfigSchema>
+export type ConnectorConfigInput = z.infer<typeof ConnectorConfigSchema>
+export type CreateDataSourceInputV2 = z.infer<typeof DataSourceSchemaV2.create>
+export type SaveMappingInputV2 = z.infer<typeof SaveMappingSchemaV2>

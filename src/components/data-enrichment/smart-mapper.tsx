@@ -115,14 +115,15 @@ interface TabRawData {
   headerReasons: string[]     // Human-readable explanations
 }
 
-type EntityType = 'partners' | 'staff' | 'asins'
-type ColumnCategory = 'partner' | 'staff' | 'asin' | 'weekly' | 'computed' | 'skip' | null
-type ComputationType = 'formula' | 'aggregation' | 'lookup' | 'custom'
-type EntityType_Computed = 'partners' | 'staff' | 'asins'
+// Import canonical types from entities (single source of truth)
+import type { EntityType, ColumnCategoryOrNull } from '@/types/entities'
+import type { ComputationType, SourceAuthority } from '@/types/enrichment'
+
+type ColumnCategory = ColumnCategoryOrNull
 
 interface ComputedFieldConfig {
   computationType: ComputationType
-  targetTable: EntityType_Computed
+  targetTable: EntityType
   targetField: string
   displayName: string
   description?: string
@@ -137,7 +138,6 @@ interface ComputedFieldConfig {
   matchField?: string
   lookupField?: string
 }
-type SourceAuthority = 'source_of_truth' | 'reference'
 
 interface ColumnClassification {
   sourceIndex: number
@@ -2236,7 +2236,7 @@ function ComputedFieldConfigModal({
   const [computationType, setComputationType] = useState<ComputationType>(
     column.computedConfig?.computationType || 'formula'
   )
-  const [targetTable, setTargetTable] = useState<EntityType_Computed>(
+  const [targetTable, setTargetTable] = useState<EntityType>(
     column.computedConfig?.targetTable || 'partners'
   )
   const [targetField, setTargetField] = useState(

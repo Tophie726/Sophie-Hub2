@@ -2,13 +2,15 @@ import { NextRequest } from 'next/server'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { requirePermission } from '@/lib/auth/api-auth'
 import { apiSuccess, apiValidationError, ApiErrors } from '@/lib/api/response'
-import { SaveMappingSchema } from '@/lib/validations/schemas'
+import { SaveMappingSchemaV2 } from '@/lib/validations/schemas'
 import { DEFAULT_WEEKLY_PATTERN } from '@/types/enrichment'
+import { getConnectorRegistry } from '@/lib/connectors'
 
 // Use singleton Supabase client
 const supabase = getAdminClient()
 
 // POST - Save field mappings (admin only)
+// Supports both legacy format { spreadsheet_id } and new format { type, connector_config }
 export async function POST(request: NextRequest) {
   const auth = await requirePermission('data-enrichment:write')
   if (!auth.authenticated) return auth.response
@@ -16,20 +18,62 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
 
-    // Validate input
-    const validation = SaveMappingSchema.safeParse(body)
+    // Validate input with V2 schema (supports both formats)
+    const validation = SaveMappingSchemaV2.safeParse(body)
     if (!validation.success) {
       return apiValidationError(validation.error)
     }
 
     const { dataSource, tabMapping, columnMappings, weeklyPattern, computedFields } = validation.data
 
+    // Determine the connector type and config
+    let connectorType: string
+    let connectorConfigObj: Record<string, unknown>
+    let legacySpreadsheetId: string | null = null
+    let legacySpreadsheetUrl: string | null = null
+
+    if (dataSource.connector_config) {
+      // New format: use provided connector_config
+      connectorType = dataSource.connector_config.type
+      connectorConfigObj = dataSource.connector_config as Record<string, unknown>
+
+      // Extract legacy fields for backward compatibility (dual-write)
+      if (dataSource.connector_config.type === 'google_sheet') {
+        legacySpreadsheetId = dataSource.connector_config.spreadsheet_id
+        legacySpreadsheetUrl = dataSource.connector_config.spreadsheet_url ?? null
+      }
+
+      // Validate config using the connector registry
+      if (getConnectorRegistry().has(connectorType as 'google_sheet')) {
+        const connector = getConnectorRegistry().get(connectorType as 'google_sheet')
+        const configValidation = connector.validateConfig(dataSource.connector_config)
+        if (configValidation !== true) {
+          throw new Error(configValidation)
+        }
+      }
+    } else if (dataSource.spreadsheet_id) {
+      // Legacy format: construct connector_config from spreadsheet_id
+      connectorType = dataSource.type || 'google_sheet'
+      legacySpreadsheetId = dataSource.spreadsheet_id
+      legacySpreadsheetUrl = dataSource.spreadsheet_url ?? null
+      connectorConfigObj = {
+        type: 'google_sheet',
+        spreadsheet_id: dataSource.spreadsheet_id,
+        spreadsheet_url: dataSource.spreadsheet_url ?? null,
+      }
+    } else {
+      throw new Error('Either spreadsheet_id or connector_config is required')
+    }
+
     // 1. Create or update data_source
-    const { data: existingSource } = await supabase
-      .from('data_sources')
-      .select('id')
-      .eq('spreadsheet_id', dataSource.spreadsheet_id)
-      .single()
+    // Look up by spreadsheet_id for backward compatibility
+    const { data: existingSource } = legacySpreadsheetId
+      ? await supabase
+          .from('data_sources')
+          .select('id')
+          .eq('spreadsheet_id', legacySpreadsheetId)
+          .single()
+      : { data: null }
 
     let dataSourceId: string
 
@@ -39,7 +83,8 @@ export async function POST(request: NextRequest) {
         .from('data_sources')
         .update({
           name: dataSource.name,
-          spreadsheet_url: dataSource.spreadsheet_url,
+          spreadsheet_url: legacySpreadsheetUrl,
+          connector_config: connectorConfigObj,
           updated_at: new Date().toISOString(),
         })
         .eq('id', existingSource.id)
@@ -49,14 +94,17 @@ export async function POST(request: NextRequest) {
       if (error) throw error
       dataSourceId = data.id
     } else {
-      // Create new
+      // Create new with both legacy and new fields (dual-write)
       const { data, error } = await supabase
         .from('data_sources')
         .insert({
           name: dataSource.name,
-          type: 'google_sheet',
-          spreadsheet_id: dataSource.spreadsheet_id,
-          spreadsheet_url: dataSource.spreadsheet_url,
+          type: connectorType,
+          // Legacy columns (for backward compatibility)
+          spreadsheet_id: legacySpreadsheetId,
+          spreadsheet_url: legacySpreadsheetUrl,
+          // New connector_config column
+          connector_config: connectorConfigObj,
         })
         .select('id')
         .single()

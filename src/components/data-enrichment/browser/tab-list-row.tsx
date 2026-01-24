@@ -8,6 +8,7 @@ import { Progress } from '@/components/ui/progress'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { easeOut, duration, springPop } from '@/lib/animations'
+import type { CategoryStats, TabStatus, EntityType } from '@/types/entities'
 
 // Haptic feedback helper (works on Android, not iOS Safari)
 function haptic(intensity: 'light' | 'medium' | 'heavy' = 'medium') {
@@ -17,24 +18,13 @@ function haptic(intensity: 'light' | 'medium' | 'heavy' = 'medium') {
   }
 }
 
-type TabStatus = 'active' | 'reference' | 'hidden' | 'flagged'
-type EntityType = 'partners' | 'staff' | 'asins' | null
+type EntityTypeOrNull = EntityType | null
 type FeedbackType = 'flag' | 'unflag' | 'hide' | 'unhide' | null
-
-interface CategoryStats {
-  partner: number
-  staff: number
-  asin: number
-  weekly: number
-  computed: number
-  skip: number
-  unmapped: number
-}
 
 interface TabListRowProps {
   id: string
   name: string
-  primaryEntity: EntityType
+  primaryEntity: EntityTypeOrNull
   status: TabStatus
   columnCount: number
   categoryStats: CategoryStats

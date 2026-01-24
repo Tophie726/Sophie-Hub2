@@ -30,10 +30,11 @@ import {
   Tag,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import type { ColumnCategoryOrNull } from '@/types/entities'
 
 const easeOut: [number, number, number, number] = [0.22, 1, 0.36, 1]
 
-type ColumnCategory = 'partner' | 'staff' | 'asin' | 'weekly' | 'computed' | 'skip' | null
+type ColumnCategory = ColumnCategoryOrNull
 
 interface FieldTag {
   id: string

@@ -1,7 +1,8 @@
 import { getAdminClient } from '@/lib/supabase/admin'
 import { requirePermission } from '@/lib/auth/api-auth'
 import { apiSuccess, apiError, apiValidationError, ApiErrors } from '@/lib/api/response'
-import { DataSourceSchema } from '@/lib/validations/schemas'
+import { DataSourceSchemaV2 } from '@/lib/validations/schemas'
+import { getConnectorRegistry } from '@/lib/connectors'
 import {
   CategoryStats,
   DataSourceWithStats,
@@ -14,6 +15,7 @@ const supabase = getAdminClient()
 export type { CategoryStats, DataSourceWithStats }
 
 // POST - Create a new data source (admin only)
+// Supports both legacy format { spreadsheet_id } and new format { type, connector_config }
 export async function POST(request: Request) {
   const auth = await requirePermission('data-enrichment:write')
   if (!auth.authenticated) return auth.response
@@ -21,38 +23,82 @@ export async function POST(request: Request) {
   try {
     const body = await request.json()
 
-    // Validate input
-    const validation = DataSourceSchema.create.safeParse(body)
+    // Validate input with V2 schema (supports both formats)
+    const validation = DataSourceSchemaV2.create.safeParse(body)
     if (!validation.success) {
       return apiValidationError(validation.error)
     }
 
-    const { name, spreadsheet_id, spreadsheet_url } = validation.data
+    const { name, spreadsheet_id, spreadsheet_url, type, connector_config } = validation.data
 
-    // Check if this spreadsheet is already connected
-    const { data: existing } = await supabase
-      .from('data_sources')
-      .select('id')
-      .eq('spreadsheet_id', spreadsheet_id)
-      .single()
+    // Determine the connector type and config
+    let connectorType: string
+    let connectorConfigObj: Record<string, unknown>
+    let legacySpreadsheetId: string | null = null
+    let legacySpreadsheetUrl: string | null = null
 
-    if (existing) {
-      return apiError(
-        'CONFLICT',
-        'This spreadsheet is already connected',
-        409,
-        { existingId: existing.id }
-      )
+    if (connector_config) {
+      // New format: use provided connector_config
+      connectorType = connector_config.type
+      connectorConfigObj = connector_config as Record<string, unknown>
+
+      // Extract legacy fields for backward compatibility (dual-write)
+      if (connector_config.type === 'google_sheet') {
+        legacySpreadsheetId = connector_config.spreadsheet_id
+        legacySpreadsheetUrl = connector_config.spreadsheet_url ?? null
+      }
+
+      // Validate config using the connector registry
+      if (getConnectorRegistry().has(connectorType as 'google_sheet')) {
+        const connector = getConnectorRegistry().get(connectorType as 'google_sheet')
+        const configValidation = connector.validateConfig(connector_config)
+        if (configValidation !== true) {
+          return apiError('VALIDATION_ERROR', configValidation, 400)
+        }
+      }
+    } else if (spreadsheet_id) {
+      // Legacy format: construct connector_config from spreadsheet_id
+      connectorType = type || 'google_sheet'
+      legacySpreadsheetId = spreadsheet_id
+      legacySpreadsheetUrl = spreadsheet_url ?? null
+      connectorConfigObj = {
+        type: 'google_sheet',
+        spreadsheet_id,
+        spreadsheet_url: spreadsheet_url ?? null,
+      }
+    } else {
+      return apiError('VALIDATION_ERROR', 'Either spreadsheet_id or connector_config is required', 400)
     }
 
-    // Create the data source
+    // Check if this source is already connected (by spreadsheet_id for sheets)
+    if (legacySpreadsheetId) {
+      const { data: existing } = await supabase
+        .from('data_sources')
+        .select('id')
+        .eq('spreadsheet_id', legacySpreadsheetId)
+        .single()
+
+      if (existing) {
+        return apiError(
+          'CONFLICT',
+          'This spreadsheet is already connected',
+          409,
+          { existingId: existing.id }
+        )
+      }
+    }
+
+    // Create the data source with both legacy and new fields (dual-write)
     const { data: source, error } = await supabase
       .from('data_sources')
       .insert({
         name,
-        type: 'google_sheet',
-        spreadsheet_id,
-        spreadsheet_url: spreadsheet_url || null,
+        type: connectorType,
+        // Legacy columns (for backward compatibility)
+        spreadsheet_id: legacySpreadsheetId,
+        spreadsheet_url: legacySpreadsheetUrl,
+        // New connector_config column
+        connector_config: connectorConfigObj,
         status: 'active',
       })
       .select()

@@ -19,16 +19,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { cn } from '@/lib/utils'
-
-interface CategoryStats {
-  partner: number
-  staff: number
-  asin: number
-  weekly: number
-  computed: number
-  skip: number
-  unmapped: number
-}
+import type { CategoryStats } from '@/types/entities'
 
 interface DataSourceWithStats {
   id: string

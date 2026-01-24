@@ -9,16 +9,7 @@ import { SmartMapper } from '../smart-mapper'
 import { TabOverviewDashboard } from './tab-overview-dashboard'
 import { Button } from '@/components/ui/button'
 import { SheetSearchModal } from '../sheet-search-modal'
-
-interface CategoryStats {
-  partner: number
-  staff: number
-  asin: number
-  weekly: number
-  computed: number
-  skip: number
-  unmapped: number
-}
+import type { CategoryStats } from '@/types/entities'
 
 interface DataSource {
   id: string

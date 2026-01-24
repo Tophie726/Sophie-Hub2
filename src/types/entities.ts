@@ -37,6 +37,12 @@ export type TabStatus = 'active' | 'reference' | 'hidden' | 'flagged'
 export type ColumnCategory = 'partner' | 'staff' | 'asin' | 'weekly' | 'computed' | 'skip'
 
 /**
+ * Column category that allows null (unclassified)
+ * Used in UI components during classification phase
+ */
+export type ColumnCategoryOrNull = ColumnCategory | null
+
+/**
  * Authority level for field mappings
  * - source_of_truth: This source is authoritative for this field
  * - reference: Read-only lookup, doesn't update master record

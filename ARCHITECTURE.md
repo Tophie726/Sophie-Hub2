@@ -567,6 +567,246 @@ Track these metrics as the app scales:
 
 ---
 
+## Connector Architecture (2026-01-24)
+
+### Overview
+
+Sophie Hub uses a pluggable connector architecture for data source integration. This allows new data sources (Google Sheets, Close.io, Typeform, ClickUp, etc.) to be added without modifying core business logic.
+
+### Directory Structure
+
+```
+src/lib/connectors/
+├── index.ts           # Re-exports + auto-registration
+├── types.ts           # Type definitions (ConnectorTypeId, ConnectorConfig)
+├── base.ts            # IConnector interface + BaseConnector class
+├── registry.ts        # Singleton ConnectorRegistry
+└── google-sheets.ts   # Google Sheets implementation
+```
+
+### Key Types
+
+```typescript
+// Connector type identifiers
+type ConnectorTypeId = 'google_sheet' | 'google_form' | 'api' | 'csv'
+
+// Discriminated union for connector configs
+type ConnectorConfig =
+  | GoogleSheetConnectorConfig
+  | GoogleFormConnectorConfig
+  | ApiConnectorConfig
+  | CsvConnectorConfig
+
+// Connector interface
+interface IConnector<TConfig extends ConnectorConfig> {
+  metadata: ConnectorMetadata
+  validateConfig(config: TConfig): true | string
+  search?(token: string, query?: string): Promise<SourceSearchResult[]>
+  getPreview(token: string, config: TConfig): Promise<SourcePreview>
+  getTabs(token: string, config: TConfig): Promise<SourceTab[]>
+  getRawRows(token: string, config: TConfig, tab: string): Promise<SourceRawRows>
+  getData(token: string, config: TConfig, tab: string): Promise<SourceData>
+  testConnection(token: string, config: TConfig): Promise<ConnectionTestResult>
+}
+```
+
+### Usage
+
+```typescript
+import { getConnector, type GoogleSheetConnectorConfig } from '@/lib/connectors'
+
+const sheets = getConnector<GoogleSheetConnectorConfig>('google_sheet')
+const results = await sheets.search(token, 'query')
+```
+
+### Backward Compatibility
+
+The system supports both legacy and new API formats:
+
+**Legacy format (still works):**
+```json
+{ "name": "My Sheet", "spreadsheet_id": "abc123" }
+```
+
+**New format:**
+```json
+{
+  "name": "My Sheet",
+  "type": "google_sheet",
+  "connector_config": {
+    "type": "google_sheet",
+    "spreadsheet_id": "abc123",
+    "spreadsheet_url": "https://..."
+  }
+}
+```
+
+**Dual-write:** Both `spreadsheet_id` and `connector_config` columns are populated on insert for backward compatibility with existing queries.
+
+---
+
+## Type Consolidation (2026-01-24)
+
+### Single Source of Truth
+
+Core types are now defined in one location and imported everywhere:
+
+| Type | Canonical Location | Usage |
+|------|-------------------|-------|
+| `CategoryStats` | `src/types/entities.ts` | Progress tracking stats |
+| `ColumnCategory` | `src/types/entities.ts` | Field classification |
+| `EntityType` | `src/types/entities.ts` | partners/staff/asins |
+| `TabStatus` | `src/types/entities.ts` | Tab visibility status |
+| `AuthorityLevel` | `src/types/entities.ts` | source_of_truth/reference/derived |
+
+### Import Pattern
+
+```typescript
+// In components
+import type { CategoryStats, ColumnCategory, EntityType } from '@/types/entities'
+
+// In enrichment-specific code (also re-exports entity types)
+import type { ColumnCategory, SourceAuthority, ComputationType } from '@/types/enrichment'
+```
+
+### Nullable Variants
+
+For UI components that need nullable types:
+
+```typescript
+import type { EntityType } from '@/types/entities'
+type EntityTypeOrNull = EntityType | null  // Define locally if needed
+```
+
+Or use the pre-defined:
+```typescript
+import type { ColumnCategoryOrNull } from '@/types/entities'
+```
+
+---
+
+## Sync Engine Architecture (2026-01-24)
+
+### Overview
+
+The Sync Engine pulls data from mapped sources and writes to Sophie Hub entity tables based on configured column mappings.
+
+### Directory Structure
+
+```
+src/lib/sync/
+├── index.ts           # Module exports + getSyncEngine singleton
+├── types.ts           # SyncOptions, SyncResult, EntityChange, etc.
+├── transforms.ts      # Value transforms (date, currency, boolean, number)
+└── engine.ts          # SyncEngine class
+```
+
+### Key Types
+
+```typescript
+// Sync options
+interface SyncOptions {
+  dryRun?: boolean           // Preview changes without applying
+  forceOverwrite?: boolean   // Ignore authority rules
+  rowLimit?: number          // Limit rows for testing
+  triggeredBy?: string       // User ID triggering sync
+}
+
+// Sync result
+interface SyncResult {
+  success: boolean
+  syncRunId: string
+  stats: SyncStats
+  changes: EntityChange[]    // For dry run
+  durationMs: number
+}
+
+// Entity change
+interface EntityChange {
+  entity: EntityType
+  keyField: string
+  keyValue: string
+  type: 'create' | 'update' | 'skip'
+  fields: Record<string, unknown>
+  existing?: Record<string, unknown>
+  skipReason?: string
+}
+```
+
+### Usage
+
+```typescript
+import { getSyncEngine } from '@/lib/sync'
+
+const engine = getSyncEngine()
+
+// Sync a single tab mapping
+const result = await engine.syncTab(tabMappingId, accessToken, {
+  dryRun: true,  // Preview first
+})
+
+// Sync all active tabs for a data source
+const results = await engine.syncDataSource(dataSourceId, accessToken)
+```
+
+### Authority Rules
+
+The sync engine respects authority levels:
+
+| Authority | Behavior on Sync |
+|-----------|------------------|
+| `source_of_truth` | Overwrites existing entity field |
+| `reference` | Only sets on create, never overwrites |
+| `derived` | Never synced (computed from other fields) |
+
+### Transform Pipeline
+
+Value transforms convert source strings to target types:
+
+| Transform | Input | Output |
+|-----------|-------|--------|
+| `none` | `"hello"` | `"hello"` |
+| `trim` | `" hello "` | `"hello"` |
+| `date` | `"01/15/2026"` | `"2026-01-15T00:00:00.000Z"` |
+| `currency` | `"$1,234.56"` | `1234.56` |
+| `boolean` | `"yes"` | `true` |
+| `number` | `"1,234"` | `1234` |
+| `json` | `'{"a":1}'` | `{a: 1}` |
+
+### API Endpoints
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/sync/tab/[id]` | POST | Trigger sync for a tab mapping |
+| `/api/sync/runs` | GET | List sync runs with filtering |
+| `/api/sync/runs/[id]` | GET | Get detailed sync run info |
+
+### Field Lineage
+
+Every field change is recorded in the `field_lineage` table:
+
+```sql
+CREATE TABLE field_lineage (
+  entity_type TEXT NOT NULL,
+  entity_id UUID NOT NULL,
+  field_name TEXT NOT NULL,
+  source_type TEXT NOT NULL,      -- 'google_sheet', 'api', 'app', 'manual'
+  source_ref TEXT,                -- "Master Sheet → Tab → Column"
+  previous_value JSONB,
+  new_value JSONB,
+  sync_run_id UUID,
+  changed_at TIMESTAMPTZ
+);
+```
+
+### Performance
+
+- **Batch inserts**: Creates are batched in groups of 50
+- **Row-level errors**: Errors don't stop sync, they're collected and reported
+- **Dry run mode**: Preview changes without database writes
+
+---
+
 ## Related Documentation
 
 - **Security:** [SECURITY.md](SECURITY.md)
@@ -574,3 +814,5 @@ Track these metrics as the app scales:
 - **Authorization:** [docs/AUTHORIZATION.md](docs/AUTHORIZATION.md)
 - **Roadmap:** [docs/ROADMAP.md](docs/ROADMAP.md)
 - **Project Context:** [CLAUDE.md](CLAUDE.md)
+- **Sync Engine Design:** [docs/features/SYNC_ENGINE.md](docs/features/SYNC_ENGINE.md)
+- **Data Enrichment Progress:** [docs/DATA_ENRICHMENT_PROGRESS.md](docs/DATA_ENRICHMENT_PROGRESS.md)
