@@ -5,9 +5,9 @@
 
 ---
 
-## Current Phase: Phase 2 - Sync Engine (In Progress)
+## Current Phase: Phase 2 - Sync Engine (Complete)
 
-### Status: Core Engine Complete, API Ready, Basic UI Done
+### Status: Core Engine Complete, API Ready, UI Complete, DB Backfilled
 
 ---
 
@@ -32,7 +32,7 @@
 
 | Task | Status | Priority | Notes |
 |------|--------|----------|-------|
-| Apply database migration | Pending | HIGH | Run `supabase migration up` |
+| Apply database migration | Done | HIGH | `connection_config` backfilled via REST API |
 | Component abstraction (search modal) | Pending | LOW | SheetSearchModal → ConnectorSearchModal |
 | Create connector picker UI | Pending | LOW | "Add Source" flow with connector selection |
 
