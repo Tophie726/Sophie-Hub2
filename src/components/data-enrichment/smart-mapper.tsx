@@ -58,6 +58,7 @@ import {
   ChevronRight,
 } from 'lucide-react'
 import { MobileColumnCard } from './mobile-column-card'
+import { AISuggestionButton, type AISuggestion } from './ai-suggestion-button'
 
 // ============ ANIMATED LOCK ICON ============
 // Custom animated lock that shows shackle closing
@@ -1726,6 +1727,22 @@ function ClassifyPhase({
                         })}
                       </div>
                     )}
+
+                    {/* AI Suggestion button */}
+                    <AISuggestionButton
+                      columnName={col.sourceColumn}
+                      sampleValues={sampleRows[0] ? [sampleRows[0][idx]].filter(Boolean) : []}
+                      siblingColumns={validColumns.map(c => c.sourceColumn)}
+                      position={idx}
+                      onApply={(suggestion: AISuggestion) => {
+                        // Apply the category
+                        onCategoryChange(idx, suggestion.category)
+                        // If it's a key field and we have Partner/Staff category, request key confirmation
+                        if (suggestion.is_key && (suggestion.category === 'partner' || suggestion.category === 'staff')) {
+                          requestKeyConfirmation(idx, col.sourceColumn, suggestion.category, false)
+                        }
+                      }}
+                    />
 
                     {/* Category selector with integrated key management */}
                     <DropdownMenu>
