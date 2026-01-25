@@ -639,8 +639,8 @@ const duration = {
 - [x] POST /api/sync/tab/[id] endpoint
 - [x] GET /api/sync/runs endpoint
 - [x] GET /api/sync/runs/[id] endpoint
-- [ ] Sync button in TabOverviewDashboard
-- [ ] Sync history panel component
+- [x] Sync button in TabOverviewDashboard
+- [x] Sync history panel component
 - [ ] Visual data map design (future)
 
 ### Phase 3 Progress
@@ -734,5 +734,5 @@ const duration = {
 
 ---
 
-*Last updated: 2026-01-24 (Phase 6 AI Assistant Complete)*
+*Last updated: 2026-01-25 (Audit log applied, auth error handling added)*
 *Architecture audit by Claude Opus 4.5*
