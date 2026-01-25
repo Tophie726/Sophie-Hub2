@@ -3,6 +3,7 @@ import { requirePermission } from '@/lib/auth/api-auth'
 import { apiSuccess, apiError, apiValidationError, ApiErrors } from '@/lib/api/response'
 import { getMappingAssistant, type ColumnInput } from '@/lib/ai/mapping-sdk'
 import { checkRateLimit, RATE_LIMITS, rateLimitHeaders } from '@/lib/rate-limit'
+import { hasSystemSetting } from '@/lib/settings'
 import { audit } from '@/lib/audit'
 import { z } from 'zod'
 
@@ -90,11 +91,12 @@ export async function POST(request: NextRequest) {
 
     const { column_name, sample_values, sibling_columns, position } = validation.data
 
-    // Check if API key is configured
-    if (!process.env.ANTHROPIC_API_KEY) {
+    // Check if API key is configured (database or env fallback)
+    const hasDbKey = await hasSystemSetting('anthropic_api_key')
+    if (!hasDbKey && !process.env.ANTHROPIC_API_KEY) {
       return apiError(
         'SERVICE_UNAVAILABLE',
-        'AI mapping assistant is not configured. Please set ANTHROPIC_API_KEY.',
+        'AI mapping assistant is not configured. Add your Anthropic API key in Settings → API Keys.',
         503
       )
     }
