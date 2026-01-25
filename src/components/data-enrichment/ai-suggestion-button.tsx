@@ -48,6 +48,8 @@ interface AISuggestionButtonProps {
   disabled?: boolean
   tabName?: string
   sourceName?: string
+  /** Primary entity type from AI tab summary - helps improve suggestion accuracy */
+  primaryEntity?: 'partner' | 'staff' | 'asin' | null
 }
 
 // =============================================================================
@@ -117,6 +119,7 @@ export function AISuggestionButton({
   disabled = false,
   tabName,
   sourceName,
+  primaryEntity,
 }: AISuggestionButtonProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
@@ -138,6 +141,7 @@ export function AISuggestionButton({
           position,
           tab_name: tabName,
           source_name: sourceName,
+          primary_entity: primaryEntity,
         }),
       })
 

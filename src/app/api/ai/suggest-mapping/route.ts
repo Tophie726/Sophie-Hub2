@@ -20,6 +20,8 @@ const SuggestMappingSchema = z.object({
   // Context for better suggestions
   tab_name: z.string().optional(),
   source_name: z.string().optional(),
+  // Primary entity from AI tab summary - significantly improves accuracy
+  primary_entity: z.enum(['partner', 'staff', 'asin']).optional().nullable(),
 })
 
 // =============================================================================
@@ -93,7 +95,7 @@ export async function POST(request: NextRequest) {
       return apiValidationError(validation.error)
     }
 
-    const { column_name, sample_values, sibling_columns, position, tab_name, source_name } = validation.data
+    const { column_name, sample_values, sibling_columns, position, tab_name, source_name, primary_entity } = validation.data
 
     // Check if API key is configured (database or env fallback)
     const hasDbKey = await hasSystemSetting('anthropic_api_key')
@@ -114,9 +116,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Build context for better suggestions
+    // Primary entity from tab summary significantly improves accuracy
     const context: MappingContext = {
       tabName: tab_name,
       sourceName: source_name,
+      primaryEntity: primary_entity || undefined,
     }
 
     const suggestion = await assistant.suggestColumnMapping(column, sibling_columns, context)

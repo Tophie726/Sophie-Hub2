@@ -60,6 +60,7 @@ import {
 import { MobileColumnCard } from './mobile-column-card'
 import { AISuggestionButton, type AISuggestion } from './ai-suggestion-button'
 import { AISuggestAllDialog, type BulkSuggestion } from './ai-suggest-all-dialog'
+import { AITabAnalysis, type TabSummary } from './ai-tab-analysis'
 
 // ============ ANIMATED LOCK ICON ============
 // Custom animated lock that shows shackle closing
@@ -255,6 +256,8 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [isSavingDraft, setIsSavingDraft] = useState(false) // TODO: Show saving indicator in UI
   const [availableTags, setAvailableTags] = useState<FieldTag[]>([])
+  // AI Tab Summary - provides context for per-column suggestions
+  const [tabSummary, setTabSummary] = useState<TabSummary | null>(null)
   const draftKey = getDraftKey(spreadsheetId, tabName)
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -782,6 +785,9 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
           onConfirm={() => setPhase('map')}
           onBack={() => setPhase('preview')}
           embedded={embedded}
+          tabSummary={tabSummary}
+          onTabSummaryChange={setTabSummary}
+          dataSourceId={dataSourceId}
         />
       )}
       {phase === 'map' && (
@@ -1132,6 +1138,9 @@ function ClassifyPhase({
   onConfirm,
   onBack,
   embedded = false,
+  tabSummary,
+  onTabSummaryChange,
+  dataSourceId,
 }: {
   sheetName: string
   tabName: string
@@ -1147,6 +1156,9 @@ function ClassifyPhase({
   onConfirm: () => void
   onBack: () => void
   embedded?: boolean
+  tabSummary: TabSummary | null
+  onTabSummaryChange: (summary: TabSummary) => void
+  dataSourceId?: string
 }) {
   // State for computed field config modal
   const [configureComputedIndex, setConfigureComputedIndex] = useState<number | null>(null)
@@ -1363,6 +1375,18 @@ function ClassifyPhase({
 
   return (
     <motion.div {...fadeInUp} className="space-y-6">
+      {/* AI Tab Summary - provides context before column mapping */}
+      <AITabAnalysis
+        tabName={tabName}
+        sourceName={sheetName}
+        columnNames={rawData.rows[headerRow] || []}
+        sampleRows={rawData.rows.slice(headerRow + 1, headerRow + 4)}
+        dataSourceId={dataSourceId}
+        initialSummary={tabSummary}
+        onSummaryComplete={onTabSummaryChange}
+        className={embedded ? '' : 'max-w-4xl mx-auto'}
+      />
+
       <div
         ref={containerRef}
         tabIndex={0}
@@ -1752,6 +1776,7 @@ function ClassifyPhase({
                       position={idx}
                       tabName={tabName}
                       sourceName={sheetName}
+                      primaryEntity={tabSummary?.primary_entity === 'partner' || tabSummary?.primary_entity === 'staff' || tabSummary?.primary_entity === 'asin' ? tabSummary.primary_entity : null}
                       onApply={(suggestion: AISuggestion) => {
                         // Apply the category
                         onCategoryChange(idx, suggestion.category)

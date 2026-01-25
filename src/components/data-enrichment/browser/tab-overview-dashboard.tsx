@@ -32,6 +32,7 @@ import {
 import { TabCard } from './tab-card'
 import { TabListRow } from './tab-list-row'
 import { SyncHistoryPanel } from '../sync-history-panel'
+import { AISourceAnalysis } from './ai-source-analysis'
 import type { CategoryStats, TabStatus, EntityType } from '@/types/entities'
 
 type EntityTypeOrNull = EntityType | null
@@ -61,6 +62,7 @@ interface SyncStatus {
 interface TabOverviewDashboardProps {
   sourceName: string
   sourceId?: string
+  spreadsheetId?: string
   tabs: Tab[]
   onSelectTab: (tabId: string) => void
   onTabStatusChange?: (tabId: string, status: 'active' | 'reference' | 'hidden' | 'flagged', notes?: string) => void
@@ -112,6 +114,7 @@ function formatRelativeTime(dateString: string): string {
 export function TabOverviewDashboard({
   sourceName,
   sourceId,
+  spreadsheetId,
   tabs,
   onSelectTab,
   onTabStatusChange,
@@ -238,6 +241,16 @@ export function TabOverviewDashboard({
         </div>
         <Progress value={overallProgress} className="h-2" />
       </div>
+
+      {/* AI Source Analysis */}
+      {spreadsheetId && (
+        <AISourceAnalysis
+          sourceName={sourceName}
+          sourceId={sourceId || ''}
+          spreadsheetId={spreadsheetId}
+          tabs={tabs.map(t => ({ id: t.id, tab_name: t.tab_name }))}
+        />
+      )}
 
       {/* Sync history collapsible */}
       {sourceId && onSync && (

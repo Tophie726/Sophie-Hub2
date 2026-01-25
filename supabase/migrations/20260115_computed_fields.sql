@@ -2,6 +2,17 @@
 -- Fields whose values come from logic rather than direct sync
 -- Supports hot-swapping sources and gradual implementation
 
+-- ============================================
+-- UPDATED_AT TRIGGER FUNCTION (idempotent)
+-- ============================================
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
 CREATE TABLE IF NOT EXISTS computed_fields (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 

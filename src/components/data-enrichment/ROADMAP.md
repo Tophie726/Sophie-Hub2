@@ -32,6 +32,50 @@
 
 ---
 
+## Data Model Architecture
+
+### Core Entities & Primary Keys
+
+| Entity | Primary Key | Description |
+|--------|-------------|-------------|
+| **partners** | `brand_name` | The unique brand/company name |
+| **staff** | `full_name` | Staff member's full name |
+| **asins** | `asin_code` | Amazon's ASIN identifier |
+
+### Relationship Fields (Critical Pattern)
+
+Staff members are often assigned to partners (e.g., POD Leader, Account Manager). These assignments are stored **ON the partner record** as foreign keys.
+
+**The Rule:** Category is determined by **which entity owns the row**, not what the value contains.
+
+| Sheet Type | Column | Category | Target Field | Why |
+|------------|--------|----------|--------------|-----|
+| Partner sheet | "POD Leader" | `partner` | `pod_leader_id` | Assignment stored on partner |
+| Partner sheet | "Account Manager" | `partner` | `account_manager_id` | Assignment stored on partner |
+| Partner sheet | "Brand Manager" | `partner` | `brand_manager_id` | Assignment stored on partner |
+| Staff sheet | "Manager" | `staff` | `manager_id` | Manager FK stored on staff |
+| ASIN sheet | "Brand" | `asin` | `brand_name` | FK to partner stored on ASIN |
+
+**Common Relationship Columns on Partner Records:**
+- `pod_leader_id` - POD Leader assignment
+- `account_manager_id` - Account Manager assignment
+- `brand_manager_id` - Brand Manager assignment
+- `sales_rep_id` - Sales Rep assignment
+- `ppc_specialist_id` - PPC Specialist assignment
+
+**Why This Matters:**
+When AI sees "POD Leader = Sarah Smith" on a partner sheet, it should suggest:
+- Category: `partner` (not `staff`)
+- Target: `pod_leader_id`
+- Authority: `reference` (values are staff names, FK lookups)
+
+This is documented in all AI prompts in:
+- `src/lib/ai/mapping-sdk.ts`
+- `src/app/api/ai/analyze-source/route.ts`
+- `src/app/api/ai/analyze-tab/route.ts`
+
+---
+
 ## Phase 1: Foundation Abstraction
 
 **Goal:** Create a pluggable connector architecture that makes adding new data sources trivial.
@@ -663,7 +707,7 @@ const duration = {
 - [ ] Template: Market & Comp Analysis
 - [ ] Template: Campaign Structure
 
-### Phase 6 Progress (AI-Assisted) - COMPLETE
+### Phase 6 Progress (AI-Assisted)
 - [x] Claude API integration design (Tool-use pattern)
 - [x] API key management (database with env fallback - see `/admin/settings`)
 - [x] Mapping suggestion endpoint (`/api/ai/suggest-mapping`)
@@ -674,6 +718,10 @@ const duration = {
 - [x] UI: Sparkle button per column (`ai-suggestion-button.tsx`)
 - [x] UI: Suggestion popover with confidence + reasoning
 - [x] UI: "AI Suggest All" button + bulk review dialog (`ai-suggest-all-dialog.tsx`)
+- [x] Source-level AI analysis (`/api/ai/analyze-source`, `ai-source-analysis.tsx`)
+- [x] Per-tab AI summary in SmartMapper (`/api/ai/analyze-tab`, `ai-tab-analysis.tsx`)
+- [x] Tab summary persistence (`/api/ai/save-summary`, `tab_mappings.ai_summary`)
+- [x] Context passing: Tab summary's `primary_entity` improves per-column suggestions
 
 ---
 
@@ -725,8 +773,13 @@ const duration = {
 ### AI Mapping Assistant
 - `src/lib/ai/index.ts` - Module exports
 - `src/lib/ai/mapping-sdk.ts` - MappingAssistantSDK (Claude tool-use)
-- `src/app/api/ai/suggest-mapping/route.ts` - Single column suggestion
+- `src/app/api/ai/suggest-mapping/route.ts` - Single column suggestion (accepts `primary_entity` context)
 - `src/app/api/ai/suggest-all/route.ts` - Bulk suggestions
+- `src/app/api/ai/analyze-source/route.ts` - Source-level AI analysis
+- `src/app/api/ai/analyze-tab/route.ts` - Per-tab AI summary (entity type, purpose, column breakdown)
+- `src/app/api/ai/save-summary/route.ts` - Save/load tab summaries to database
+- `src/components/data-enrichment/browser/ai-source-analysis.tsx` - Source analysis UI
+- `src/components/data-enrichment/ai-tab-analysis.tsx` - Per-tab summary UI (persists to DB, passes context)
 
 ### Settings & API Keys
 - `src/app/(dashboard)/settings/page.tsx` - User settings page
@@ -742,5 +795,5 @@ const duration = {
 
 ---
 
-*Last updated: 2026-01-25 (Settings pages + API key management)*
+*Last updated: 2026-01-25 (AI Tab Summary persistence + context passing)*
 *Architecture audit by Claude Opus 4.5*

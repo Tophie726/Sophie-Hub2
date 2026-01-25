@@ -107,7 +107,8 @@ const COLUMN_MAPPING_TOOL: Anthropic.Tool = {
 
 const ENTITY_SCHEMA: EntitySchema = {
   partners: [
-    'brand_name',
+    // Core partner fields
+    'brand_name',        // PRIMARY KEY
     'client_name',
     'client_email',
     'client_phone',
@@ -122,9 +123,15 @@ const ENTITY_SCHEMA: EntitySchema = {
     'parent_asin_count',
     'child_asin_count',
     'notes',
+    // Staff assignment fields (FKs to staff)
+    'pod_leader_id',
+    'account_manager_id',
+    'brand_manager_id',
+    'sales_rep_id',
+    'ppc_specialist_id',
   ],
   staff: [
-    'full_name',
+    'full_name',         // PRIMARY KEY
     'email',
     'phone',
     'slack_id',
@@ -138,9 +145,10 @@ const ENTITY_SCHEMA: EntitySchema = {
     'hire_date',
     'dashboard_url',
     'calendly_url',
+    'manager_id',        // FK to another staff member
   ],
   asins: [
-    'asin_code',
+    'asin_code',         // PRIMARY KEY
     'parent_asin',
     'is_parent',
     'title',
@@ -149,6 +157,7 @@ const ENTITY_SCHEMA: EntitySchema = {
     'status',
     'cogs',
     'price',
+    'brand_name',        // FK to partner
   ],
 }
 
@@ -299,24 +308,37 @@ export class MappingAssistantSDK {
 ## Your Role
 Help admins map columns from external data sources (Google Sheets, CRMs, etc.) to Sophie Hub's core entities. Be accurate and conservative - if unsure, lower your confidence score.
 
-## Core Entities & Fields
+## Core Entities & Key Fields
 
 ### partners (Client brands we manage)
+**PRIMARY KEY: brand_name** (the unique identifier for partners)
 Fields: ${ENTITY_SCHEMA.partners.join(', ')}
-Key identifiers: brand_name, client_email
+Also stores: pod_leader_id, account_manager_id (FKs to staff)
 
 ### staff (Team members)
+**PRIMARY KEY: full_name** (the unique identifier for staff members)
 Fields: ${ENTITY_SCHEMA.staff.join(', ')}
-Key identifiers: email, full_name
 
 ### asins (Amazon products per partner)
+**PRIMARY KEY: asin_code** (the Amazon ASIN identifier)
 Fields: ${ENTITY_SCHEMA.asins.join(', ')}
-Key identifiers: asin_code
+
+## CRITICAL: Relationship Fields
+
+Staff members are often assigned to partners. When you see staff-related columns on a PARTNER sheet:
+- "POD Leader", "Account Manager", "Brand Manager", "Sales Person" → These are **partner** category fields
+- They store staff assignments ON the partner record (as foreign keys)
+- Target fields: pod_leader_id, account_manager_id, sales_rep_id
+- These are NOT "staff" category - they describe WHO is assigned to the PARTNER
+
+**Rule**: The category is determined by WHICH ENTITY OWNS THE ROW, not what the value contains.
+- Partner sheet with "POD Leader = Sarah Smith" → category: partner, target: pod_leader_id
+- Staff sheet with "Manager = John Doe" → category: staff, target: manager_id
 
 ## Column Categories
-- **partner**: Maps to partners entity
-- **staff**: Maps to staff entity
-- **asin**: Maps to asins entity
+- **partner**: Fields on/about partners (including staff assignment fields like pod_leader)
+- **staff**: Fields on/about staff members directly (NOT assignments to partners)
+- **asin**: Fields on/about Amazon products
 - **weekly**: Time-series status columns (look for date patterns like "1/6", "Week 1", "Jan 6")
 - **computed**: Derived fields that need calculation (formulas, aggregates)
 - **skip**: Columns to ignore (internal notes, blank columns, irrelevant data)
