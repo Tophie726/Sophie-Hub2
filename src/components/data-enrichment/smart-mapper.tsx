@@ -2254,11 +2254,13 @@ function ClassifyPhase({
       <AISuggestAllDialog
         open={showAISuggestAll}
         onOpenChange={setShowAISuggestAll}
-        columns={allValidColumns.map((col) => ({
-          name: col.sourceColumn,
-          sample_values: sampleRows[0] ? [sampleRows[0][col.sourceIndex]].filter(Boolean) : [],
-          position: col.sourceIndex,
-        }))}
+        columns={allValidColumns
+          .filter(col => col.category === null) // Only send unclassified columns
+          .map((col) => ({
+            name: col.sourceColumn,
+            sample_values: sampleRows.slice(0, 10).map(row => String(row[col.sourceIndex] ?? '')).filter(v => v.trim()),
+            position: col.sourceIndex,
+          }))}
         tabName={tabName}
         onApplyAll={(suggestions: BulkSuggestion[]) => {
           suggestions.forEach((suggestion) => {
