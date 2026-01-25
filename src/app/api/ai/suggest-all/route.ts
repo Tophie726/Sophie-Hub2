@@ -16,7 +16,7 @@ const SuggestAllSchema = z.object({
     .array(
       z.object({
         name: z.string().min(1),
-        sample_values: z.array(z.string()).max(10),
+        sample_values: z.array(z.coerce.string()).max(10).transform(arr => arr.filter(v => v && v.trim())),
         position: z.number().int().min(0),
       })
     )

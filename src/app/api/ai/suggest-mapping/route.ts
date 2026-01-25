@@ -13,8 +13,9 @@ import { z } from 'zod'
 
 const SuggestMappingSchema = z.object({
   column_name: z.string().min(1, 'Column name is required'),
-  sample_values: z.array(z.string()).max(20, 'Max 20 sample values'),
-  sibling_columns: z.array(z.string()).max(50, 'Max 50 sibling columns'),
+  // Coerce values to strings and filter empty ones
+  sample_values: z.array(z.coerce.string()).max(20, 'Max 20 sample values').transform(arr => arr.filter(v => v && v.trim())),
+  sibling_columns: z.array(z.coerce.string()).max(50, 'Max 50 sibling columns'),
   position: z.number().int().min(0).optional().default(0),
 })
 
