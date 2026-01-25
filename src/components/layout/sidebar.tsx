@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { signOut, useSession } from 'next-auth/react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
@@ -21,6 +21,7 @@ import {
   ChevronRight,
   Building2,
   LogOut,
+  Settings,
   X,
 } from 'lucide-react'
 import { useMobileMenu } from './mobile-menu-context'
@@ -153,50 +154,69 @@ function SidebarContent({ onNavigate, layoutId = 'activeNav' }: SidebarContentPr
         </nav>
       </ScrollArea>
 
-      {/* User Section - Clean and simple */}
-      <div className="border-t border-border/40 p-4">
-        <div className="flex items-center gap-3">
-          {/* Clickable profile - goes to settings */}
+      {/* User Section */}
+      <div className="border-t border-border/40 p-3">
+        <div className="flex items-center gap-2">
+          {/* Profile - clickable to settings */}
           <Link
             href="/settings"
             onClick={onNavigate}
-            className="flex flex-1 items-center gap-3 rounded-lg p-2 transition-colors hover:bg-accent min-w-0"
+            className="flex flex-1 items-center gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-accent min-w-0"
           >
-            <Avatar className="h-9 w-9 shrink-0">
+            <Avatar className="h-8 w-8 shrink-0">
               <AvatarImage
                 src={session?.user?.image || undefined}
                 alt={session?.user?.name || 'User'}
               />
-              <AvatarFallback className="bg-primary/10 text-primary text-sm font-medium">
+              <AvatarFallback className="bg-primary/10 text-primary text-xs font-medium">
                 {getInitials(session?.user?.name)}
               </AvatarFallback>
             </Avatar>
             <div className="flex flex-1 flex-col min-w-0">
-              <span className="text-sm font-medium truncate">
+              <span className="text-sm font-medium truncate leading-tight">
                 {session?.user?.name || 'Loading...'}
               </span>
-              <span className="text-xs text-muted-foreground">{userRole}</span>
+              <span className="text-xs text-muted-foreground leading-tight">{userRole}</span>
             </div>
           </Link>
 
-          {/* Just logout button */}
-          <TooltipProvider delayDuration={300}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  onClick={() => signOut({ callbackUrl: `${window.location.origin}/signin` })}
-                  className="shrink-0 rounded-md p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                  aria-label="Sign out"
-                >
-                  <LogOut className="h-4 w-4" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="top">
-                <p>Sign out</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+          {/* Settings & Logout */}
+          <div className="flex items-center">
+            <TooltipProvider delayDuration={300}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Link
+                    href="/settings"
+                    onClick={onNavigate}
+                    className="shrink-0 rounded-md p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                    aria-label="Settings"
+                  >
+                    <Settings className="h-4 w-4" />
+                  </Link>
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  <p>Settings</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <TooltipProvider delayDuration={300}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={() => signOut({ callbackUrl: `${window.location.origin}/signin` })}
+                    className="shrink-0 rounded-md p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                    aria-label="Sign out"
+                  >
+                    <LogOut className="h-4 w-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  <p>Sign out</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
         </div>
       </div>
     </div>
