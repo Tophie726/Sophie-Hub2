@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Check,
@@ -10,6 +10,8 @@ import {
   BookOpen,
   MessageSquare,
   LayoutDashboard,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -72,6 +74,50 @@ export function SheetTabBar({
     currentNotes: string
   }>({ open: false, tabId: null, tabName: '', currentNotes: '' })
   const [flagNotes, setFlagNotes] = useState('')
+
+  // Scroll indicator state
+  const [canScrollLeft, setCanScrollLeft] = useState(false)
+  const [canScrollRight, setCanScrollRight] = useState(false)
+
+  // Check scroll position to show/hide indicators
+  const checkScroll = useCallback(() => {
+    const container = containerRef.current
+    if (!container) return
+
+    const { scrollLeft, scrollWidth, clientWidth } = container
+    setCanScrollLeft(scrollLeft > 0)
+    setCanScrollRight(scrollLeft < scrollWidth - clientWidth - 1)
+  }, [])
+
+  // Monitor scroll position
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+
+    checkScroll()
+    container.addEventListener('scroll', checkScroll)
+
+    // Also check on resize
+    const resizeObserver = new ResizeObserver(checkScroll)
+    resizeObserver.observe(container)
+
+    return () => {
+      container.removeEventListener('scroll', checkScroll)
+      resizeObserver.disconnect()
+    }
+  }, [checkScroll, tabs.length])
+
+  // Scroll by a fixed amount
+  const scrollBy = (direction: 'left' | 'right') => {
+    const container = containerRef.current
+    if (!container) return
+
+    const scrollAmount = 200
+    container.scrollBy({
+      left: direction === 'left' ? -scrollAmount : scrollAmount,
+      behavior: 'smooth'
+    })
+  }
 
   // Only show active and reference tabs in the tab bar
   // Flagged and hidden tabs are only accessible from Overview dashboard
@@ -363,7 +409,33 @@ export function SheetTabBar({
 
   return (
     <>
-      <div className="bg-muted/20 px-4">
+      <div className="bg-muted/20 px-4 relative">
+        {/* Left scroll indicator */}
+        {canScrollLeft && (
+          <div className="absolute left-0 top-0 bottom-0 z-10 flex items-center">
+            <button
+              onClick={() => scrollBy('left')}
+              className="h-full px-2 bg-gradient-to-r from-muted/80 to-transparent hover:from-muted flex items-center"
+              aria-label="Scroll left"
+            >
+              <ChevronLeft className="h-4 w-4 text-muted-foreground" />
+            </button>
+          </div>
+        )}
+
+        {/* Right scroll indicator */}
+        {canScrollRight && (
+          <div className="absolute right-0 top-0 bottom-0 z-10 flex items-center">
+            <button
+              onClick={() => scrollBy('right')}
+              className="h-full px-2 bg-gradient-to-l from-muted/80 to-transparent hover:from-muted flex items-center"
+              aria-label="Scroll right"
+            >
+              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            </button>
+          </div>
+        )}
+
         {/* Main Tab Container - scrolls horizontally on overflow */}
         <div
           ref={containerRef}

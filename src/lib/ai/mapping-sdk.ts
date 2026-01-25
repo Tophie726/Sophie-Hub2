@@ -7,6 +7,7 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 import { getAdminClient } from '@/lib/supabase/admin'
+import { getAnthropicApiKey } from '@/lib/settings'
 
 // =============================================================================
 // Types
@@ -156,15 +157,12 @@ export class MappingAssistantSDK {
 
   /**
    * Initialize the SDK (lazy - only when needed)
+   * Loads API key from database (with env fallback)
    */
-  private ensureInitialized(): void {
+  private async ensureInitialized(): Promise<void> {
     if (this.anthropic) return
 
-    const apiKey = process.env.ANTHROPIC_API_KEY
-    if (!apiKey) {
-      throw new Error('ANTHROPIC_API_KEY environment variable is not set')
-    }
-
+    const apiKey = await getAnthropicApiKey()
     this.anthropic = new Anthropic({ apiKey })
   }
 
@@ -217,7 +215,7 @@ export class MappingAssistantSDK {
     column: ColumnInput,
     siblingColumns: string[]
   ): Promise<ColumnSuggestion> {
-    this.ensureInitialized()
+    await this.ensureInitialized()
     await this.loadExistingMappings()
 
     const response = await this.anthropic!.messages.create({
