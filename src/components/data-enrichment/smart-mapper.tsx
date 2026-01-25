@@ -1748,7 +1748,7 @@ function ClassifyPhase({
                     <AISuggestionButton
                       columnName={col.sourceColumn}
                       sampleValues={sampleRows.slice(0, 10).map(row => String(row[idx] ?? '')).filter(v => v.trim())}
-                      siblingColumns={validColumns.map(c => c.sourceColumn)}
+                      siblingColumns={validColumns.slice(0, 50).map(c => c.sourceColumn)}
                       position={idx}
                       onApply={(suggestion: AISuggestion) => {
                         // Apply the category
