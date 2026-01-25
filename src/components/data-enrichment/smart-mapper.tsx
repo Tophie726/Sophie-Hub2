@@ -1750,6 +1750,8 @@ function ClassifyPhase({
                       sampleValues={sampleRows.slice(0, 10).map(row => String(row[idx] ?? '')).filter(v => v.trim())}
                       siblingColumns={validColumns.slice(0, 50).map(c => c.sourceColumn)}
                       position={idx}
+                      tabName={tabName}
+                      sourceName={sheetName}
                       onApply={(suggestion: AISuggestion) => {
                         // Apply the category
                         onCategoryChange(idx, suggestion.category)

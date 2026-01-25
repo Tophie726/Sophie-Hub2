@@ -38,6 +38,12 @@ export interface ColumnInput {
   position: number
 }
 
+export interface MappingContext {
+  tabName?: string
+  sourceName?: string
+  primaryEntity?: 'partner' | 'staff' | 'asin' | null
+}
+
 export interface ExistingMapping {
   sourceColumn: string
   targetEntity: string
@@ -213,7 +219,8 @@ export class MappingAssistantSDK {
    */
   async suggestColumnMapping(
     column: ColumnInput,
-    siblingColumns: string[]
+    siblingColumns: string[],
+    context?: MappingContext
   ): Promise<ColumnSuggestion> {
     await this.ensureInitialized()
     await this.loadExistingMappings()
@@ -221,13 +228,13 @@ export class MappingAssistantSDK {
     const response = await this.anthropic!.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 1024,
-      system: this.buildSystemPrompt(),
+      system: this.buildSystemPrompt(context),
       tools: [COLUMN_MAPPING_TOOL],
       tool_choice: { type: 'tool', name: 'suggest_column_mapping' },
       messages: [
         {
           role: 'user',
-          content: this.buildColumnPrompt(column, siblingColumns),
+          content: this.buildColumnPrompt(column, siblingColumns, context),
         },
       ],
     })
@@ -265,11 +272,27 @@ export class MappingAssistantSDK {
   /**
    * Build the system prompt with schema and existing mappings
    */
-  private buildSystemPrompt(): string {
+  private buildSystemPrompt(context?: MappingContext): string {
     const existingPatternsJson =
       this.existingMappings.length > 0
         ? JSON.stringify(this.existingMappings.slice(0, 20), null, 2)
         : 'No existing mappings yet'
+
+    // Build context hint based on sheet/tab names
+    let contextHint = ''
+    if (context?.primaryEntity) {
+      contextHint = `\n\n## IMPORTANT: Sheet Context\nThis tab has been identified as primarily containing **${context.primaryEntity}** data. Strongly prefer mapping columns to the ${context.primaryEntity} entity unless clearly unrelated.`
+    } else if (context?.tabName || context?.sourceName) {
+      const name = context.tabName || context.sourceName || ''
+      // Infer primary entity from common naming patterns
+      if (/client|partner|brand|account/i.test(name)) {
+        contextHint = `\n\n## IMPORTANT: Sheet Context\nThe sheet/tab name "${name}" suggests this is primarily about **partners/clients**. Prefer mapping columns to the partner entity when reasonable. For example, "Client Count" on a client sheet likely refers to a partner metric, not staff.`
+      } else if (/staff|team|employee|member/i.test(name)) {
+        contextHint = `\n\n## IMPORTANT: Sheet Context\nThe sheet/tab name "${name}" suggests this is primarily about **staff/team members**. Prefer mapping columns to the staff entity when reasonable.`
+      } else if (/asin|product|sku|inventory/i.test(name)) {
+        contextHint = `\n\n## IMPORTANT: Sheet Context\nThe sheet/tab name "${name}" suggests this is primarily about **ASINs/products**. Prefer mapping columns to the asin entity when reasonable.`
+      }
+    }
 
     return `You are a data mapping assistant for Sophie Hub, an internal operations platform for Sophie Society (an Amazon brand management agency with 120+ staff managing 700+ partner brands).
 
@@ -303,30 +326,35 @@ Key identifiers: asin_code
 - **reference**: Read-only reference, doesn't overwrite existing values
 
 ## Existing Mapping Patterns (learn from these)
-${existingPatternsJson}
+${existingPatternsJson}${contextHint}
 
 ## Analysis Guidelines
 1. Look at BOTH column names AND sample values
 2. Consider context from sibling columns (e.g., if "Brand Name" exists, "Email" likely refers to client email)
-3. Weekly columns often have date patterns in names
-4. Key fields are unique identifiers - be careful marking something as is_key
-5. When uncertain, use lower confidence and category="skip"
-6. Default to authority="reference" unless clearly the primary source`
+3. **Pay close attention to the sheet/tab name** - it often indicates the primary entity type
+4. Weekly columns often have date patterns in names
+5. Key fields are unique identifiers - be careful marking something as is_key
+6. When uncertain, use lower confidence and category="skip"
+7. Default to authority="reference" unless clearly the primary source`
   }
 
   /**
    * Build the prompt for a specific column
    */
-  private buildColumnPrompt(column: ColumnInput, siblingColumns: string[]): string {
+  private buildColumnPrompt(column: ColumnInput, siblingColumns: string[], context?: MappingContext): string {
     const nonEmptyValues = column.sampleValues.filter((v) => v && v.trim())
     const sampleDisplay =
       nonEmptyValues.length > 0
         ? nonEmptyValues.slice(0, 5).join('", "')
         : '(all empty values)'
 
+    const contextLine = context?.tabName
+      ? `**Sheet/Tab:** "${context.tabName}"${context.sourceName ? ` (from ${context.sourceName})` : ''}\n`
+      : ''
+
     return `Analyze this column and suggest a mapping:
 
-**Column Name:** "${column.name}"
+${contextLine}**Column Name:** "${column.name}"
 **Sample Values:** "${sampleDisplay}"
 **Position:** Column ${column.position + 1}
 **Sibling Columns:** ${siblingColumns.slice(0, 10).join(', ')}

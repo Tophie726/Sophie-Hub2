@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { requirePermission } from '@/lib/auth/api-auth'
 import { apiSuccess, apiError, apiValidationError, ApiErrors } from '@/lib/api/response'
-import { getMappingAssistant, type ColumnInput } from '@/lib/ai/mapping-sdk'
+import { getMappingAssistant, type ColumnInput, type MappingContext } from '@/lib/ai/mapping-sdk'
 import { checkRateLimit, RATE_LIMITS, rateLimitHeaders } from '@/lib/rate-limit'
 import { hasSystemSetting } from '@/lib/settings'
 import { audit } from '@/lib/audit'
@@ -17,6 +17,9 @@ const SuggestMappingSchema = z.object({
   sample_values: z.array(z.coerce.string()).max(20, 'Max 20 sample values').transform(arr => arr.filter(v => v && v.trim())),
   sibling_columns: z.array(z.coerce.string()).max(50, 'Max 50 sibling columns'),
   position: z.number().int().min(0).optional().default(0),
+  // Context for better suggestions
+  tab_name: z.string().optional(),
+  source_name: z.string().optional(),
 })
 
 // =============================================================================
@@ -90,7 +93,7 @@ export async function POST(request: NextRequest) {
       return apiValidationError(validation.error)
     }
 
-    const { column_name, sample_values, sibling_columns, position } = validation.data
+    const { column_name, sample_values, sibling_columns, position, tab_name, source_name } = validation.data
 
     // Check if API key is configured (database or env fallback)
     const hasDbKey = await hasSystemSetting('anthropic_api_key')
@@ -110,7 +113,13 @@ export async function POST(request: NextRequest) {
       position,
     }
 
-    const suggestion = await assistant.suggestColumnMapping(column, sibling_columns)
+    // Build context for better suggestions
+    const context: MappingContext = {
+      tabName: tab_name,
+      sourceName: source_name,
+    }
+
+    const suggestion = await assistant.suggestColumnMapping(column, sibling_columns, context)
 
     // Audit log the AI suggestion
     await audit.log({

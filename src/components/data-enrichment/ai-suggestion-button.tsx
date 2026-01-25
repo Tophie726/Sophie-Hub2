@@ -46,6 +46,8 @@ interface AISuggestionButtonProps {
   position: number
   onApply: (suggestion: AISuggestion) => void
   disabled?: boolean
+  tabName?: string
+  sourceName?: string
 }
 
 // =============================================================================
@@ -113,6 +115,8 @@ export function AISuggestionButton({
   position,
   onApply,
   disabled = false,
+  tabName,
+  sourceName,
 }: AISuggestionButtonProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
@@ -132,6 +136,8 @@ export function AISuggestionButton({
           sample_values: sampleValues,
           sibling_columns: siblingColumns,
           position,
+          tab_name: tabName,
+          source_name: sourceName,
         }),
       })
 
