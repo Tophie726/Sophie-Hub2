@@ -211,10 +211,10 @@ const animations = {
 
 ### 3.2 Credential Storage
 
-- [ ] Secure storage for connector API keys
-  - Option A: Supabase Vault (if available)
-  - Option B: Encrypted JSONB column with app-level encryption
-  - Option C: Environment variables for sensitive keys
+- [x] Secure storage for connector API keys
+  - Using Option B: Encrypted JSONB column with app-level encryption (AES-256-GCM)
+  - Admin settings page at `/admin/settings`
+  - Encryption utilities in `src/lib/encryption/index.ts`
 
 - [ ] Token refresh handling for OAuth connectors
 - [ ] Credential rotation support
@@ -665,7 +665,7 @@ const duration = {
 
 ### Phase 6 Progress (AI-Assisted) - COMPLETE
 - [x] Claude API integration design (Tool-use pattern)
-- [x] API key management (env var ANTHROPIC_API_KEY)
+- [x] API key management (database with env fallback - see `/admin/settings`)
 - [x] Mapping suggestion endpoint (`/api/ai/suggest-mapping`)
 - [x] Bulk suggestion endpoint (`/api/ai/suggest-all`)
 - [x] MappingAssistantSDK class (`src/lib/ai/mapping-sdk.ts`)
@@ -728,11 +728,19 @@ const duration = {
 - `src/app/api/ai/suggest-mapping/route.ts` - Single column suggestion
 - `src/app/api/ai/suggest-all/route.ts` - Bulk suggestions
 
+### Settings & API Keys
+- `src/app/(dashboard)/settings/page.tsx` - User settings page
+- `src/app/(dashboard)/admin/settings/page.tsx` - Admin API key management
+- `src/lib/encryption/index.ts` - AES-256-GCM encryption
+- `src/lib/settings/index.ts` - getAnthropicApiKey helper
+- `supabase/migrations/20260125_system_settings.sql` - Settings table
+
 ### Feature Docs
 - `docs/features/AI_MAPPING_ASSISTANT.md` - AI mapping co-pilot design
+- `docs/features/SETTINGS_AND_API_KEYS.md` - Settings & API key management design
 - `docs/DATA_ENRICHMENT_PROGRESS.md` - Progress tracker
 
 ---
 
-*Last updated: 2026-01-25 (Audit log applied, auth error handling added)*
+*Last updated: 2026-01-25 (Settings pages + API key management)*
 *Architecture audit by Claude Opus 4.5*

@@ -1,7 +1,7 @@
 # Data Enrichment Progress Tracker
 
 > Tracking the implementation of Sophie Hub's data enrichment system.
-> Last updated: 2026-01-25 (Audit Log Migration Applied + Auth Error Handling)
+> Last updated: 2026-01-25 (Settings Pages + API Key Management)
 
 ---
 
@@ -262,6 +262,16 @@ In-app AI co-pilot for column mapping at multiple granularity levels.
 - `src/components/data-enrichment/ai-suggest-all-dialog.tsx` - Bulk review dialog
 - `src/components/ui/popover.tsx` - Popover component (shadcn/ui)
 
+### Settings & API Key Management
+- `src/app/(dashboard)/settings/page.tsx` - User settings (profile, theme)
+- `src/app/(dashboard)/admin/settings/page.tsx` - Admin settings (API keys)
+- `src/app/api/admin/settings/route.ts` - List settings API
+- `src/app/api/admin/settings/[key]/route.ts` - Update/delete settings API
+- `src/lib/encryption/index.ts` - AES-256-GCM encryption utilities
+- `src/lib/settings/index.ts` - getSystemSetting, getAnthropicApiKey helpers
+- `supabase/migrations/20260125_system_settings.sql` - system_settings table
+- `docs/features/SETTINGS_AND_API_KEYS.md` - Full design doc
+
 ### Database Migrations
 - `supabase/migrations/20260124_connector_config.sql` - Connection config backfill
 - `supabase/migrations/20260124_field_lineage.sql` - Field lineage tracking
@@ -288,6 +298,9 @@ In-app AI co-pilot for column mapping at multiple granularity levels.
 | 2026-01-24 | Batch inserts (50 at a time) | Performance optimization for large syncs |
 | 2026-01-25 | Auth error state with retry button | Better UX for session race conditions |
 | 2026-01-25 | Applied audit_log migration | Complete audit trail now active |
+| 2026-01-25 | Settings pages + API key management | Admin can configure Claude API key in UI |
+| 2026-01-25 | Tab scroll indicators | Chevron buttons show when tabs overflow |
+| 2026-01-25 | Google profile images in sidebar | Session-based avatars with settings link |
 
 ---
 
