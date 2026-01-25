@@ -4,7 +4,6 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { signOut, useSession } from 'next-auth/react'
-import { useTheme } from 'next-themes'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -22,11 +21,7 @@ import {
   ChevronRight,
   Building2,
   LogOut,
-  Sun,
-  Moon,
-  Monitor,
   X,
-  Settings,
 } from 'lucide-react'
 import { useMobileMenu } from './mobile-menu-context'
 
@@ -85,40 +80,9 @@ interface SidebarContentProps {
 function SidebarContent({ onNavigate, layoutId = 'activeNav' }: SidebarContentProps) {
   const pathname = usePathname()
   const { data: session } = useSession()
-  const { theme, setTheme } = useTheme()
-  const [mounted, setMounted] = useState(false)
-
-  // Avoid hydration mismatch by only rendering theme icon after mount
-  useEffect(() => {
-    setMounted(true)
-  }, [])
 
   // Determine user role (simplified - could be enhanced with actual role lookup)
   const userRole = session?.user?.email?.includes('admin') ? 'Admin' : 'Staff'
-
-  // Cycle through themes: light -> dark -> system
-  const cycleTheme = () => {
-    if (theme === 'light') setTheme('dark')
-    else if (theme === 'dark') setTheme('system')
-    else setTheme('light')
-  }
-
-  const getThemeIcon = () => {
-    // Return consistent icon on server to avoid hydration mismatch
-    if (!mounted) return Sun
-    if (theme === 'light') return Sun
-    if (theme === 'dark') return Moon
-    return Monitor
-  }
-
-  const getThemeLabel = () => {
-    if (!mounted) return 'Theme'
-    if (theme === 'light') return 'Light mode'
-    if (theme === 'dark') return 'Dark mode'
-    return 'System'
-  }
-
-  const ThemeIcon = getThemeIcon()
 
   return (
     <div className="flex h-full flex-col">
@@ -189,16 +153,16 @@ function SidebarContent({ onNavigate, layoutId = 'activeNav' }: SidebarContentPr
         </nav>
       </ScrollArea>
 
-      {/* User Section */}
+      {/* User Section - Clean and simple */}
       <div className="border-t border-border/40 p-4">
         <div className="flex items-center gap-3">
           {/* Clickable profile - goes to settings */}
           <Link
             href="/settings"
             onClick={onNavigate}
-            className="flex flex-1 items-center gap-3 rounded-lg p-2 transition-colors hover:bg-accent"
+            className="flex flex-1 items-center gap-3 rounded-lg p-2 transition-colors hover:bg-accent min-w-0"
           >
-            <Avatar className="h-9 w-9">
+            <Avatar className="h-9 w-9 shrink-0">
               <AvatarImage
                 src={session?.user?.image || undefined}
                 alt={session?.user?.name || 'User'}
@@ -215,67 +179,24 @@ function SidebarContent({ onNavigate, layoutId = 'activeNav' }: SidebarContentPr
             </div>
           </Link>
 
-          {/* Action buttons */}
-          <div className="flex items-center gap-1">
-            <TooltipProvider delayDuration={300}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Link
-                    href="/settings"
-                    onClick={onNavigate}
-                    className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                  >
-                    <Settings className="h-4 w-4" />
-                  </Link>
-                </TooltipTrigger>
-                <TooltipContent side="top">
-                  <p>Settings</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-            <TooltipProvider delayDuration={300}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    onClick={cycleTheme}
-                    className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                  >
-                    <AnimatePresence mode="wait" initial={false}>
-                      <motion.div
-                        key={theme}
-                        initial={{ scale: 0.8, opacity: 0, rotate: -30 }}
-                        animate={{ scale: 1, opacity: 1, rotate: 0 }}
-                        exit={{ scale: 0.8, opacity: 0, rotate: 30 }}
-                        transition={{ duration: 0.15, ease: easeOut }}
-                      >
-                        <ThemeIcon className="h-4 w-4" />
-                      </motion.div>
-                    </AnimatePresence>
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="top">
-                  <p>{getThemeLabel()}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-            <TooltipProvider delayDuration={300}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    onClick={() => signOut({ callbackUrl: `${window.location.origin}/signin` })}
-                    className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                  >
-                    <LogOut className="h-4 w-4" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="top">
-                  <p>Sign out</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </div>
+          {/* Just logout button */}
+          <TooltipProvider delayDuration={300}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={() => signOut({ callbackUrl: `${window.location.origin}/signin` })}
+                  className="shrink-0 rounded-md p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                  aria-label="Sign out"
+                >
+                  <LogOut className="h-4 w-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                <p>Sign out</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
       </div>
     </div>
