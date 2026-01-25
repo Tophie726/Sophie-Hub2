@@ -88,7 +88,7 @@ export const authOptions = {
 
       return true
     },
-    async jwt({ token, account }) {
+    async jwt({ token, account, profile }) {
       // Initial sign in - persist the OAuth access_token and refresh_token
       if (account) {
         return {
@@ -96,6 +96,8 @@ export const authOptions = {
           accessToken: account.access_token,
           refreshToken: account.refresh_token,
           expiresAt: account.expires_at,
+          // Store Google profile picture
+          picture: (profile as { picture?: string })?.picture || token.picture,
         }
       }
 
@@ -111,6 +113,10 @@ export const authOptions = {
       // Send properties to the client
       session.accessToken = token.accessToken as string
       session.error = token.error as string | undefined
+      // Ensure user image is available (NextAuth should pass it automatically, but let's be explicit)
+      if (token.picture && session.user) {
+        session.user.image = token.picture as string
+      }
       return session
     },
   },

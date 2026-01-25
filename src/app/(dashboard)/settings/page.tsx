@@ -2,13 +2,13 @@
 
 import { useSession } from 'next-auth/react'
 import { useTheme } from 'next-themes'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
 import { PageHeader } from '@/components/layout/page-header'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Sun, Moon, Monitor, Settings, Shield, ChevronRight } from 'lucide-react'
+import { Sun, Moon, Monitor, Shield, ChevronRight, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 function getInitials(name?: string | null): string {
@@ -25,14 +25,28 @@ export default function SettingsPage() {
   const { data: session } = useSession()
   const { theme, setTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
+
+  // Check admin status from API (since ADMIN_EMAILS isn't a NEXT_PUBLIC env var)
+  const checkAdminStatus = useCallback(async () => {
+    try {
+      const response = await fetch('/api/auth/me')
+      if (response.ok) {
+        const data = await response.json()
+        setIsAdmin(data.user?.isAdmin || false)
+      }
+    } catch (error) {
+      console.error('Failed to check admin status:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
 
   useEffect(() => {
     setMounted(true)
-  }, [])
-
-  // Check if user is admin (simplified check)
-  const isAdmin = session?.user?.email?.includes('admin') ||
-    process.env.NEXT_PUBLIC_ADMIN_EMAILS?.split(',').includes(session?.user?.email || '')
+    checkAdminStatus()
+  }, [checkAdminStatus])
 
   const themes = [
     { value: 'light', label: 'Light', icon: Sun },
@@ -51,8 +65,8 @@ export default function SettingsPage() {
         {/* Profile Card */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+            <CardTitle className="flex items-center gap-3">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-lg">
                 👤
               </span>
               Profile
@@ -88,8 +102,8 @@ export default function SettingsPage() {
         {/* Appearance Card */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+            <CardTitle className="flex items-center gap-3">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-lg">
                 🎨
               </span>
               Appearance
@@ -123,7 +137,16 @@ export default function SettingsPage() {
         </Card>
 
         {/* Admin Settings Link (only for admins) */}
-        {isAdmin && (
+        {isLoading ? (
+          <Card className="border-muted">
+            <CardContent className="py-6">
+              <div className="flex items-center justify-center gap-2 text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span className="text-sm">Checking permissions...</span>
+              </div>
+            </CardContent>
+          </Card>
+        ) : isAdmin && (
           <Card className="border-orange-500/20 bg-orange-500/5">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-orange-600 dark:text-orange-400">
@@ -138,7 +161,6 @@ export default function SettingsPage() {
               <Link href="/admin/settings">
                 <Button variant="outline" className="w-full justify-between group">
                   <span className="flex items-center gap-2">
-                    <Settings className="h-4 w-4" />
                     Open Admin Settings
                   </span>
                   <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />

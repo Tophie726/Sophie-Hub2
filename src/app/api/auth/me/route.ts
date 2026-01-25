@@ -1,5 +1,12 @@
 import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth/api-auth'
+import { ROLES } from '@/lib/auth/roles'
+
+interface SessionUser {
+  name?: string | null
+  email?: string | null
+  image?: string | null
+}
 
 /**
  * GET /api/auth/me
@@ -13,13 +20,19 @@ export async function GET() {
     return auth.response
   }
 
-  // Return the authenticated user info
-  // auth.user has all the info we need (email, name, role)
+  // Get image from NextAuth session (cast to expected shape)
+  const session = auth.session as { user?: SessionUser } | null
+  const sessionImage = session?.user?.image
+
   return NextResponse.json({
-    user: auth.user,
+    user: {
+      ...auth.user,
+      isAdmin: auth.user.role === ROLES.ADMIN,
+    },
     session: {
       email: auth.user.email,
       name: auth.user.name,
+      image: sessionImage,
     },
   })
 }
