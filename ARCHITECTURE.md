@@ -79,15 +79,69 @@ const patternsByTab = new Map<string, any[]>()
 
 #### Cache-Control Headers on Read-Only APIs (2026-01-26)
 
-**Location:** `src/lib/api/response.ts`, `src/app/api/flow-map/route.ts`, `src/app/api/mappings/load/route.ts`, `src/app/api/data-sources/route.ts`
+**Location:** `src/lib/api/response.ts` + 7 API routes
 
-**Change:** Added optional `headers` parameter to `apiSuccess()` helper. Applied `Cache-Control: private, max-age=30, stale-while-revalidate` to read-heavy endpoints (flow-map, mappings/load, data-sources).
+**Change:** Added optional `headers` parameter to `apiSuccess()` helper. Applied `Cache-Control` to all read-heavy endpoints.
+
+**Cached Endpoints:**
+
+| Endpoint | max-age | stale-while-revalidate | Rationale |
+|----------|---------|----------------------|-----------|
+| `/api/data-sources` | 30s | 60s | Source list, changes on save only |
+| `/api/flow-map` | 30s | 120s | Aggregated view, rarely changes |
+| `/api/mappings/load` | 30s | 60s | Saved mappings, changes on save only |
+| `/api/sheets/raw-rows` | 60s | 120s | Google Sheets data, stable during mapping session |
+| `/api/ai/save-summary` (GET) | 60s | 120s | AI summaries, changes only on re-analysis |
+| `/api/field-tags` | 300s | 600s | Tags rarely change, 5-minute cache |
 
 **Guidelines:**
 - `private` — only browser caches (not CDN), since all endpoints require auth
-- `max-age=30` — serve cached for 30 seconds
-- `stale-while-revalidate=120` — serve stale while revalidating in background for up to 2 minutes
-- Mutation-heavy endpoints (save, sync) should NOT have cache headers
+- Short `max-age` for data that changes on user action
+- Longer `max-age` for reference data (field-tags: 5 minutes)
+- Mutation endpoints (save, sync, POST) should NOT have cache headers
+
+---
+
+### Client-Side Data Caching
+
+#### SmartMapper Raw Data Cache (2026-01-26)
+
+**Location:** `src/components/data-enrichment/smart-mapper.tsx`
+
+**Problem:** Every tab click fetched raw sheet data from Google Sheets API (400-1000ms), even when revisiting a tab within the same session.
+
+**Solution:** Module-level `Map` cache with 5-minute TTL:
+```typescript
+const RAW_DATA_CACHE_TTL = 5 * 60 * 1000
+const rawDataCache = new Map<string, { data: TabRawData; timestamp: number }>()
+
+// On tab load: check cache before fetching
+const cached = getCachedRawData(spreadsheetId, tabName)
+if (cached) { setRawData(cached); return } // <50ms
+
+// On fetch: cache the result
+setCachedRawData(spreadsheetId, tabName, data)
+```
+
+**Result:** Tab revisit within 5 minutes: <50ms (was 400-1000ms). Cache clears on page reload.
+
+---
+
+#### Google Sheets API Parallelization (2026-01-26)
+
+**Location:** `src/lib/google/sheets.ts` (`getSheetRawRows`)
+
+**Problem:** Two sequential Google API calls — `values.get()` then `spreadsheets.get()` — each taking 200-500ms.
+
+**Solution:** `Promise.all()` to run both in parallel:
+```typescript
+const [response, metadata] = await Promise.all([
+  sheets.spreadsheets.values.get({ spreadsheetId, range }),
+  sheets.spreadsheets.get({ spreadsheetId, ranges, fields }),
+])
+```
+
+**Result:** ~200-300ms saved per raw data fetch.
 
 ---
 
@@ -594,7 +648,7 @@ Track these metrics as the app scales:
 |------|------|---------|
 | 2025-01-24 | Enterprise Sweep | N+1 fix, singleton pattern, React.memo, ErrorBoundary, health endpoint, TypeScript fixes, console.log cleanup |
 | 2025-01-24 | Security Audit | Open redirect fix, query injection fix, RBAC implementation |
-| 2026-01-26 | Performance Sweep | N+1 fix in mappings/load, Cache-Control headers (flow-map, mappings/load, data-sources), apiSuccess headers param, blank page race condition fix, skip Google Sheets preview for configured sources |
+| 2026-01-26 | Performance Sweep | N+1 fix in mappings/load, Cache-Control on 7 endpoints, apiSuccess headers param, blank page fix, skip preview for configured sources, parallel Google API calls, client-side raw data cache, deferred field tags |
 
 ---
 

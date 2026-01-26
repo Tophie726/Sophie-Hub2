@@ -53,6 +53,8 @@ export async function GET(request: NextRequest) {
       detectedHeaderRow: headerDetection.rowIndex,
       headerConfidence: headerDetection.confidence,
       headerReasons: headerDetection.reasons,
+    }, {
+      headers: { 'Cache-Control': 'private, max-age=60, stale-while-revalidate=120' },
     })
   } catch (error) {
     console.error('Error getting raw rows:', error)

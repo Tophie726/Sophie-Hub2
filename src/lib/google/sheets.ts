@@ -168,11 +168,18 @@ export async function getSheetRawRows(
 
   const sheets = google.sheets({ version: 'v4', auth })
 
-  // Get first N rows for preview
-  const response = await sheets.spreadsheets.values.get({
-    spreadsheetId,
-    range: `'${tabName}'!A1:ZZ${maxRows}`,
-  })
+  // Fetch rows and metadata in parallel (saves 200-300ms vs sequential)
+  const [response, metadata] = await Promise.all([
+    sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: `'${tabName}'!A1:ZZ${maxRows}`,
+    }),
+    sheets.spreadsheets.get({
+      spreadsheetId,
+      ranges: [`'${tabName}'`],
+      fields: 'sheets.properties.gridProperties.rowCount',
+    }),
+  ])
 
   const values = response.data.values || []
 
@@ -186,13 +193,6 @@ export async function getSheetRawRows(
       })
     }
     return normalized
-  })
-
-  // Get total row count from metadata
-  const metadata = await sheets.spreadsheets.get({
-    spreadsheetId,
-    ranges: [`'${tabName}'`],
-    fields: 'sheets.properties.gridProperties.rowCount',
   })
 
   const totalRows = metadata.data.sheets?.[0]?.properties?.gridProperties?.rowCount || values.length

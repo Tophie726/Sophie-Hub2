@@ -203,6 +203,20 @@ const fadeInUp = {
 const getDraftKey = (spreadsheetId: string, tabName: string) =>
   `smartmapper-draft-${spreadsheetId}-${tabName}`
 
+// Module-level cache for raw sheet data (persists across tab switches, clears on page reload)
+const RAW_DATA_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
+const rawDataCache = new Map<string, { data: TabRawData; timestamp: number }>()
+function getCachedRawData(spreadsheetId: string, tabName: string): TabRawData | null {
+  const key = `${spreadsheetId}:${tabName}`
+  const entry = rawDataCache.get(key)
+  if (entry && Date.now() - entry.timestamp < RAW_DATA_CACHE_TTL) return entry.data
+  if (entry) rawDataCache.delete(key) // Expired
+  return null
+}
+function setCachedRawData(spreadsheetId: string, tabName: string, data: TabRawData) {
+  rawDataCache.set(`${spreadsheetId}:${tabName}`, { data, timestamp: Date.now() })
+}
+
 interface DraftState {
   phase: 'preview' | 'classify' | 'map'
   headerRow: number
@@ -229,8 +243,11 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
   const draftKey = getDraftKey(spreadsheetId, tabName)
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
-  // Fetch available field tags
+  // Fetch available field tags (deferred: only when entering classify phase)
   useEffect(() => {
+    if (phase !== 'classify' && phase !== 'map') return
+    if (availableTags.length > 0) return // Already loaded
+
     async function fetchTags() {
       try {
         const response = await fetch('/api/field-tags')
@@ -243,7 +260,8 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
       }
     }
     fetchTags()
-  }, [])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase])
 
   // Save draft to DB (debounced) and localStorage (immediate backup)
   useEffect(() => {
@@ -453,18 +471,31 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [handleUndo])
 
-  // Load raw data
+  // Load raw data (with client-side cache to avoid re-fetching from Google API on tab switch)
   const [loadError, setLoadError] = useState<string | null>(null)
   useEffect(() => {
     async function loadData() {
-      setIsLoading(true)
       setLoadError(null)
+
+      // Check client-side cache first (avoids Google API round-trip on tab revisit)
+      const cached = getCachedRawData(spreadsheetId, tabName)
+      if (cached) {
+        setRawData(cached)
+        const effectiveHeaderRow = confirmedHeaderRow !== undefined ? confirmedHeaderRow : cached.detectedHeaderRow
+        setHeaderRow(effectiveHeaderRow)
+        setInitialHeaderRow(effectiveHeaderRow)
+        setIsLoading(false)
+        return
+      }
+
+      setIsLoading(true)
       try {
         const response = await fetch(
           `/api/sheets/raw-rows?id=${spreadsheetId}&tab=${encodeURIComponent(tabName)}`
         )
         const data = await response.json()
         if (response.ok) {
+          setCachedRawData(spreadsheetId, tabName, data)
           setRawData(data)
           // Use confirmed header row if available, otherwise use detected
           const effectiveHeaderRow = confirmedHeaderRow !== undefined ? confirmedHeaderRow : data.detectedHeaderRow

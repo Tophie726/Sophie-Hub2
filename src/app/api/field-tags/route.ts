@@ -24,7 +24,9 @@ export async function GET() {
       return NextResponse.json({ error: 'Failed to fetch tags' }, { status: 500 })
     }
 
-    return NextResponse.json({ tags })
+    return NextResponse.json({ tags }, {
+      headers: { 'Cache-Control': 'private, max-age=300, stale-while-revalidate=600' },
+    })
   } catch (error) {
     console.error('Error in field-tags GET:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

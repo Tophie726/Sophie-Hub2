@@ -133,6 +133,8 @@ export async function GET(request: NextRequest) {
     return apiSuccess({
       summary: tabMapping?.ai_summary || null,
       tabMappingId: tabMapping?.id || null,
+    }, 200, {
+      'Cache-Control': 'private, max-age=60, stale-while-revalidate=120',
     })
   } catch (error) {
     console.error('Error in GET /api/ai/save-summary:', error)
