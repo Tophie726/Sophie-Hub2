@@ -145,10 +145,9 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
         if (sourceToSelect) {
           setActiveSourceId(sourceToSelect.id)
 
-          // Only fetch Google Sheets preview for tab discovery when source has no DB tabs.
-          // Sources with existing tabs skip the 100-500ms Google API call.
-          const hasTabs = sourceToSelect.tabs && sourceToSelect.tabs.length > 0
-          if (sourceToSelect.spreadsheet_id && !hasTabs) {
+          // Always fetch Google Sheets preview for full tab discovery.
+          // DB tabs show immediately (non-blocking), preview merges in background.
+          if (sourceToSelect.spreadsheet_id) {
             loadPreviewForSource(sourceToSelect.id, sourceToSelect.spreadsheet_id)
           }
 
@@ -510,10 +509,8 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
     const source = sources.find(s => s.id === sourceId)
     const preview = sheetPreviews[sourceId]
 
-    // Load preview only if we don't have it cached AND source has no DB tabs
-    // Sources with existing DB tabs don't need Google API discovery
-    const hasTabs = source?.tabs && source.tabs.length > 0
-    if (!preview && !hasTabs && source?.spreadsheet_id) {
+    // Load preview if we don't have it cached (for full tab discovery)
+    if (!preview && source?.spreadsheet_id) {
       loadPreviewForSource(sourceId, source.spreadsheet_id)
     }
 

@@ -648,7 +648,8 @@ Track these metrics as the app scales:
 |------|------|---------|
 | 2025-01-24 | Enterprise Sweep | N+1 fix, singleton pattern, React.memo, ErrorBoundary, health endpoint, TypeScript fixes, console.log cleanup |
 | 2025-01-24 | Security Audit | Open redirect fix, query injection fix, RBAC implementation |
-| 2026-01-26 | Performance Sweep | N+1 fix in mappings/load, Cache-Control on 7 endpoints, apiSuccess headers param, blank page fix, skip preview for configured sources, parallel Google API calls, client-side raw data cache, deferred field tags |
+| 2026-01-26 | Performance Sweep | N+1 fix in mappings/load, Cache-Control on 7 endpoints, apiSuccess headers param, blank page fix, parallel Google API calls, client-side raw data cache, deferred field tags, non-blocking preview |
+| 2026-01-26 | Quality Strategy | Added 6 critical invariants (INV-1 to INV-6) and pre-change verification checklist to `browser/CLAUDE.md` |
 
 ---
 

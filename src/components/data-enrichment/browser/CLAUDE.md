@@ -248,8 +248,86 @@ export const OVERVIEW_TAB_ID = '__overview__'
 const HIGH_CONFIDENCE_THRESHOLD = 80
 ```
 
-## Critical Constraint
+## Critical Constraints
 
 **NO FAKE DATA**: All stats displayed must come from database queries via the API. The dashboard is a window into the database, not static UI. Progress percentages, category counts, and timestamps are all derived from actual `column_mappings` and `tab_mappings` records.
 
 **VISUAL CONSISTENCY**: When the same data is displayed in multiple places, it must look the same everywhere. The header status indicator is the canonical example - grey/orange/green dot appears identically in tab bar, cards, and list rows.
+
+---
+
+## CRITICAL INVARIANTS (Read Before Any Change)
+
+These invariants MUST hold true at all times. If a change breaks any of these, it's a regression — no matter how much performance it gains.
+
+### INV-1: All Google Sheet tabs must be visible
+**Every tab in the actual Google Sheet must appear in the SheetTabBar.** This requires:
+- The Google Sheets preview (`/api/sheets/preview`) must always fetch for tab discovery
+- DB tabs show immediately (from `data_sources` API), preview tabs merge in background
+- The merge logic at `sheetTabs` must include both DB and preview tabs
+- **Violation example**: Skipping preview fetch for sources with DB tabs → only mapped tabs show
+
+### INV-2: Selecting a source must show Overview with data
+**Clicking a source tab must always land on Overview with content visible.** This requires:
+- `activeTabId` defaults to `OVERVIEW_TAB_ID`
+- `sheetTabs.length > 0` before rendering Overview content
+- Skeleton shows only when `sheetTabs.length === 0` AND still loading
+- **Violation example**: Setting `activeSourceId` before `sources` state is populated → blank page
+
+### INV-3: Saved mappings must persist across visits
+**If a user saves column mappings and returns, they must see their saved work.** This requires:
+- `restoreDraft()` 3-step cascade: DB draft → localStorage → saved `column_mappings`
+- Step 3 (saved mappings) is critical for post-save visits where drafts are cleared
+- **Violation example**: Removing Step 3 from `restoreDraft()` → fresh state on return
+
+### INV-4: Status indicators must be consistent everywhere
+**The same data must look the same in SheetTabBar, TabCard, and TabListRow.** This requires:
+- Header status: grey (none) / orange (auto-detected) / green (confirmed) — all three views
+- Progress ring on confirmed tabs in SheetTabBar
+- When adding or changing an indicator, update ALL three locations
+
+### INV-5: Performance optimizations must not change behavior
+**Caching, batching, and parallelization must produce identical results to the unoptimized version.** This requires:
+- Cache-Control headers: only on GET/read endpoints, never on mutations
+- Client-side caches: must have TTL and invalidation on mutation
+- Skipping fetches: ONLY safe when the data is guaranteed to be available elsewhere
+- **Violation example**: Skipping Google preview because "DB tabs exist" → missing unmapped tabs
+
+### INV-6: DB tabs show immediately, no blocking on external APIs
+**The skeleton loader must clear as soon as DB data is available.** This requires:
+- Skeleton condition: `(isLoadingPreview || isLoading) && sheetTabs.length === 0`
+- DB tabs populate `sheetTabs` before preview completes
+- Preview fetch is fire-and-forget, never awaited in the rendering path
+
+---
+
+## PRE-CHANGE VERIFICATION CHECKLIST
+
+Run through this BEFORE committing any change to the data-enrichment browser:
+
+### Data Visibility
+- [ ] All Google Sheet tabs visible in SheetTabBar (not just mapped ones)
+- [ ] Overview dashboard shows real stats from database
+- [ ] Tab cards show correct header status, progress, categories
+- [ ] Unmapped tabs still visible and clickable
+
+### Navigation
+- [ ] Clicking a source → lands on Overview with content
+- [ ] Clicking a tab → SmartMapper loads with data
+- [ ] Clicking "Back" in SmartMapper → returns to Overview
+- [ ] Switching sources → Overview with correct tabs
+
+### Persistence
+- [ ] Classify columns → Save → Navigate away → Return → Classifications restored
+- [ ] Draft saves to DB (check Network tab for POST /api/tab-mappings/draft)
+- [ ] Saved mappings load when no draft exists
+
+### Performance (verify no regressions)
+- [ ] DB tabs render before Google Sheets preview completes
+- [ ] Tab revisit within session uses cached data
+- [ ] No duplicate API calls in Network tab
+
+### Visual Consistency
+- [ ] Header status dot matches in tab bar, grid cards, list rows
+- [ ] Progress bars show same percentage everywhere
+- [ ] Category badges match between Overview and SmartMapper

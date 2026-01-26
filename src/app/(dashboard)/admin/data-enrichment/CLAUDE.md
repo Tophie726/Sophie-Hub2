@@ -233,8 +233,9 @@ Following CLAUDE.md animation guidelines:
 22. **Performance: Client-side raw data cache** - Module-level 5min TTL Map in SmartMapper, tab revisit <50ms vs 400-1000ms ✓
 23. **Performance: Parallel Google API** - `values.get()` + `spreadsheets.get()` via Promise.all, saves 200-300ms ✓
 24. **Performance: Cache-Control on 7 endpoints** - Browser-level caching on all read-heavy APIs ✓
-25. **Performance: Skip preview for configured sources** - Sources with DB tabs skip Google Sheets discovery ✓
+25. **Performance: Non-blocking preview** - DB tabs show immediately, Google Sheets preview merges in background ✓
 26. **Performance: Deferred field tags** - Only fetches on Classify phase entry, not on mount ✓
+27. **Quality: Critical invariants + pre-change checklist** - `browser/CLAUDE.md` documents 6 invariants and verification steps ✓
 
 ### What's TODO 🚧
 

@@ -736,7 +736,7 @@ const duration = {
 | `apiSuccess` headers parameter | `src/lib/api/response.ts` | Cleaner cache pattern |
 | Blank page race condition fix | `source-browser.tsx` | Guard render on data ready |
 | React.memo on all Flow nodes/edges | `lineage/nodes/*.tsx`, `lineage/edges/*.tsx` | No re-render on pan/zoom |
-| Skip Google Sheets preview for configured sources | `source-browser.tsx` | Eliminates 100-500ms Google API call on revisit |
+| Non-blocking preview (DB tabs render first) | `source-browser.tsx` | DB tabs show immediately, preview merges in background |
 | Parallel Google Sheets API calls | `src/lib/google/sheets.ts` | `values.get()` + `get()` via Promise.all, saves 200-300ms |
 | Client-side raw data cache (5min TTL) | `smart-mapper.tsx` | Module-level Map cache, tab revisit <50ms vs 400-1000ms |
 | Cache-Control on sheets/raw-rows | `api/sheets/raw-rows/route.ts` | 60s browser cache on sheet data |
@@ -835,5 +835,5 @@ const duration = {
 
 ---
 
-*Last updated: 2026-01-26 (SmartMapper perf: parallel Google API, client cache, deferred fetches)*
+*Last updated: 2026-01-26 (Fix: preview always fetches for tab discovery + critical invariants checklist)*
 *Architecture audit by Claude Opus 4.5*
