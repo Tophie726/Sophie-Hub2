@@ -230,6 +230,11 @@ Following CLAUDE.md animation guidelines:
 19. **Saved mapping restoration** - When no draft exists, SmartMapper loads from `column_mappings` table via `/api/mappings/load` ✓
 20. **Entity-centric data flow** - Click entity in Data Flow Map → see actual mapped fields with source badges, authority icons, and tooltip details ✓
 21. **Dropdown submenu portal fix** - `DropdownMenuSubContent` wrapped in Portal to prevent ScrollArea clipping ✓
+22. **Performance: Client-side raw data cache** - Module-level 5min TTL Map in SmartMapper, tab revisit <50ms vs 400-1000ms ✓
+23. **Performance: Parallel Google API** - `values.get()` + `spreadsheets.get()` via Promise.all, saves 200-300ms ✓
+24. **Performance: Cache-Control on 7 endpoints** - Browser-level caching on all read-heavy APIs ✓
+25. **Performance: Skip preview for configured sources** - Sources with DB tabs skip Google Sheets discovery ✓
+26. **Performance: Deferred field tags** - Only fetches on Classify phase entry, not on mount ✓
 
 ### What's TODO 🚧
 
