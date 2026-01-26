@@ -700,15 +700,16 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
       if (response.ok) {
         const result = await response.json()
 
-        // Refresh sources to get updated mapping data
-        const sourcesResponse = await fetch('/api/data-sources')
+        // Refresh sources to get updated mapping data (bypass cache after save)
+        const sourcesResponse = await fetch('/api/data-sources', { cache: 'no-store' })
         if (sourcesResponse.ok) {
           const json = await sourcesResponse.json()
           setSources(json.data?.sources || json.sources || [])
 
           // Update activeTabId to the new tab mapping ID if available
-          if (result.tab_mapping_id) {
-            setActiveTabId(result.tab_mapping_id)
+          const tabMappingId = result.data?.tab_mapping_id || result.tab_mapping_id
+          if (tabMappingId) {
+            setActiveTabId(tabMappingId)
           }
         }
       } else {
@@ -877,7 +878,9 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
         sources={sources.map(s => ({
           id: s.id,
           name: s.name,
-          tabCount: s.tabs.length || sheetPreviews[s.id]?.tabs.length || 0,
+          tabCount: sheetPreviews[s.id]
+            ? Math.max(s.tabs.length, sheetPreviews[s.id].tabs.length)
+            : (s.spreadsheet_id ? null : s.tabs.length),
         }))}
         activeSourceId={activeSourceId}
         onSelectSource={handleSelectSource}

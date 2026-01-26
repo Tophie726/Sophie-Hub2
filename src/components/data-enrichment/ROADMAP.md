@@ -746,6 +746,9 @@ const duration = {
 | Cache-Control on ai/save-summary GET | `api/ai/save-summary/route.ts` | 60s browser cache on AI summaries |
 | Cache-Control on field-tags GET | `api/field-tags/route.ts` | 5min browser cache (tags rarely change) |
 | Deferred field tags fetch | `smart-mapper.tsx` | Only fetches when entering Classify phase, not on mount |
+| Tab count badge fix (Math.max) | `source-browser.tsx` | `\|\|` short-circuit → `Math.max()` so badge shows true tab count |
+| Cache bypass on restoreDraft | `smart-mapper.tsx` | `cache: 'no-store'` prevents stale cached /api/mappings/load from hiding saved is_key |
+| Post-save data-sources cache bypass | `source-browser.tsx` | `cache: 'no-store'` on /api/data-sources refresh after save |
 
 ### Remaining (Prioritized)
 

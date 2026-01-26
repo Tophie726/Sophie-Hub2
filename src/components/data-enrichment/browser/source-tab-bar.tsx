@@ -26,7 +26,7 @@ import { CSS } from '@dnd-kit/utilities'
 interface DataSource {
   id: string
   name: string
-  tabCount: number
+  tabCount: number | null // null = preview still loading, don't show count yet
 }
 
 interface SourceTabBarProps {
@@ -100,15 +100,17 @@ function SortableTab({ source, isActive, onSelect, onClose }: SortableTabProps) 
         <span className="truncate flex-1 text-left" title={source.name}>{source.name}</span>
       </button>
 
-      {/* Tab count badge */}
-      <span className={cn(
-        'flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded-full',
-        isActive
-          ? 'bg-green-500/10 text-green-600'
-          : 'bg-muted text-muted-foreground'
-      )}>
-        {source.tabCount}
-      </span>
+      {/* Tab count badge — only show when we have the definitive count */}
+      {source.tabCount !== null && (
+        <span className={cn(
+          'flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded-full',
+          isActive
+            ? 'bg-green-500/10 text-green-600'
+            : 'bg-muted text-muted-foreground'
+        )}>
+          {source.tabCount}
+        </span>
+      )}
 
       {/* Close button */}
       {onClose && (

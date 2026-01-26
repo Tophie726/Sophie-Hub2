@@ -319,7 +319,8 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
       if (dataSourceId) {
         try {
           const response = await fetch(
-            `/api/tab-mappings/draft?data_source_id=${dataSourceId}&tab_name=${encodeURIComponent(tabName)}`
+            `/api/tab-mappings/draft?data_source_id=${dataSourceId}&tab_name=${encodeURIComponent(tabName)}`,
+            { cache: 'no-store' }
           )
           const data = await response.json()
           if (data.draft && data.draft.columns?.length > 0) {
@@ -367,7 +368,8 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
       if (dataSourceId) {
         try {
           const savedResponse = await fetch(
-            `/api/mappings/load?data_source_id=${dataSourceId}`
+            `/api/mappings/load?data_source_id=${dataSourceId}`,
+            { cache: 'no-store' }
           )
           if (savedResponse.ok) {
             const savedData = await savedResponse.json()
@@ -711,10 +713,10 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        className="space-y-0"
+        className="flex flex-col min-h-[60vh]"
       >
         {/* Loading header with tab context */}
-        <div className="rounded-xl border bg-card overflow-hidden">
+        <div className="rounded-xl border bg-card overflow-hidden flex-1 flex flex-col">
           {/* Header with loading context */}
           <div className="p-5 border-b bg-gradient-to-r from-muted/10 to-transparent">
             <div className="flex items-center gap-4">
@@ -739,13 +741,13 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
           </div>
 
           {/* Skeleton table with staggered animation */}
-          <div className="p-4">
+          <div className="p-4 flex-1">
             {/* Header row skeleton */}
             <div className="flex gap-3 pb-3 border-b mb-3">
               <div className="h-8 w-8 bg-muted/30 rounded flex items-center justify-center">
                 <span className="text-[10px] text-muted-foreground/50">#</span>
               </div>
-              {[1, 2, 3, 4].map((i) => (
+              {[1, 2, 3, 4, 5].map((i) => (
                 <motion.div
                   key={i}
                   className="h-8 flex-1 bg-gradient-to-r from-primary/10 via-primary/5 to-primary/10 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite] rounded"
@@ -753,21 +755,21 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
                 />
               ))}
             </div>
-            {/* Data rows skeleton */}
-            {[0, 1, 2, 3, 4].map((i) => (
+            {/* Data rows skeleton — enough rows to fill available space */}
+            {Array.from({ length: 12 }, (_, i) => (
               <motion.div
                 key={i}
                 className="flex gap-3 py-1.5"
                 initial={{ opacity: 0, x: -10 }}
                 animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: i * 0.05, duration: 0.3, ease: easeOut }}
+                transition={{ delay: Math.min(i * 0.04, 0.3), duration: 0.3, ease: easeOut }}
               >
                 <div className="h-8 w-8 bg-muted/15 rounded flex items-center justify-center text-xs text-muted-foreground/40">{i + 1}</div>
-                {[1, 2, 3, 4].map((j) => (
+                {[1, 2, 3, 4, 5].map((j) => (
                   <div
                     key={j}
                     className="h-8 flex-1 bg-gradient-to-r from-muted/25 via-muted/10 to-muted/25 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite] rounded"
-                    style={{ animationDelay: `${(i * 4 + j) * 50}ms` }}
+                    style={{ animationDelay: `${(i * 5 + j) * 40}ms` }}
                   />
                 ))}
               </motion.div>

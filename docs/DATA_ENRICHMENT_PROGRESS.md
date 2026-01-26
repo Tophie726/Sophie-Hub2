@@ -152,6 +152,8 @@
 | Deferred field tags fetch | Done | LOW | Only fetch when entering Classify phase, not on SmartMapper mount |
 | Dry run preview dialog | Done | HIGH | `SyncPreviewDialog`: click Sync → dry run all tabs → review creates/updates/skips → confirm → apply |
 | Saved mapping restore merge fix | Done | HIGH | Step 3 now merges saved mappings with full sheet headers — unmapped columns preserved |
+| Tab count badge fix | Done | LOW | `Math.max(db, preview)` instead of `||` short-circuit — badge now shows true tab count |
+| Cache bypass on restoreDraft | Done | HIGH | `cache: 'no-store'` on draft + mappings/load fetches in restoreDraft — prevents stale cached data from hiding saved mappings (root cause of key not persisting) |
 | Level 3 - Field detail panel | Pending | HIGH | Slide-in from right |
 | GET /api/flow-map/field/[name] | Pending | HIGH | Cross-references + lineage |
 | Pin/lock feature | Pending | MEDIUM | Pin icon overlay + glow ring |
@@ -417,6 +419,9 @@ In-app AI co-pilot for column mapping at multiple granularity levels.
 | 2026-01-26 | Sync engine backend complete | 596-line SyncEngine class, API endpoints, UI button + history panel all functional. Missing: dry run preview UI |
 | 2026-01-26 | Playwright over Vitest for regression tests | Integration bugs (missing tabs, lost mappings) aren't catchable by unit tests. Playwright E2E covers real browser flows |
 | 2026-01-26 | Dry run preview before sync | User clicks Sync → dry_run all tabs → SyncPreviewDialog shows creates/updates/skips per entity → Confirm → actual sync. Prevents accidental writes |
+| 2026-01-26 | Math.max for tab count badge | `s.tabs.length \|\| preview` short-circuits when DB tabs > 0. Changed to `Math.max()` so badge shows the higher of DB vs preview count |
+| 2026-01-26 | Cache bypass on restoreDraft fetches | `/api/mappings/load` has 30s browser cache. After save (which clears drafts), restoreDraft Step 3 fetched stale cached data with no saved mappings → key lost. Fix: `cache: 'no-store'` on both draft and mappings/load fetches in restoreDraft |
+| 2026-01-26 | Fix apiSuccess data access after save | `result.tab_mapping_id` → `result.data?.tab_mapping_id` — save API wraps response in apiSuccess but source-browser read the unwrapped field |
 
 ---
 

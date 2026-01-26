@@ -306,13 +306,21 @@ These invariants MUST hold true at all times. If a change breaks any of these, i
 - Cache-Control headers: only on GET/read endpoints, never on mutations
 - Client-side caches: must have TTL and invalidation on mutation
 - Skipping fetches: ONLY safe when the data is guaranteed to be available elsewhere
+- **Critical**: `restoreDraft()` fetches MUST use `cache: 'no-store'` — cached `/api/mappings/load` responses after save will serve stale data (pre-save, missing key columns)
 - **Violation example**: Skipping Google preview because "DB tabs exist" → missing unmapped tabs
+- **Violation example**: Relying on cached `/api/mappings/load` after save → isKey lost because cached response has no saved mappings
 
 ### INV-6: DB tabs show immediately, no blocking on external APIs
 **The skeleton loader must clear as soon as DB data is available.** This requires:
 - Skeleton condition: `(isLoadingPreview || isLoading) && sheetTabs.length === 0`
 - DB tabs populate `sheetTabs` before preview completes
 - Preview fetch is fire-and-forget, never awaited in the rendering path
+
+### INV-7: Tab count badge must show the true tab count
+**The SourceTabBar badge must reflect all tabs, not just DB-mapped tabs.** This requires:
+- `tabCount: Math.max(s.tabs.length, sheetPreviews[s.id]?.tabs.length || 0)`
+- Do NOT use `||` — it short-circuits when DB tabs exist (e.g., 11 is truthy), hiding the preview count (e.g., 20+)
+- **Violation example**: `s.tabs.length || previewCount` → shows 11 instead of 20+ when 11 DB tabs exist
 
 ---
 
