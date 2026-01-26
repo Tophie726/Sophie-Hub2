@@ -97,7 +97,7 @@ function SortableTab({ source, isActive, onSelect, onClose }: SortableTabProps) 
           'h-4 w-4 flex-shrink-0',
           isActive ? 'text-green-600' : 'text-muted-foreground'
         )} />
-        <span className="truncate flex-1 text-left">{source.name}</span>
+        <span className="truncate flex-1 text-left" title={source.name}>{source.name}</span>
       </button>
 
       {/* Tab count badge */}

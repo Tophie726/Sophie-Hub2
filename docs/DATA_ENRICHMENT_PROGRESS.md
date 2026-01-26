@@ -1,7 +1,7 @@
 # Data Enrichment Progress Tracker
 
 > Tracking the implementation of Sophie Hub's data enrichment system.
-> Last updated: 2026-01-26 (Mapping persistence fix + entity-centric flow detail)
+> Last updated: 2026-01-26 (Performance sweep + blank page fix + hover tooltips)
 
 ---
 
@@ -136,6 +136,11 @@
 | EntityFieldData type + transform | Done | HIGH | Full field data passed through when entity expanded, height calculation updated |
 | Mapping persistence fix | Done | HIGH | 3-step restore: DB draft → localStorage → saved column_mappings |
 | Dropdown submenu portal fix | Done | HIGH | DropdownMenuSubContent wrapped in Portal to prevent ScrollArea clipping |
+| Blank page race condition fix | Done | HIGH | Guard Overview on sheetTabs.length > 0, show skeleton during initial fetch, prevent preview overriding tab |
+| Hover tooltips on truncated names | Done | LOW | Native `title` attr on truncated tab/source names in SheetTabBar + SourceTabBar |
+| N+1 query fix in /api/mappings/load | Done | HIGH | 21+ queries → 3 queries via batch .in() + Map assembly |
+| Cache-Control headers on GET APIs | Done | MEDIUM | flow-map + mappings/load: private, max-age=30, stale-while-revalidate |
+| apiSuccess headers parameter | Done | LOW | Optional headers param for cleaner cache control |
 | Level 3 - Field detail panel | Pending | HIGH | Slide-in from right |
 | GET /api/flow-map/field/[name] | Pending | HIGH | Cross-references + lineage |
 | Pin/lock feature | Pending | MEDIUM | Pin icon overlay + glow ring |
@@ -387,6 +392,10 @@ In-app AI co-pilot for column mapping at multiple granularity levels.
 | 2026-01-26 | 3-step draft restore cascade | DB draft → localStorage → saved column_mappings. Fixes lost mappings after Save clears drafts |
 | 2026-01-26 | Entity-centric field detail in flow map | Replace group summary chips with actual mapped fields + source attribution + authority icons |
 | 2026-01-26 | Portal wrap for dropdown submenus | DropdownMenuSubContent needs Portal to escape ScrollArea overflow clipping |
+| 2026-01-26 | Guard Overview on sheetTabs.length | Prevents blank page when source loaded before Google Sheets preview returns |
+| 2026-01-26 | Batch queries in /api/mappings/load | Same 3-query pattern as /api/data-sources: N+1 → batch .in() + in-memory Map assembly |
+| 2026-01-26 | Cache-Control on read-heavy GETs | private + stale-while-revalidate; safe for auth-gated admin endpoints |
+| 2026-01-26 | Native title tooltips on truncated names | Browser-native tooltip (~1s delay) over Radix Tooltip: zero DOM overhead, accessible by default |
 
 ---
 

@@ -153,6 +153,7 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
           // Only default to Overview if user hasn't already selected a tab
           // This prevents race condition where user clicks tab before fetch completes
           if (!userHasSelectedTab.current) {
+            userHasSelectedTab.current = true // Prevent preview callback from overriding
             setActiveTabIdInternal(OVERVIEW_TAB_ID)
             onTabChange?.(OVERVIEW_TAB_ID)
           }
@@ -846,7 +847,7 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
 
       {/* Content Area */}
       <AnimatePresence mode="wait">
-        {isLoadingPreview && sheetTabs.length === 0 ? (
+        {(isLoadingPreview || isLoading) && sheetTabs.length === 0 ? (
           /* Elegant skeleton loader - only show when we have NO tabs yet */
           <motion.div
             key="loading"
@@ -923,7 +924,7 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
               </div>
             </div>
           </motion.div>
-        ) : activeSourceId && activeTabId === OVERVIEW_TAB_ID ? (
+        ) : activeSourceId && activeTabId === OVERVIEW_TAB_ID && sheetTabs.length > 0 ? (
           /* Overview Dashboard */
           <motion.div
             key={`${activeSourceId}-overview`}

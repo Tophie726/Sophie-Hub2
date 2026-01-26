@@ -305,7 +305,7 @@ export function SheetTabBar({
             )}
 
             {/* Tab name */}
-            <span className="truncate max-w-[80px] md:max-w-[120px]">{tab.name}</span>
+            <span className="truncate max-w-[80px] md:max-w-[120px]" title={tab.name}>{tab.name}</span>
 
             {/* Reference badge */}
             {isReference && (

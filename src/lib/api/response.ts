@@ -81,7 +81,7 @@ export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes]
 /**
  * Create a successful API response
  */
-export function apiSuccess<T>(data: T, status = 200): NextResponse<ApiSuccessResponse<T>> {
+export function apiSuccess<T>(data: T, status = 200, headers?: Record<string, string>): NextResponse<ApiSuccessResponse<T>> {
   return NextResponse.json(
     {
       success: true,
@@ -90,7 +90,7 @@ export function apiSuccess<T>(data: T, status = 200): NextResponse<ApiSuccessRes
         timestamp: new Date().toISOString(),
       },
     },
-    { status }
+    { status, headers }
   )
 }
 

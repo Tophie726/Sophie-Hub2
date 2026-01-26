@@ -270,6 +270,8 @@ export async function GET() {
         totalSources: sources.length,
         totalTabs,
       },
+    }, 200, {
+      'Cache-Control': 'private, max-age=30, stale-while-revalidate=120',
     })
   } catch (error) {
     console.error('Error in GET /api/flow-map:', error)

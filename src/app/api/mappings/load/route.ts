@@ -51,37 +51,56 @@ export async function GET(request: NextRequest) {
 
     if (tabError) throw tabError
 
-    // For each tab, load column mappings and patterns
-    const tabsWithDetails = await Promise.all(
-      (tabMappings || []).map(async (tab) => {
-        const [columnMappingsResult, patternsResult] = await Promise.all([
+    // Batch fetch all column mappings and patterns in 2 queries (not N*2)
+    const tabIds = (tabMappings || []).map(t => t.id)
+
+    const [allMappingsResult, allPatternsResult] = tabIds.length > 0
+      ? await Promise.all([
           supabase
             .from('column_mappings')
             .select('*')
-            .eq('tab_mapping_id', tab.id)
+            .in('tab_mapping_id', tabIds)
             .order('source_column_index'),
           supabase
             .from('column_patterns')
             .select('*')
-            .eq('tab_mapping_id', tab.id)
+            .in('tab_mapping_id', tabIds)
             .eq('is_active', true)
             .order('priority', { ascending: false }),
         ])
+      : [{ data: [] }, { data: [] }]
 
-        return {
-          ...tab,
-          columnMappings: columnMappingsResult.data || [],
-          patterns: patternsResult.data || [],
-        }
-      })
-    )
+    // Build O(1) lookup maps
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const mappingsByTab = new Map<string, any[]>()
+    for (const m of allMappingsResult.data || []) {
+      const list = mappingsByTab.get(m.tab_mapping_id)
+      if (list) list.push(m)
+      else mappingsByTab.set(m.tab_mapping_id, [m])
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const patternsByTab = new Map<string, any[]>()
+    for (const p of allPatternsResult.data || []) {
+      const list = patternsByTab.get(p.tab_mapping_id)
+      if (list) list.push(p)
+      else patternsByTab.set(p.tab_mapping_id, [p])
+    }
+
+    const tabsWithDetails = (tabMappings || []).map(tab => ({
+      ...tab,
+      columnMappings: mappingsByTab.get(tab.id) || [],
+      patterns: patternsByTab.get(tab.id) || [],
+    }))
 
     const response: LoadMappingResponse = {
       dataSource,
       tabMappings: tabsWithDetails,
     }
 
-    return NextResponse.json(response)
+    return NextResponse.json(response, {
+      headers: { 'Cache-Control': 'private, max-age=30, stale-while-revalidate=60' },
+    })
   } catch (error) {
     console.error('Error loading mapping:', error)
     return NextResponse.json(

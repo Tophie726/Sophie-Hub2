@@ -724,6 +724,40 @@ const duration = {
 
 ---
 
+## Performance Optimization
+
+### Done (2026-01-26)
+
+| Item | Location | Impact |
+|------|----------|--------|
+| N+1 → 3-query fix in data-sources API | `api/data-sources/route.ts` | 500+ → 3 queries |
+| N+1 → 3-query fix in mappings/load API | `api/mappings/load/route.ts` | 21+ → 3 queries |
+| Cache-Control on read-heavy GETs | `api/flow-map`, `api/mappings/load` | 40% fewer refetches |
+| `apiSuccess` headers parameter | `src/lib/api/response.ts` | Cleaner cache pattern |
+| Blank page race condition fix | `source-browser.tsx` | Guard render on data ready |
+| React.memo on all Flow nodes/edges | `lineage/nodes/*.tsx`, `lineage/edges/*.tsx` | No re-render on pan/zoom |
+
+### Remaining (Prioritized)
+
+| Item | Impact | Effort | Notes |
+|------|--------|--------|-------|
+| **SWR for data fetching** | HIGH | HIGH | Replace 29 raw `fetch()` calls — dedup, cache, auto-retry. Start with `useDataSources()` hook |
+| **SmartMapper code split** | HIGH | MED | 2943-line monolith → lazy-loaded phases (`PreviewPhase`, `ClassifyPhase`, `MapPhase`) |
+| **useMemo on filter/map ops** | MED | MED | ~59 `.filter()/.map()` calls in SmartMapper re-run every render |
+| **useCallback on handler props** | MED | LOW | Inline handlers break `React.memo` on TabCard, FieldRow children |
+| **Draft save debounce increase** | LOW | LOW | 500ms → 1000ms = 50% fewer DB writes during rapid classification |
+| **Virtual scroll for large field lists** | MED | MED | `react-window` on MobileFlowList for 500+ field datasets |
+| **Prefetch on phase transitions** | LOW | LOW | When entering classify phase, prefetch `/api/mappings/load` in background |
+
+### Performance Principles
+
+- **3-query pattern**: Batch all related data with `.in()`, assemble with in-memory Maps. Never loop queries.
+- **Cache-Control**: `private` (auth-gated), short `max-age`, generous `stale-while-revalidate`. Never cache mutation endpoints.
+- **React.memo**: All leaf components that receive stable data. Pair with `useCallback` for handler props.
+- **No layout shift**: Fixed dimensions for skeletons, `tabular-nums` for counters, reserve space for dynamic content.
+
+---
+
 ## Key Files Reference
 
 ### Database

@@ -45,6 +45,52 @@ const columnsByTab = new Map<string, Column[]>()
 
 ---
 
+#### N+1 Query Fix in Mappings Load API (2026-01-26)
+
+**Location:** `src/app/api/mappings/load/route.ts`
+
+**Problem:** The GET endpoint was making 1 + N*2 queries:
+- 1 query for tab mappings
+- N queries for column_mappings (one per tab)
+- N queries for column_patterns (one per tab)
+
+With 10 tabs, this was 21 queries per request.
+
+**Solution:** Same batch pattern as data-sources:
+```typescript
+const tabIds = tabMappings.map(t => t.id)
+
+// 2 queries: all mappings + all patterns
+const [allMappings, allPatterns] = await Promise.all([
+  supabase.from('column_mappings').select('*').in('tab_mapping_id', tabIds),
+  supabase.from('column_patterns').select('*').in('tab_mapping_id', tabIds),
+])
+
+// Build O(1) lookup maps
+const mappingsByTab = new Map<string, any[]>()
+const patternsByTab = new Map<string, any[]>()
+```
+
+**Result:** Reduced from 21+ queries to 3 queries regardless of tab count.
+
+---
+
+### HTTP Caching
+
+#### Cache-Control Headers on Read-Only APIs (2026-01-26)
+
+**Location:** `src/lib/api/response.ts`, `src/app/api/flow-map/route.ts`, `src/app/api/mappings/load/route.ts`
+
+**Change:** Added optional `headers` parameter to `apiSuccess()` helper. Applied `Cache-Control: private, max-age=30, stale-while-revalidate=120` to read-heavy endpoints.
+
+**Guidelines:**
+- `private` — only browser caches (not CDN), since all endpoints require auth
+- `max-age=30` — serve cached for 30 seconds
+- `stale-while-revalidate=120` — serve stale while revalidating in background for up to 2 minutes
+- Mutation-heavy endpoints (save, sync) should NOT have cache headers
+
+---
+
 ### Connection Pool Management
 
 #### Supabase Client Singleton (2025-01-24)
@@ -548,6 +594,7 @@ Track these metrics as the app scales:
 |------|------|---------|
 | 2025-01-24 | Enterprise Sweep | N+1 fix, singleton pattern, React.memo, ErrorBoundary, health endpoint, TypeScript fixes, console.log cleanup |
 | 2025-01-24 | Security Audit | Open redirect fix, query injection fix, RBAC implementation |
+| 2026-01-26 | Performance Sweep | N+1 fix in mappings/load, Cache-Control headers, apiSuccess headers param, blank page race condition fix |
 
 ---
 
