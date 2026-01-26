@@ -16,11 +16,27 @@ export interface EntityNodeData {
   onToggleExpand: (entityType: EntityType) => void
 }
 
+/** A single field within an entity group */
+export interface EntityFieldData {
+  name: string
+  label: string
+  isMapped: boolean
+  isKey: boolean
+  sources: Array<{
+    sourceId: string
+    sourceName: string
+    tabName: string
+    sourceColumn: string
+    authority: string
+  }>
+}
+
 /** Summary of a field group within an entity */
 export interface EntityGroupData {
   name: FieldGroup
   fieldCount: number
   mappedFieldCount: number
+  fields?: EntityFieldData[]
 }
 
 /** Data carried by a source node (Google Sheet, etc.) */

@@ -1,7 +1,7 @@
 # Data Enrichment Progress Tracker
 
 > Tracking the implementation of Sophie Hub's data enrichment system.
-> Last updated: 2026-01-26 (Data Flow Map - Phase 1)
+> Last updated: 2026-01-26 (Mapping persistence fix + entity-centric flow detail)
 
 ---
 
@@ -128,11 +128,14 @@
 | Fix edge crossing layout | Done | 2026-01-26 | Sort sources by primary entity, separate handle routing |
 | Move entry point to header | Done | 2026-01-26 | Replaced card with top-right "Data Flow" button |
 
-### Phase 5.2: Interaction (Planned)
+### Phase 5.2: Interaction (In Progress)
 
 | Task | Status | Priority | Notes |
 |------|--------|----------|-------|
-| Level 2 - Group expanded fields | Pending | HIGH | Individual fields within groups |
+| Entity-centric field detail | Done | HIGH | Click entity → scrollable field list with mapped dots, key badges, source badges, authority icons, and tooltips |
+| EntityFieldData type + transform | Done | HIGH | Full field data passed through when entity expanded, height calculation updated |
+| Mapping persistence fix | Done | HIGH | 3-step restore: DB draft → localStorage → saved column_mappings |
+| Dropdown submenu portal fix | Done | HIGH | DropdownMenuSubContent wrapped in Portal to prevent ScrollArea clipping |
 | Level 3 - Field detail panel | Pending | HIGH | Slide-in from right |
 | GET /api/flow-map/field/[name] | Pending | HIGH | Cross-references + lineage |
 | Pin/lock feature | Pending | MEDIUM | Pin icon overlay + glow ring |
@@ -381,6 +384,9 @@ In-app AI co-pilot for column mapping at multiple granularity levels.
 | 2026-01-26 | Flow map as header button | Separate from integration cards (Sheets/Forms/Docs) per UX feedback |
 | 2026-01-26 | Named handles for edges | Mapping edges use left handles, reference edges use right handles to avoid crossing |
 | 2026-01-26 | Sort sources by primary entity | Minimizes edge crossings by aligning sources near their target entity |
+| 2026-01-26 | 3-step draft restore cascade | DB draft → localStorage → saved column_mappings. Fixes lost mappings after Save clears drafts |
+| 2026-01-26 | Entity-centric field detail in flow map | Replace group summary chips with actual mapped fields + source attribution + authority icons |
+| 2026-01-26 | Portal wrap for dropdown submenus | DropdownMenuSubContent needs Portal to escape ScrollArea overflow clipping |
 
 ---
 
@@ -396,8 +402,9 @@ In-app AI co-pilot for column mapping at multiple granularity levels.
 8. [x] Auth error handling with retry button - DONE (2026-01-25)
 9. [ ] **Test full pipeline with real data** - Connect sheet, map columns, sync
 10. [x] Phase 5.1: Visual data flow map (foundation) - DONE (2026-01-26)
-11. [ ] Phase 5.2: Data flow map interaction (field detail, pin/lock, filters)
-12. [ ] Nested sheet extraction UX design
+11. [~] Phase 5.2: Data flow map interaction - entity field detail DONE, pin/lock/filters remaining
+12. [x] Mapping persistence fix - 3-step restore cascade - DONE (2026-01-26)
+13. [ ] Nested sheet extraction UX design
 13. [ ] Phase 4: Additional connectors (Close.io, Typeform, etc.)
 
 ---

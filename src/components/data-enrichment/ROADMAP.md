@@ -177,39 +177,38 @@ This is documented in all AI prompts in:
 
 ### 2.2 Core Visualization
 
-- [ ] Create `DataMapVisualization` component
-  - Canvas-based or SVG for performance
-  - Responsive layout (force-directed or hierarchical)
+- [x] Create `DataFlowMap` component (React Flow + mobile card list)
+  - `FlowCanvas.tsx` for desktop (pan, zoom, minimap)
+  - `MobileFlowList.tsx` for mobile (hierarchical cards)
 
-- [ ] Node Types:
-  | Node | Shape | Color |
-  |------|-------|-------|
-  | Core Entity (Partners) | Large circle | Blue |
-  | Core Entity (Staff) | Large circle | Green |
-  | Core Entity (ASINs) | Medium circle | Orange |
-  | Data Source | Rounded rect | Based on connector |
-  | Computed Field | Diamond | Purple |
+- [x] Node Types:
+  | Node | Shape | Color | Component |
+  |------|-------|-------|-----------|
+  | Core Entity (Partners) | Rounded rect | Blue | `EntityNode.tsx` |
+  | Core Entity (Staff) | Rounded rect | Green | `EntityNode.tsx` |
+  | Core Entity (ASINs) | Rounded rect | Orange | `EntityNode.tsx` |
+  | Data Source | Rounded rect | Gray | `SourceNode.tsx` |
+  | Field Group | Rounded rect | Entity color | `FieldGroupNode.tsx` |
 
-- [ ] Edge Types:
-  | Edge | Style | Animation |
+- [x] Edge Types:
+  | Edge | Style | Component |
   |------|-------|-----------|
-  | Source of Truth | Solid line | Pulse on hover |
-  | Reference | Dashed line | None |
-  | Computed | Dotted line | None |
+  | Mapping (source→entity) | Solid line | `MappingEdge.tsx` |
+  | Reference (entity→entity) | Dashed line | `ReferenceEdge.tsx` |
 
 ### 2.3 Interactions
 
-- [ ] **Hover**: Highlight connected nodes, show tooltip with stats
-- [ ] **Click**: Drill down to source detail or entity view
-- [ ] **Zoom/Pan**: Smooth, bounded, with minimap
+- [x] **Hover**: Entity nodes scale + tooltips on expanded fields showing source details
+- [x] **Click**: Entity expand toggle shows field-level detail with mapped dots, key badges, source names, authority icons
+- [x] **Zoom/Pan**: React Flow built-in pan/zoom/minimap
 - [ ] **Filter**: By entity type, source type, connection strength
 
 ### 2.4 Stats & Insights
 
-- [ ] Connection strength indicators (how many fields mapped)
+- [x] Connection strength indicators (edge stroke width scaled by mapped field count)
 - [ ] Data freshness indicators (last sync time)
 - [ ] Health status (errors, warnings)
-- [ ] Coverage percentage per entity
+- [x] Coverage percentage per entity (progress rings + percentage badges)
 
 ### 2.5 Animation Specs
 
@@ -685,7 +684,7 @@ const duration = {
 - [x] GET /api/sync/runs/[id] endpoint
 - [x] Sync button in TabOverviewDashboard
 - [x] Sync history panel component
-- [ ] Visual data map design (future)
+- [x] Visual data map (React Flow canvas + entity-centric field detail)
 
 ### Phase 3 Progress
 - [x] Audit logging implemented (`src/lib/audit/index.ts`)
@@ -795,5 +794,5 @@ const duration = {
 
 ---
 
-*Last updated: 2026-01-25 (AI Tab Summary persistence + context passing)*
+*Last updated: 2026-01-26 (Entity-centric field detail + mapping persistence fix)*
 *Architecture audit by Claude Opus 4.5*

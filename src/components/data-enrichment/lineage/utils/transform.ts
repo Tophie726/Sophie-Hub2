@@ -133,7 +133,8 @@ export function transformToFlowElements(
     entityPositions.set(entityType, { x: LAYOUT.entityX, y: currentY })
 
     if (expandedEntities.has(entityType)) {
-      currentY += LAYOUT.groupStartY + entityData.groups.length * LAYOUT.groupGap + 40
+      const totalFields = entityData.groups.reduce((sum, g) => sum + g.fields.length, 0)
+      currentY += 120 + totalFields * 26 + entityData.groups.length * 28 + 40
     } else {
       currentY += LAYOUT.entityGap
     }
@@ -211,6 +212,21 @@ export function transformToFlowElements(
         name: g.name,
         fieldCount: g.fields.length,
         mappedFieldCount: g.fields.filter((f) => f.isMapped).length,
+        ...(isExpanded ? {
+          fields: g.fields.map((f) => ({
+            name: f.name,
+            label: f.label,
+            isMapped: f.isMapped,
+            isKey: f.isKey,
+            sources: f.sources.map((s) => ({
+              sourceId: s.sourceId,
+              sourceName: s.sourceName,
+              tabName: s.tabName,
+              sourceColumn: s.sourceColumn,
+              authority: s.authority,
+            })),
+          })),
+        } : {}),
       })),
       isExpanded,
       onToggleExpand,

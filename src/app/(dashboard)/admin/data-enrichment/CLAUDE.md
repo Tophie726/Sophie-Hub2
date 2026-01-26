@@ -205,7 +205,7 @@ Following CLAUDE.md animation guidelines:
 
 ## CURRENT IMPLEMENTATION STATUS
 
-> **Last Updated: January 24, 2026**
+> **Last Updated: January 26, 2026**
 
 ### What's Working ✅
 
@@ -227,12 +227,14 @@ Following CLAUDE.md animation guidelines:
 16. **Mapping progress display** - Progress bars and category breakdown from real DB data
 17. **Enterprise API patterns** - Zod validation, standardized responses, centralized types
 18. **Role-based access control** - Admin-only access via ADMIN_EMAILS env var
+19. **Saved mapping restoration** - When no draft exists, SmartMapper loads from `column_mappings` table via `/api/mappings/load` ✓
+20. **Entity-centric data flow** - Click entity in Data Flow Map → see actual mapped fields with source badges, authority icons, and tooltip details ✓
+21. **Dropdown submenu portal fix** - `DropdownMenuSubContent` wrapped in Portal to prevent ScrollArea clipping ✓
 
 ### What's TODO 🚧
 
 1. **Sync data** - Actually import data from sheets to entity tables
-2. **Clear draft on save** - Delete draft after successful mapping commit
-3. **Run display_order migration** - Enable persisted source tab ordering
+2. **Run display_order migration** - Enable persisted source tab ordering
 
 ### Recently Implemented Features
 
@@ -421,6 +423,8 @@ Mapping progress is automatically saved so users (and other admins) can resume w
 
 ### How It Works
 
+**Saving (3 layers):**
+
 1. **Primary Storage: Database**
    - Draft state saved to `tab_mappings.draft_state` (JSONB)
    - Includes: phase, headerRow, columns, timestamp
@@ -435,6 +439,17 @@ Mapping progress is automatically saved so users (and other admins) can resume w
 3. **Debounced Saving**
    - DB saves debounced at 500ms to avoid hammering server
    - localStorage saves immediately for responsiveness
+
+**Restoring (3-step cascade):**
+
+On mount, `restoreDraft()` tries three sources in order:
+
+1. **DB draft** (`GET /api/tab-mappings/draft`) → found & <7 days old? Restore. Done.
+2. **localStorage draft** → found & <7 days old? Restore. Done.
+3. **Saved column_mappings** (`GET /api/mappings/load?data_source_id=X`) → find matching `tab_mapping` by `tab_name` → convert `ColumnMapping[]` to `ColumnClassification[]` → set phase to `classify` → show toast "Restored saved mappings". Done.
+4. **If all fail** → initialize fresh columns.
+
+Step 3 is critical: when the user saves mappings (Classify → Map → Save), the draft is cleared. On return, Steps 1-2 find nothing. Without Step 3, SmartMapper would start fresh, losing the saved work. Step 3 reads from the permanent `column_mappings` table to restore the saved state.
 
 ### Database Schema
 
@@ -1329,10 +1344,31 @@ src/components/data-enrichment/
 │   ├── StagedChangeCard.tsx
 │   ├── ConflictResolver.tsx
 │   └── BatchActions.tsx
-├── lineage/                     # (unchanged)
-│   ├── LineageGraph.tsx
-│   ├── FieldLineagePopover.tsx
-│   └── SourceBadge.tsx
+├── lineage/                     # Data Flow Map (React Flow)
+│   ├── DataFlowMap.tsx          # Orchestrator (mobile/desktop switch)
+│   ├── FlowCanvas.tsx           # React Flow canvas (desktop)
+│   ├── MobileFlowList.tsx       # Card layout (mobile)
+│   ├── index.ts                 # Barrel exports
+│   ├── nodes/
+│   │   ├── types.ts             # EntityNodeData, EntityFieldData, EntityGroupData, etc.
+│   │   ├── EntityNode.tsx       # Entity node with field-level detail on expand
+│   │   ├── SourceNode.tsx       # Data source node
+│   │   └── FieldGroupNode.tsx   # Field group node
+│   ├── edges/
+│   │   ├── types.ts             # MappingEdgeData, ReferenceEdgeData
+│   │   ├── MappingEdge.tsx      # Source-to-entity (solid)
+│   │   └── ReferenceEdge.tsx    # Entity-to-entity (dashed)
+│   ├── hooks/
+│   │   ├── useFlowData.ts       # Fetch + transform API data
+│   │   ├── useFlowLayout.ts     # Layout + entity expansion state
+│   │   ├── useFlowFilters.ts    # Entity + status filters
+│   │   └── usePinnedFields.ts   # Pin state (localStorage)
+│   ├── utils/
+│   │   ├── transform.ts         # API → React Flow nodes/edges
+│   │   ├── layout.ts            # Node positioning
+│   │   └── colors.ts            # Entity color map (hex for SVG)
+│   └── panels/
+│       └── FlowLegend.tsx       # Color coding legend
 └── sources/                     # (unchanged)
     ├── SourceList.tsx
     ├── SourceCard.tsx

@@ -59,6 +59,7 @@ import {
   X,
   ChevronRight,
 } from 'lucide-react'
+import { toast } from 'sonner'
 import { MobileColumnCard } from './mobile-column-card'
 import { AISuggestionButton, type AISuggestion } from './ai-suggestion-button'
 import { AISuggestAllDialog, type BulkSuggestion } from './ai-suggest-all-dialog'
@@ -123,7 +124,7 @@ interface TabRawData {
 
 // Import canonical types from entities (single source of truth)
 import type { EntityType, ColumnCategoryOrNull } from '@/types/entities'
-import type { ComputationType, SourceAuthority } from '@/types/enrichment'
+import type { ComputationType, SourceAuthority, ColumnMapping } from '@/types/enrichment'
 
 type ColumnCategory = ColumnCategoryOrNull
 
@@ -341,6 +342,44 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
       } catch (e) {
         console.warn('Failed to restore draft from localStorage:', e)
       }
+
+      // Step 3: Try loading persisted column_mappings (saved data, not drafts)
+      if (dataSourceId) {
+        try {
+          const savedResponse = await fetch(
+            `/api/mappings/load?data_source_id=${dataSourceId}`
+          )
+          if (savedResponse.ok) {
+            const savedData = await savedResponse.json()
+            const tabMapping = savedData.tabMappings?.find(
+              (t: { tab_name: string }) => t.tab_name === tabName
+            )
+            if (tabMapping && tabMapping.columnMappings?.length > 0) {
+              const restored: ColumnClassification[] = tabMapping.columnMappings.map(
+                (cm: ColumnMapping) => ({
+                  sourceIndex: cm.source_column_index ?? 0,
+                  sourceColumn: cm.source_column,
+                  category: cm.category,
+                  targetField: cm.target_field,
+                  authority: cm.authority,
+                  isKey: cm.is_key,
+                  tagIds: cm.tags?.map((t) => t.id) || [],
+                })
+              )
+              setPhase('classify')
+              setHeaderRow(tabMapping.header_row)
+              setInitialHeaderRow(tabMapping.header_row)
+              setColumns(restored)
+              setDraftRestored(true)
+              toast.info('Restored saved mappings')
+              return
+            }
+          }
+        } catch (e) {
+          console.warn('Failed to load saved mappings:', e)
+        }
+      }
+
       setDraftRestored(true)
     }
 

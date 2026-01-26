@@ -5,8 +5,10 @@ import { Handle, Position } from '@xyflow/react'
 import type { NodeProps } from '@xyflow/react'
 import { Building2, Users, Package, ChevronDown, ChevronRight } from 'lucide-react'
 import { motion } from 'framer-motion'
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip'
+import { Badge } from '@/components/ui/badge'
 import type { EntityType } from '@/types/entities'
-import type { EntityNodeData } from './types'
+import type { EntityNodeData, EntityFieldData } from './types'
 import { getEntityTextColor, getEntityBgColor, getEntityBorderColor } from '../utils/colors'
 
 const easeOut: [number, number, number, number] = [0.22, 1, 0.36, 1]
@@ -15,6 +17,75 @@ const ENTITY_ICONS: Record<EntityType, typeof Building2> = {
   partners: Building2,
   staff: Users,
   asins: Package,
+}
+
+/** Single field row with tooltip for source details */
+function FieldRow({ field }: { field: EntityFieldData }) {
+  const primarySource = field.sources[0]
+  const authorityIcon = primarySource?.authority === 'source_of_truth' ? '⭐' : '📋'
+
+  const row = (
+    <div className="flex items-center gap-2 text-xs py-1 px-2 rounded-sm hover:bg-muted/50 transition-colors">
+      {/* Mapped dot */}
+      <div
+        className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+          field.isMapped ? 'bg-green-500' : 'bg-muted-foreground/30'
+        }`}
+      />
+
+      {/* Field label */}
+      <span
+        className={`truncate ${
+          field.isMapped ? 'text-foreground' : 'text-muted-foreground'
+        }`}
+      >
+        {field.label}
+      </span>
+
+      {/* Key badge */}
+      {field.isKey && (
+        <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 flex-shrink-0">
+          Key
+        </Badge>
+      )}
+
+      {/* Source badge + authority */}
+      {field.sources.length > 0 ? (
+        <span className="ml-auto flex items-center gap-1 flex-shrink-0">
+          <span className="text-[10px] text-muted-foreground truncate max-w-[120px]">
+            {primarySource.sourceName}
+          </span>
+          <span className="text-[10px]">{authorityIcon}</span>
+        </span>
+      ) : (
+        <span className="ml-auto text-[10px] text-muted-foreground/50">—</span>
+      )}
+    </div>
+  )
+
+  // Wrap in tooltip if there are sources to show
+  if (field.sources.length === 0) return row
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{row}</TooltipTrigger>
+      <TooltipContent side="right" className="max-w-xs">
+        <div className="space-y-1">
+          <p className="font-medium">{field.label}</p>
+          {field.sources.map((s, i) => (
+            <div key={i} className="text-[11px]">
+              <span className="opacity-80">{s.sourceName}</span>
+              <span className="opacity-50"> → {s.tabName}</span>
+              <span className="opacity-50"> (col: {s.sourceColumn})</span>
+              <span className="ml-1">
+                {s.authority === 'source_of_truth' ? '⭐ Source of Truth' : '📋 Reference'}
+              </span>
+            </div>
+          ))}
+        </div>
+      </TooltipContent>
+    </Tooltip>
+  )
 }
 
 function EntityNodeComponent({ data }: NodeProps) {
@@ -131,42 +202,35 @@ function EntityNodeComponent({ data }: NodeProps) {
           </div>
         </div>
 
-        {/* Expanded: show group summary chips */}
+        {/* Expanded: show field-level detail per group */}
         {isExpanded && nodeData.groups.length > 0 && (
-          <div className="mt-3 pt-3 border-t border-border/50 space-y-1.5">
-            {nodeData.groups.map((group) => {
-              const groupProgress =
-                group.fieldCount > 0
-                  ? Math.round((group.mappedFieldCount / group.fieldCount) * 100)
-                  : 0
-              return (
-                <div
-                  key={group.name}
-                  className="flex items-center justify-between text-xs"
-                >
-                  <span className="text-muted-foreground truncate">{group.name}</span>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    {/* Mini progress bar */}
-                    <div className="w-16 h-1.5 rounded-full bg-muted overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all duration-300 ${
-                          entityType === 'partners'
-                            ? 'bg-blue-500'
-                            : entityType === 'staff'
-                              ? 'bg-green-500'
-                              : 'bg-orange-500'
-                        }`}
-                        style={{ width: `${groupProgress}%` }}
-                      />
-                    </div>
-                    <span className="text-muted-foreground tabular-nums w-8 text-right">
+          <TooltipProvider delayDuration={200}>
+            <div
+              className="mt-3 pt-3 border-t border-border/50 overflow-y-auto"
+              style={{ maxHeight: 400 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {nodeData.groups.map((group) => (
+                <div key={group.name}>
+                  {/* Group header */}
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70 pt-2 pb-1 px-2 font-medium">
+                    {group.name}
+                    <span className="ml-1 tabular-nums">
                       {group.mappedFieldCount}/{group.fieldCount}
                     </span>
                   </div>
+
+                  {/* Field rows */}
+                  {group.fields?.map((field: EntityFieldData) => (
+                    <FieldRow
+                      key={field.name}
+                      field={field}
+                    />
+                  ))}
                 </div>
-              )
-            })}
-          </div>
+              ))}
+            </div>
+          </TooltipProvider>
         )}
       </div>
     </motion.div>
