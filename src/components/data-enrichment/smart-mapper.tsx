@@ -362,6 +362,8 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
       }
 
       // Step 3: Try loading persisted column_mappings (saved data, not drafts)
+      // IMPORTANT: Saved mappings only include classified columns (category != null).
+      // We need to merge them with the full sheet headers so unmapped columns are still visible.
       if (dataSourceId) {
         try {
           const savedResponse = await fetch(
@@ -373,21 +375,52 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
               (t: { tab_name: string }) => t.tab_name === tabName
             )
             if (tabMapping && tabMapping.columnMappings?.length > 0) {
-              const restored: ColumnClassification[] = tabMapping.columnMappings.map(
-                (cm: ColumnMapping) => ({
-                  sourceIndex: cm.source_column_index ?? 0,
-                  sourceColumn: cm.source_column,
-                  category: cm.category,
-                  targetField: cm.target_field,
-                  authority: cm.authority,
-                  isKey: cm.is_key,
-                  tagIds: cm.tags?.map((t) => t.id) || [],
-                })
-              )
+              // Build a lookup of saved mappings by source column name
+              const savedByColumn = new Map<string, ColumnMapping>()
+              for (const cm of tabMapping.columnMappings as ColumnMapping[]) {
+                savedByColumn.set(cm.source_column, cm)
+              }
+
+              // Get all headers from raw data at the saved header row
+              const savedHeaderRow = tabMapping.header_row ?? 0
+              const headers = rawData?.rows[savedHeaderRow] || []
+
+              // Merge: saved mappings applied on top of full column list
+              const merged: ColumnClassification[] = headers.map((header: string, idx: number) => {
+                const saved = savedByColumn.get(header || `Column ${idx + 1}`)
+                if (saved) {
+                  return {
+                    sourceIndex: saved.source_column_index ?? idx,
+                    sourceColumn: saved.source_column,
+                    category: saved.category,
+                    targetField: saved.target_field,
+                    authority: saved.authority,
+                    isKey: saved.is_key,
+                    tagIds: saved.tags?.map((t: { id: string }) => t.id) || [],
+                  }
+                }
+                // Column exists in sheet but wasn't classified — show as unmapped
+                const name = (header || '').toLowerCase()
+                const isWeekly =
+                  name.includes('weekly') ||
+                  name.includes('week ') ||
+                  name.match(/^w\d+\s/) ||
+                  name.match(/^\d{1,2}\/\d{1,2}/) ||
+                  name.match(/^\d{4}-\d{2}-\d{2}/)
+                return {
+                  sourceIndex: idx,
+                  sourceColumn: header || `Column ${idx + 1}`,
+                  category: isWeekly ? 'weekly' as const : null,
+                  targetField: null,
+                  authority: 'source_of_truth' as const,
+                  isKey: false,
+                }
+              })
+
               setPhase('classify')
-              setHeaderRow(tabMapping.header_row)
-              setInitialHeaderRow(tabMapping.header_row)
-              setColumns(restored)
+              setHeaderRow(savedHeaderRow)
+              setInitialHeaderRow(savedHeaderRow)
+              setColumns(merged)
               setDraftRestored(true)
               toast.info('Restored saved mappings')
               return
