@@ -1,7 +1,7 @@
 # Data Enrichment Progress Tracker
 
 > Tracking the implementation of Sophie Hub's data enrichment system.
-> Last updated: 2026-01-26 (Sync engine audit: backend complete, next = dry run preview UI + Playwright E2E)
+> Last updated: 2026-01-26 (Dry run preview UI: SyncPreviewDialog shows changes before committing sync)
 
 ---
 
@@ -63,7 +63,7 @@
 | Authority toggle UI | Done | MEDIUM | Already implemented in SmartMapper MapPhase |
 | Visual data map component | Done | MEDIUM | Phase 5.1: React Flow canvas + mobile card list |
 | Entity field registry | Done | HIGH | `src/lib/entity-fields/` - single source of truth |
-| **Dry run preview UI** | **Pending** | **HIGH** | API supports `dry_run: true` — need UI to show create/update/skip preview before committing |
+| **Dry run preview UI** | **Done** | **HIGH** | `SyncPreviewDialog`: dry run → preview creates/updates/skips → confirm → actual sync |
 | End-to-end sync verification | Pending | HIGH | Full pipeline test: map columns → sync → verify entity tables |
 | Error recovery UX | Pending | MEDIUM | Better error handling for partial sync failures |
 | Lineage visualization | Pending | MEDIUM | "Where did this value come from?" |
@@ -150,6 +150,7 @@
 | Client-side raw data cache (5min TTL) | Done | HIGH | Module-level Map in SmartMapper. Tab revisit: <50ms vs 400-1000ms Google API |
 | Cache-Control on sheets/raw-rows, ai/save-summary, field-tags | Done | MEDIUM | Browser caching on all read-heavy SmartMapper endpoints |
 | Deferred field tags fetch | Done | LOW | Only fetch when entering Classify phase, not on SmartMapper mount |
+| Dry run preview dialog | Done | HIGH | `SyncPreviewDialog`: click Sync → dry run all tabs → review creates/updates/skips → confirm → apply |
 | Level 3 - Field detail panel | Pending | HIGH | Slide-in from right |
 | GET /api/flow-map/field/[name] | Pending | HIGH | Cross-references + lineage |
 | Pin/lock feature | Pending | MEDIUM | Pin icon overlay + glow ring |
@@ -294,6 +295,7 @@ In-app AI co-pilot for column mapping at multiple granularity levels.
 - `src/lib/sync/engine.ts` - SyncEngine class
 
 ### Sync UI Components
+- `src/components/data-enrichment/sync-preview-dialog.tsx` - Dry run preview before sync (creates/updates/skips per entity)
 - `src/components/data-enrichment/sync-history-panel.tsx` - Collapsible history with expandable errors
 - `src/components/data-enrichment/browser/tab-overview-dashboard.tsx` - Contains Sync button
 
@@ -413,6 +415,7 @@ In-app AI co-pilot for column mapping at multiple granularity levels.
 | 2026-01-26 | Defer field tags to Classify phase | Tags only needed for classification UI, not for Preview phase |
 | 2026-01-26 | Sync engine backend complete | 596-line SyncEngine class, API endpoints, UI button + history panel all functional. Missing: dry run preview UI |
 | 2026-01-26 | Playwright over Vitest for regression tests | Integration bugs (missing tabs, lost mappings) aren't catchable by unit tests. Playwright E2E covers real browser flows |
+| 2026-01-26 | Dry run preview before sync | User clicks Sync → dry_run all tabs → SyncPreviewDialog shows creates/updates/skips per entity → Confirm → actual sync. Prevents accidental writes |
 
 ---
 
@@ -429,8 +432,9 @@ In-app AI co-pilot for column mapping at multiple granularity levels.
 9. [x] Phase 5.1: Visual data flow map (foundation) - DONE (2026-01-26)
 10. [~] Phase 5.2: Data flow map interaction - entity field detail DONE, pin/lock/filters remaining
 11. [x] Mapping persistence fix - 3-step restore cascade - DONE (2026-01-26)
-12. [ ] **Sync Engine UX: Dry Run Preview** - Show what will be created/updated/skipped before committing
-13. [ ] **Playwright E2E tests** - Critical path regression tests (tab discovery, mapping persistence, sync)
+12. [x] **Sync Engine UX: Dry Run Preview** - DONE (SyncPreviewDialog)
+13. [ ] **End-to-end sync verification** - Full pipeline test with real data
+14. [ ] **Playwright E2E tests** - Critical path regression tests (tab discovery, mapping persistence, sync)
 14. [ ] Nested sheet extraction UX design
 15. [ ] Phase 4: Additional connectors (Close.io, Typeform, etc.)
 

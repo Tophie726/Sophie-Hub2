@@ -8,6 +8,7 @@ import { SourceTabBar } from './source-tab-bar'
 import { SheetTabBar, OVERVIEW_TAB_ID } from './sheet-tab-bar'
 import { SmartMapper } from '../smart-mapper'
 import { TabOverviewDashboard } from './tab-overview-dashboard'
+import { SyncPreviewDialog, type TabPreviewResult } from '../sync-preview-dialog'
 import { Button } from '@/components/ui/button'
 import { SheetSearchModal } from '../sheet-search-modal'
 import type { CategoryStats } from '@/types/entities'
@@ -89,6 +90,11 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
     rowsCreated?: number
     rowsUpdated?: number
   }>({})
+
+  // Sync preview state
+  const [showSyncPreview, setShowSyncPreview] = useState(false)
+  const [isLoadingSyncPreview, setIsLoadingSyncPreview] = useState(false)
+  const [previewResults, setPreviewResults] = useState<TabPreviewResult[]>([])
 
   // For new sources - store preview data until saved
   const [sheetPreviews, setSheetPreviews] = useState<Record<string, SheetPreview>>({})
@@ -333,9 +339,9 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
     }
   }
 
-  // Handle syncing all active tabs for the current source
+  // Handle sync: run dry run first to show preview
   const handleSync = useCallback(async () => {
-    if (!activeSource?.id || isSyncing) return
+    if (!activeSource?.id || isSyncing || isLoadingSyncPreview) return
 
     // Get all active tabs with mappings
     const activeTabs = activeSource.tabs?.filter(
@@ -347,6 +353,65 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
       return
     }
 
+    // Open preview dialog and run dry run
+    setShowSyncPreview(true)
+    setIsLoadingSyncPreview(true)
+    setPreviewResults([])
+
+    const results: TabPreviewResult[] = []
+
+    for (const tab of activeTabs) {
+      if (!tab.id) continue
+
+      try {
+        const response = await fetch(`/api/sync/tab/${tab.id}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ dry_run: true }),
+        })
+
+        if (response.ok) {
+          const json = await response.json()
+          const data = json.data
+          results.push({
+            tabId: tab.id,
+            tabName: tab.tab_name,
+            changes: data.changes || [],
+            stats: data.stats || { rows_processed: 0, rows_created: 0, rows_updated: 0, rows_skipped: 0, errors: [] },
+          })
+        } else {
+          const errorData = await response.json().catch(() => ({}))
+          results.push({
+            tabId: tab.id,
+            tabName: tab.tab_name,
+            changes: [],
+            stats: { rows_processed: 0, rows_created: 0, rows_updated: 0, rows_skipped: 0, errors: [] },
+            error: errorData.error?.message || 'Dry run failed',
+          })
+        }
+      } catch {
+        results.push({
+          tabId: tab.id,
+          tabName: tab.tab_name,
+          changes: [],
+          stats: { rows_processed: 0, rows_created: 0, rows_updated: 0, rows_skipped: 0, errors: [] },
+          error: 'Network error',
+        })
+      }
+    }
+
+    setPreviewResults(results)
+    setIsLoadingSyncPreview(false)
+  }, [activeSource, isSyncing, isLoadingSyncPreview])
+
+  // Confirm sync: apply changes for real
+  const handleConfirmSync = useCallback(async () => {
+    if (!activeSource?.id || isSyncing) return
+
+    const activeTabs = activeSource.tabs?.filter(
+      t => t.status === 'active' || !t.status
+    ) || []
+
     setIsSyncing(true)
     let totalProcessed = 0
     let totalCreated = 0
@@ -354,7 +419,6 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
     const errors: string[] = []
 
     try {
-      // Sync each active tab
       for (const tab of activeTabs) {
         if (!tab.id) continue
 
@@ -372,7 +436,7 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
             totalCreated += data.stats?.rows_created || 0
             totalUpdated += data.stats?.rows_updated || 0
           } else {
-            const errorData = await response.json()
+            const errorData = await response.json().catch(() => ({}))
             errors.push(`${tab.tab_name}: ${errorData.error?.message || 'Sync failed'}`)
           }
         } catch {
@@ -380,7 +444,6 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
         }
       }
 
-      // Update sync status
       setSyncStatus({
         lastSyncAt: new Date().toISOString(),
         lastSyncStatus: errors.length === 0 ? 'completed' : 'failed',
@@ -388,6 +451,8 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
         rowsCreated: totalCreated,
         rowsUpdated: totalUpdated,
       })
+
+      setShowSyncPreview(false)
 
       if (errors.length === 0) {
         toast.success('Sync complete', {
@@ -408,6 +473,7 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
         lastSyncAt: new Date().toISOString(),
         lastSyncStatus: 'failed',
       })
+      setShowSyncPreview(false)
       toast.error('Sync failed', {
         description: error instanceof Error ? error.message : 'Unknown error',
       })
@@ -1052,6 +1118,16 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
           </motion.div>
         ) : null}
       </AnimatePresence>
+
+      <SyncPreviewDialog
+        open={showSyncPreview}
+        onOpenChange={setShowSyncPreview}
+        previewResults={previewResults}
+        isLoadingPreview={isLoadingSyncPreview}
+        isSyncing={isSyncing}
+        onConfirm={handleConfirmSync}
+        sourceName={activeSource?.name || ''}
+      />
 
       <SheetSearchModal
         open={showSearchModal}

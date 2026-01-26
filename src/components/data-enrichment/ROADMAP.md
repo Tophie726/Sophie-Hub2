@@ -685,7 +685,7 @@ const duration = {
 - [x] Sync button in TabOverviewDashboard — with loading states
 - [x] Sync history panel component — collapsible with expandable error details
 - [x] Visual data map (React Flow canvas + entity-centric field detail)
-- [ ] **Dry run preview UI** — API supports dry_run but no UI to show preview before commit
+- [x] **Dry run preview UI** — `SyncPreviewDialog` shows creates/updates/skips per tab before committing
 - [ ] End-to-end sync verification — full pipeline test with real data
 - [ ] Error recovery UX — better handling for partial sync failures
 
@@ -797,7 +797,7 @@ const duration = {
 ### API Routes
 - `src/app/api/data-sources/route.ts` - Source CRUD
 - `src/app/api/mappings/save/route.ts` - Save mappings
-- `src/app/api/sync/tab/[id]/route.ts` - Trigger sync for a tab
+- `src/app/api/sync/tab/[id]/route.ts` - Trigger sync for a tab (supports `dry_run: true`)
 - `src/app/api/sync/runs/route.ts` - List sync runs
 - `src/app/api/sync/runs/[id]/route.ts` - Get sync run details
 - `src/app/api/sheets/*` - Google Sheets specific
@@ -805,6 +805,8 @@ const duration = {
 ### Components
 - `src/components/data-enrichment/smart-mapper.tsx` - Column classification
 - `src/components/data-enrichment/browser/source-browser.tsx` - Browser container
+- `src/components/data-enrichment/sync-preview-dialog.tsx` - Dry run preview before sync
+- `src/components/data-enrichment/sync-history-panel.tsx` - Sync history with expandable errors
 - `src/components/data-enrichment/sheet-search-modal.tsx` - Sheet search
 
 ### Security
@@ -838,5 +840,5 @@ const duration = {
 
 ---
 
-*Last updated: 2026-01-26 (Sync engine audit: backend complete, next = dry run preview UI + Playwright E2E)*
+*Last updated: 2026-01-26 (Dry run preview UI: SyncPreviewDialog shows changes before committing sync)*
 *Architecture audit by Claude Opus 4.5*

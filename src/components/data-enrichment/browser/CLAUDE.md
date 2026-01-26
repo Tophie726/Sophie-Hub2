@@ -94,6 +94,21 @@ When user confirms a header in SmartMapper:
 
 This avoids requiring a full page refresh to see updated status.
 
+### Sync Flow (Dry Run Preview)
+
+When user clicks the "Sync" button in TabOverviewDashboard:
+1. `handleSync` opens `SyncPreviewDialog` and starts loading
+2. For each active tab, calls `POST /api/sync/tab/[id]` with `{ dry_run: true }`
+3. API returns `EntityChange[]` (creates, updates, skips) without writing to DB
+4. Dialog shows summary stats (X creates, Y updates, Z skips) grouped by entity
+5. User reviews per-tab changes with expandable field-level detail
+6. User clicks "Confirm Sync" → `handleConfirmSync` runs actual sync (no dry_run)
+7. Toast shows results, sync status updated
+
+**Key files:**
+- `sync-preview-dialog.tsx` — Dialog with stats, entity sections, change detail
+- `source-browser.tsx` — `handleSync` (dry run) + `handleConfirmSync` (actual write)
+
 ## API Integration
 
 ### GET /api/data-sources
