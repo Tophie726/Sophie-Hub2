@@ -1383,6 +1383,12 @@ function ClassifyPhase({
         sampleRows={rawData.rows.slice(headerRow + 1, headerRow + 4)}
         dataSourceId={dataSourceId}
         initialSummary={tabSummary}
+        currentMappings={columns.map(c => ({
+          column_name: c.sourceColumn,
+          category: c.category,
+          target_field: c.targetField,
+        }))}
+        allColumnsClassified={columns.length > 0 && columns.every(c => c.category !== null)}
         onSummaryComplete={onTabSummaryChange}
         className={embedded ? '' : 'max-w-4xl mx-auto'}
       />

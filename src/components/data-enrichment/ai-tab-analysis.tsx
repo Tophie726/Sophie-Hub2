@@ -1,7 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { motion } from 'framer-motion'
+import { useState, useEffect, useRef } from 'react'
 import {
   Sparkles,
   Loader2,
@@ -14,9 +13,6 @@ import {
   ChevronUp,
   Key,
   AlertTriangle,
-  Link2,
-  Layers,
-  XCircle,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -46,16 +42,26 @@ interface TabSummary {
   data_quality_notes?: string[]
 }
 
+interface ColumnMapping {
+  column_name: string
+  category: string | null
+  target_field: string | null
+}
+
 interface AITabAnalysisProps {
   tabName: string
   sourceName?: string
   columnNames: string[]
   sampleRows: string[][]
-  /** Data source ID for persistence (optional - if not provided, summary won't persist) */
+  /** Data source ID for persistence */
   dataSourceId?: string
   /** Initial summary loaded from parent state */
   initialSummary?: TabSummary | null
-  /** Called when summary is generated - updates parent state */
+  /** Current column mappings - passed to AI for context */
+  currentMappings?: ColumnMapping[]
+  /** Whether all columns have been classified */
+  allColumnsClassified?: boolean
+  /** Called when summary is generated */
   onSummaryComplete?: (summary: TabSummary) => void
   className?: string
 }
@@ -90,6 +96,8 @@ export function AITabAnalysis({
   sampleRows,
   dataSourceId,
   initialSummary,
+  currentMappings,
+  allColumnsClassified = false,
   onSummaryComplete,
   className,
 }: AITabAnalysisProps) {
@@ -97,8 +105,9 @@ export function AITabAnalysis({
   const [isLoading, setIsLoading] = useState(false)
   const [isLoadingFromDb, setIsLoadingFromDb] = useState(!!dataSourceId && !initialSummary)
   const [error, setError] = useState<string | null>(null)
-  const [isExpanded, setIsExpanded] = useState(false) // Start collapsed
-  const hasRun = !!summary // If we have a summary (initial or fetched), we've "run"
+  const [isExpanded, setIsExpanded] = useState(false)
+  const hasRun = !!summary
+  const autoRanRef = useRef(false)
 
   // Load existing summary from database on mount
   useEffect(() => {
@@ -124,9 +133,19 @@ export function AITabAnalysis({
     }
 
     loadSummary()
-  }, [dataSourceId, tabName, initialSummary, onSummaryComplete])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dataSourceId, tabName])
 
-  // Save summary to database when generated
+  // Auto-run when all columns are classified
+  useEffect(() => {
+    if (allColumnsClassified && !autoRanRef.current && !isLoading) {
+      autoRanRef.current = true
+      fetchSummary()
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allColumnsClassified])
+
+  // Save summary to database
   const saveSummaryToDb = async (newSummary: TabSummary) => {
     if (!dataSourceId) return
 
@@ -160,6 +179,7 @@ export function AITabAnalysis({
           source_name: sourceName,
           column_names: columnNames,
           sample_rows: sampleRows,
+          existing_mappings: currentMappings?.filter(m => m.category),
         }),
       })
 
@@ -172,7 +192,6 @@ export function AITabAnalysis({
       const newSummary = data.data.summary
       setSummary(newSummary)
       onSummaryComplete?.(newSummary)
-      // Persist to database
       saveSummaryToDb(newSummary)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Analysis failed')
@@ -190,9 +209,7 @@ export function AITabAnalysis({
       <div className={cn('rounded-lg border bg-card p-4', className)}>
         <div className="flex items-center gap-3">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-          <div>
-            <p className="text-sm font-medium">Loading saved analysis...</p>
-          </div>
+          <p className="text-sm text-muted-foreground">Loading saved analysis...</p>
         </div>
       </div>
     )
@@ -210,7 +227,7 @@ export function AITabAnalysis({
             <div>
               <h3 className="text-sm font-medium">AI Tab Summary</h3>
               <p className="text-xs text-muted-foreground">
-                Understand what this tab is about before mapping
+                Understand what this tab is about
               </p>
             </div>
           </div>
@@ -234,9 +251,9 @@ export function AITabAnalysis({
         <div className="flex items-center gap-3">
           <Loader2 className="h-5 w-5 animate-spin text-purple-500" />
           <div>
-            <p className="text-sm font-medium">Analyzing tab structure...</p>
+            <p className="text-sm font-medium">Analyzing tab...</p>
             <p className="text-xs text-muted-foreground">
-              Understanding what "{tabName}" is about
+              Understanding what &ldquo;{tabName}&rdquo; is about
             </p>
           </div>
         </div>
@@ -264,33 +281,24 @@ export function AITabAnalysis({
     )
   }
 
-  // Summary complete
   if (!summary) return null
-
-  const { column_categories } = summary
-  const totalCategorized =
-    (column_categories.core_fields?.length || 0) +
-    (column_categories.relationship_fields?.length || 0) +
-    (column_categories.weekly_date_fields?.length || 0)
 
   return (
     <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
       <div className={cn('rounded-lg border bg-card overflow-hidden', className)}>
-        {/* Summary row - always visible */}
+        {/* Collapsed summary - always visible */}
         <CollapsibleTrigger asChild>
-          <button className="w-full flex items-center gap-4 p-4 hover:bg-muted/50 transition-colors text-left">
-            {/* Entity icon */}
-            <div className={cn('flex h-10 w-10 items-center justify-center rounded-lg', config?.bg)}>
-              <EntityIcon className={cn('h-5 w-5', config?.color)} />
+          <button className="w-full flex items-center gap-3 p-3 hover:bg-muted/50 transition-colors text-left">
+            <div className={cn('flex h-8 w-8 items-center justify-center rounded-lg', config?.bg)}>
+              <EntityIcon className={cn('h-4 w-4', config?.color)} />
             </div>
 
-            {/* Main info */}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium">{config?.label} Tab</span>
                 <Badge variant="outline" className="text-[10px] h-5">
                   <span className={getConfidenceColor(summary.confidence)}>
-                    {Math.round(summary.confidence * 100)}% confident
+                    {Math.round(summary.confidence * 100)}%
                   </span>
                 </Badge>
               </div>
@@ -299,9 +307,8 @@ export function AITabAnalysis({
               </p>
             </div>
 
-            {/* Expand indicator */}
-            <div className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-purple-500" />
+            <div className="flex items-center gap-1.5">
+              <Sparkles className="h-3.5 w-3.5 text-purple-500" />
               {isExpanded ? (
                 <ChevronUp className="h-4 w-4 text-muted-foreground" />
               ) : (
@@ -311,103 +318,33 @@ export function AITabAnalysis({
           </button>
         </CollapsibleTrigger>
 
-        {/* Expanded details */}
+        {/* Expanded: purpose, key, quality notes, re-analyze */}
         <CollapsibleContent>
-          <motion.div
-            initial={false}
-            className="px-4 pb-4 pt-0 space-y-4 border-t"
-          >
+          <div className="px-4 pb-3 pt-0 space-y-3 border-t">
             {/* Purpose */}
-            <div className="pt-4">
-              <div className="text-xs font-medium text-muted-foreground mb-1">Purpose</div>
+            <div className="pt-3">
               <p className="text-sm">{summary.purpose}</p>
             </div>
 
             {/* Key column */}
-            <div>
-              <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground mb-2">
-                <Key className="h-3.5 w-3.5" />
-                Key Identifier
-              </div>
-              <code className="text-sm bg-muted px-2 py-1 rounded">
+            <div className="flex items-center gap-2">
+              <Key className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-xs text-muted-foreground">Key:</span>
+              <code className="text-xs bg-muted px-1.5 py-0.5 rounded">
                 {summary.key_column}
               </code>
-            </div>
-
-            {/* Column breakdown */}
-            <div>
-              <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground mb-2">
-                <Layers className="h-3.5 w-3.5" />
-                Column Breakdown
-              </div>
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                {/* Core fields */}
-                {column_categories.core_fields && column_categories.core_fields.length > 0 && (
-                  <div className="p-2 rounded bg-blue-500/5 border border-blue-500/20">
-                    <div className="flex items-center gap-1.5 text-blue-600 font-medium mb-1">
-                      <Building2 className="h-3 w-3" />
-                      Core Fields ({column_categories.core_fields.length})
-                    </div>
-                    <div className="text-muted-foreground">
-                      {column_categories.core_fields.slice(0, 3).join(', ')}
-                      {column_categories.core_fields.length > 3 && '...'}
-                    </div>
-                  </div>
-                )}
-
-                {/* Relationship fields */}
-                {column_categories.relationship_fields && column_categories.relationship_fields.length > 0 && (
-                  <div className="p-2 rounded bg-green-500/5 border border-green-500/20">
-                    <div className="flex items-center gap-1.5 text-green-600 font-medium mb-1">
-                      <Link2 className="h-3 w-3" />
-                      Relationships ({column_categories.relationship_fields.length})
-                    </div>
-                    <div className="text-muted-foreground">
-                      {column_categories.relationship_fields.slice(0, 3).join(', ')}
-                      {column_categories.relationship_fields.length > 3 && '...'}
-                    </div>
-                  </div>
-                )}
-
-                {/* Weekly fields */}
-                {column_categories.weekly_date_fields && column_categories.weekly_date_fields.length > 0 && (
-                  <div className="p-2 rounded bg-purple-500/5 border border-purple-500/20">
-                    <div className="flex items-center gap-1.5 text-purple-600 font-medium mb-1">
-                      <Calendar className="h-3 w-3" />
-                      Weekly/Date ({column_categories.weekly_date_fields.length})
-                    </div>
-                    <div className="text-muted-foreground">
-                      {column_categories.weekly_date_fields.slice(0, 3).join(', ')}
-                      {column_categories.weekly_date_fields.length > 3 && '...'}
-                    </div>
-                  </div>
-                )}
-
-                {/* Skip candidates */}
-                {column_categories.skip_candidates && column_categories.skip_candidates > 0 && (
-                  <div className="p-2 rounded bg-muted border border-border">
-                    <div className="flex items-center gap-1.5 text-muted-foreground font-medium mb-1">
-                      <XCircle className="h-3 w-3" />
-                      Likely Skip (~{column_categories.skip_candidates})
-                    </div>
-                    <div className="text-muted-foreground">
-                      Empty or irrelevant columns
-                    </div>
-                  </div>
-                )}
-              </div>
             </div>
 
             {/* Data quality notes */}
             {summary.data_quality_notes && summary.data_quality_notes.length > 0 && (
               <div>
-                <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground mb-2">
-                  <AlertTriangle className="h-3.5 w-3.5" />
-                  Data Quality Notes
+                <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground mb-1.5">
+                  <AlertTriangle className="h-3 w-3" />
+                  Data Quality
                 </div>
-                <ul className="text-xs text-muted-foreground space-y-1">
+                <ul className="text-xs text-muted-foreground space-y-0.5">
                   {summary.data_quality_notes.map((note, i) => (
-                    <li key={i} className="flex items-start gap-2">
+                    <li key={i} className="flex items-start gap-1.5">
                       <span className="text-amber-500 mt-0.5">•</span>
                       {note}
                     </li>
@@ -416,8 +353,8 @@ export function AITabAnalysis({
               </div>
             )}
 
-            {/* Re-analyze button */}
-            <div className="pt-2 flex justify-end">
+            {/* Re-analyze */}
+            <div className="flex justify-end">
               <Button
                 variant="ghost"
                 size="sm"
@@ -425,18 +362,17 @@ export function AITabAnalysis({
                   e.stopPropagation()
                   fetchSummary()
                 }}
-                className="text-xs text-muted-foreground"
+                className="text-xs text-muted-foreground h-7"
               >
-                <Sparkles className="h-3 w-3 mr-1.5" />
+                <Sparkles className="h-3 w-3 mr-1" />
                 Re-analyze
               </Button>
             </div>
-          </motion.div>
+          </div>
         </CollapsibleContent>
       </div>
     </Collapsible>
   )
 }
 
-// Export the TabSummary type for use in SmartMapper
 export type { TabSummary }
