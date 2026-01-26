@@ -1,7 +1,7 @@
 # Data Enrichment Progress Tracker
 
 > Tracking the implementation of Sophie Hub's data enrichment system.
-> Last updated: 2026-01-26 (Performance sweep + blank page fix + hover tooltips)
+> Last updated: 2026-01-26 (Tab loading speed: skip preview + data-sources cache)
 
 ---
 
@@ -139,8 +139,10 @@
 | Blank page race condition fix | Done | HIGH | Guard Overview on sheetTabs.length > 0, show skeleton during initial fetch, prevent preview overriding tab |
 | Hover tooltips on truncated names | Done | LOW | Native `title` attr on truncated tab/source names in SheetTabBar + SourceTabBar |
 | N+1 query fix in /api/mappings/load | Done | HIGH | 21+ queries → 3 queries via batch .in() + Map assembly |
-| Cache-Control headers on GET APIs | Done | MEDIUM | flow-map + mappings/load: private, max-age=30, stale-while-revalidate |
+| Cache-Control headers on GET APIs | Done | MEDIUM | flow-map + mappings/load + data-sources: private, max-age=30, stale-while-revalidate |
 | apiSuccess headers parameter | Done | LOW | Optional headers param for cleaner cache control |
+| Skip Google Sheets preview for configured sources | Done | HIGH | Sources with DB tabs skip 100-500ms Google API call; preview only for new sources needing discovery |
+| Cache-Control on /api/data-sources | Done | MEDIUM | private, max-age=30, stale-while-revalidate=60 — revisits within 30s are instant |
 | Level 3 - Field detail panel | Pending | HIGH | Slide-in from right |
 | GET /api/flow-map/field/[name] | Pending | HIGH | Cross-references + lineage |
 | Pin/lock feature | Pending | MEDIUM | Pin icon overlay + glow ring |
@@ -396,6 +398,8 @@ In-app AI co-pilot for column mapping at multiple granularity levels.
 | 2026-01-26 | Batch queries in /api/mappings/load | Same 3-query pattern as /api/data-sources: N+1 → batch .in() + in-memory Map assembly |
 | 2026-01-26 | Cache-Control on read-heavy GETs | private + stale-while-revalidate; safe for auth-gated admin endpoints |
 | 2026-01-26 | Native title tooltips on truncated names | Browser-native tooltip (~1s delay) over Radix Tooltip: zero DOM overhead, accessible by default |
+| 2026-01-26 | Skip preview for configured sources | Sources with existing DB tabs don't need Google Sheets tab discovery on every visit. Preview only for new sources |
+| 2026-01-26 | Cache-Control on /api/data-sources | Same pattern as flow-map: private, max-age=30, stale-while-revalidate=60 |
 
 ---
 

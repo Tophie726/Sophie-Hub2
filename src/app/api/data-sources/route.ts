@@ -255,7 +255,9 @@ export async function GET() {
       }
     })
 
-    return apiSuccess({ sources: sourcesWithStats })
+    return apiSuccess({ sources: sourcesWithStats }, 200, {
+      'Cache-Control': 'private, max-age=30, stale-while-revalidate=60',
+    })
   } catch (error) {
     console.error('Error fetching data sources:', error)
     return ApiErrors.database(error instanceof Error ? error.message : 'Database error')

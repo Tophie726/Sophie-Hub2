@@ -732,10 +732,11 @@ const duration = {
 |------|----------|--------|
 | N+1 → 3-query fix in data-sources API | `api/data-sources/route.ts` | 500+ → 3 queries |
 | N+1 → 3-query fix in mappings/load API | `api/mappings/load/route.ts` | 21+ → 3 queries |
-| Cache-Control on read-heavy GETs | `api/flow-map`, `api/mappings/load` | 40% fewer refetches |
+| Cache-Control on read-heavy GETs | `api/flow-map`, `api/mappings/load`, `api/data-sources` | 40% fewer refetches |
 | `apiSuccess` headers parameter | `src/lib/api/response.ts` | Cleaner cache pattern |
 | Blank page race condition fix | `source-browser.tsx` | Guard render on data ready |
 | React.memo on all Flow nodes/edges | `lineage/nodes/*.tsx`, `lineage/edges/*.tsx` | No re-render on pan/zoom |
+| Skip Google Sheets preview for configured sources | `source-browser.tsx` | Eliminates 100-500ms Google API call on revisit |
 
 ### Remaining (Prioritized)
 
@@ -828,5 +829,5 @@ const duration = {
 
 ---
 
-*Last updated: 2026-01-26 (Entity-centric field detail + mapping persistence fix)*
+*Last updated: 2026-01-26 (Tab loading speed: skip preview for configured sources + data-sources cache)*
 *Architecture audit by Claude Opus 4.5*

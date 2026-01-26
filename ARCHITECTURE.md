@@ -79,9 +79,9 @@ const patternsByTab = new Map<string, any[]>()
 
 #### Cache-Control Headers on Read-Only APIs (2026-01-26)
 
-**Location:** `src/lib/api/response.ts`, `src/app/api/flow-map/route.ts`, `src/app/api/mappings/load/route.ts`
+**Location:** `src/lib/api/response.ts`, `src/app/api/flow-map/route.ts`, `src/app/api/mappings/load/route.ts`, `src/app/api/data-sources/route.ts`
 
-**Change:** Added optional `headers` parameter to `apiSuccess()` helper. Applied `Cache-Control: private, max-age=30, stale-while-revalidate=120` to read-heavy endpoints.
+**Change:** Added optional `headers` parameter to `apiSuccess()` helper. Applied `Cache-Control: private, max-age=30, stale-while-revalidate` to read-heavy endpoints (flow-map, mappings/load, data-sources).
 
 **Guidelines:**
 - `private` — only browser caches (not CDN), since all endpoints require auth
@@ -594,7 +594,7 @@ Track these metrics as the app scales:
 |------|------|---------|
 | 2025-01-24 | Enterprise Sweep | N+1 fix, singleton pattern, React.memo, ErrorBoundary, health endpoint, TypeScript fixes, console.log cleanup |
 | 2025-01-24 | Security Audit | Open redirect fix, query injection fix, RBAC implementation |
-| 2026-01-26 | Performance Sweep | N+1 fix in mappings/load, Cache-Control headers, apiSuccess headers param, blank page race condition fix |
+| 2026-01-26 | Performance Sweep | N+1 fix in mappings/load, Cache-Control headers (flow-map, mappings/load, data-sources), apiSuccess headers param, blank page race condition fix, skip Google Sheets preview for configured sources |
 
 ---
 
