@@ -72,7 +72,7 @@ export function CategoryHub({ onSelectCategory }: CategoryHubProps) {
       </div>
 
       {/* Category Cards */}
-      <div className="grid gap-4 md:gap-6 md:grid-cols-3 max-w-5xl mx-auto px-4 md:px-0">
+      <div className="grid gap-4 md:gap-6 md:grid-cols-2 lg:grid-cols-3 max-w-4xl mx-auto px-4 md:px-0">
         <CategoryCard
           title="Google Sheets"
           description="Connect spreadsheets and map columns to your database tables"

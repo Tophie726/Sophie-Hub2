@@ -12,5 +12,4 @@ export {
   type MappingCategory,
   type MappingAuthority,
   type ExistingMapping,
-  type EntitySchema,
 } from './mapping-sdk'

@@ -8,6 +8,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { getAnthropicApiKey } from '@/lib/settings'
+import { getSchemaDescription } from '@/lib/entity-fields'
 
 // =============================================================================
 // Types
@@ -51,11 +52,7 @@ export interface ExistingMapping {
   authority: MappingAuthority
 }
 
-export interface EntitySchema {
-  partners: string[]
-  staff: string[]
-  asins: string[]
-}
+// EntitySchema type is now provided by @/lib/entity-fields
 
 // =============================================================================
 // Tool Definition
@@ -101,65 +98,7 @@ const COLUMN_MAPPING_TOOL: Anthropic.Tool = {
   },
 }
 
-// =============================================================================
-// Entity Schema (hardcoded for now, could be dynamic later)
-// =============================================================================
-
-const ENTITY_SCHEMA: EntitySchema = {
-  partners: [
-    // Core partner fields
-    'brand_name',        // PRIMARY KEY
-    'client_name',
-    'client_email',
-    'client_phone',
-    'status',
-    'tier',
-    'base_fee',
-    'commission_rate',
-    'billing_day',
-    'onboarding_date',
-    'contract_start_date',
-    'contract_end_date',
-    'parent_asin_count',
-    'child_asin_count',
-    'notes',
-    // Staff assignment fields (FKs to staff)
-    'pod_leader_id',
-    'account_manager_id',
-    'brand_manager_id',
-    'sales_rep_id',
-    'ppc_specialist_id',
-  ],
-  staff: [
-    'full_name',         // PRIMARY KEY
-    'email',
-    'phone',
-    'slack_id',
-    'role',
-    'department',
-    'title',
-    'status',
-    'max_clients',
-    'current_client_count',
-    'services',
-    'hire_date',
-    'dashboard_url',
-    'calendly_url',
-    'manager_id',        // FK to another staff member
-  ],
-  asins: [
-    'asin_code',         // PRIMARY KEY
-    'parent_asin',
-    'is_parent',
-    'title',
-    'sku',
-    'category',
-    'status',
-    'cogs',
-    'price',
-    'brand_name',        // FK to partner
-  ],
-}
+// Entity schema is now sourced from @/lib/entity-fields registry
 
 // =============================================================================
 // SDK Class
@@ -310,18 +249,7 @@ Help admins map columns from external data sources (Google Sheets, CRMs, etc.) t
 
 ## Core Entities & Key Fields
 
-### partners (Client brands we manage)
-**PRIMARY KEY: brand_name** (the unique identifier for partners)
-Fields: ${ENTITY_SCHEMA.partners.join(', ')}
-Also stores: pod_leader_id, account_manager_id (FKs to staff)
-
-### staff (Team members)
-**PRIMARY KEY: full_name** (the unique identifier for staff members)
-Fields: ${ENTITY_SCHEMA.staff.join(', ')}
-
-### asins (Amazon products per partner)
-**PRIMARY KEY: asin_code** (the Amazon ASIN identifier)
-Fields: ${ENTITY_SCHEMA.asins.join(', ')}
+${getSchemaDescription()}
 
 ## CRITICAL: Relationship Fields
 

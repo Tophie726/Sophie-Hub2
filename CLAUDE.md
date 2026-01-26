@@ -195,6 +195,7 @@ src/
 │   └── ui/                    # shadcn/ui base components
 ├── lib/
 │   ├── db/                    # Database schema, queries
+│   ├── entity-fields/         # Field registry (single source of truth)
 │   ├── sheets/                # Google Sheets integration
 │   ├── enrichment/            # Data mapping logic
 │   └── utils/                 # Helpers
@@ -416,6 +417,26 @@ Shared entity types are defined in `src/types/entities.ts` to prevent type drift
 import { EntityType, TabStatus, ColumnCategory, CategoryStats } from '@/types/entities'
 import { emptyCategoryStats, calculateProgress } from '@/types/entities'
 ```
+
+### Entity Field Registry
+
+All entity field definitions (partners, staff, asins) are centralized in `src/lib/entity-fields/`. This is the single source of truth for field names, types, groups, and reference relationships. Never define field lists inline.
+
+```typescript
+import { getFieldsForEntity, getGroupedFieldDefs, getSchemaDescription } from '@/lib/entity-fields'
+import type { FieldDefinition, EntityFieldRegistry } from '@/lib/entity-fields'
+
+// Grouped dropdown options for UI
+const groups = getGroupedFieldDefs('partners')
+
+// AI-friendly schema text
+const schema = getSchemaDescription()
+
+// Dependency graph
+const deps = getReferencedEntities('partners') // → ['staff']
+```
+
+Reference fields encode which entity they point to, the match field, and storage mechanism (direct FK vs junction table). This powers the MapPhase grouped dropdown, AI mapping suggestions, and the analyze-source route.
 
 ---
 

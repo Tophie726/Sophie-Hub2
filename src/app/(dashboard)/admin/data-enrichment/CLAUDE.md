@@ -1041,6 +1041,8 @@ Staff (separate entity, team members)
 - **Staff** → submenu with key options
 - Weekly, Computed, Skip - flat options
 
+**Field Registry:** All entity fields (names, types, groups, reference relationships) are defined in `src/lib/entity-fields/registry.ts`. The MapPhase uses `getGroupedFieldDefs()` for grouped dropdowns with reference arrows (e.g. "POD Leader -> Staff"). Never define field lists inline - always import from the registry.
+
 | Category | Icon | Color | Behavior | Key Support |
 |----------|------|-------|----------|-------------|
 | Partner | 🏢 Building2 | Blue | Maps to `partners` table fields | ✓ Key designation |
@@ -1335,6 +1337,11 @@ src/components/data-enrichment/
     ├── SourceList.tsx
     ├── SourceCard.tsx
     └── SyncScheduler.tsx
+
+src/lib/entity-fields/           # Field registry (single source of truth)
+├── index.ts                     # Barrel exports
+├── types.ts                     # FieldDefinition, ReferenceConfig, FieldGroup
+└── registry.ts                  # 47 field definitions + 10 helper functions
 ```
 
 ### New Components to Build

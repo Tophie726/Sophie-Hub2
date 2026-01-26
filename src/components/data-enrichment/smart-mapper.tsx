@@ -9,7 +9,9 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
@@ -61,6 +63,7 @@ import { MobileColumnCard } from './mobile-column-card'
 import { AISuggestionButton, type AISuggestion } from './ai-suggestion-button'
 import { AISuggestAllDialog, type BulkSuggestion } from './ai-suggest-all-dialog'
 import { AITabAnalysis, type TabSummary } from './ai-tab-analysis'
+import { getGroupedFieldDefs } from '@/lib/entity-fields'
 
 // ============ ANIMATED LOCK ICON ============
 // Custom animated lock that shows shackle closing
@@ -183,43 +186,7 @@ interface SmartMapperProps {
   confirmedHeaderRow?: number
 }
 
-// Field definitions per entity type
-interface FieldDef {
-  value: string
-  label: string
-  description?: string
-}
-
-const PARTNER_FIELDS: FieldDef[] = [
-  { value: 'brand_name', label: 'Brand Name', description: 'The brand/company name' },
-  { value: 'client_name', label: 'Client Name', description: 'Contact person name' },
-  { value: 'status', label: 'Status', description: 'Active, Churned, etc.' },
-  { value: 'tier', label: 'Tier', description: 'Service tier level' },
-  { value: 'base_fee', label: 'Base Fee', description: 'Monthly fee amount' },
-  { value: 'start_date', label: 'Start Date', description: 'When they joined' },
-  { value: 'contract_type', label: 'Contract Type', description: 'Type of agreement' },
-  { value: 'billing_cycle', label: 'Billing Cycle', description: 'Monthly, quarterly, etc.' },
-  { value: 'notes', label: 'Notes', description: 'General notes' },
-]
-
-const STAFF_FIELDS: FieldDef[] = [
-  { value: 'full_name', label: 'Full Name', description: 'Staff member name' },
-  { value: 'email', label: 'Email', description: 'Work email address' },
-  { value: 'role', label: 'Role', description: 'Job title/role' },
-  { value: 'department', label: 'Department', description: 'Team or department' },
-  { value: 'status', label: 'Status', description: 'Active, On Leave, etc.' },
-  { value: 'hire_date', label: 'Hire Date', description: 'Start date' },
-  { value: 'capacity', label: 'Capacity', description: 'Workload capacity %' },
-  { value: 'slack_id', label: 'Slack ID', description: 'Slack username' },
-]
-
-const ASIN_FIELDS: FieldDef[] = [
-  { value: 'asin_code', label: 'ASIN Code', description: 'Amazon Standard ID' },
-  { value: 'product_name', label: 'Product Name', description: 'Product title' },
-  { value: 'parent_asin', label: 'Parent ASIN', description: 'Parent product ASIN' },
-  { value: 'status', label: 'Status', description: 'Active, Suppressed, etc.' },
-  { value: 'category', label: 'Category', description: 'Product category' },
-]
+// Field definitions are now in @/lib/entity-fields (single source of truth)
 
 // Animation
 const easeOut: [number, number, number, number] = [0.22, 1, 0.36, 1]
@@ -1442,46 +1409,53 @@ function ClassifyPhase({
           {/* Stats badges - static, no animation noise */}
           <div className="flex flex-wrap gap-2 mt-4">
             {stats.partner > 0 && (
-              <Badge variant="outline" className="bg-blue-500/10 text-blue-600 border-blue-500/30">
-                <Building2 className="h-3 w-3 mr-1" />
-                <span className="tabular-nums">{stats.partner}</span> Partner
-                {partnerKey && <Key className="h-3 w-3 ml-1 text-amber-500" />}
+              <Badge variant="outline" className="gap-1 bg-blue-500/10 text-blue-600 border-blue-500/30">
+                <Building2 className="h-3 w-3" />
+                <span className="tabular-nums">{stats.partner}</span>
+                <span>Partner</span>
+                {partnerKey && <Key className="h-3 w-3 text-amber-500" />}
               </Badge>
             )}
             {stats.staff > 0 && (
-              <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/30">
-                <Users className="h-3 w-3 mr-1" />
-                <span className="tabular-nums">{stats.staff}</span> Staff
-                {staffKey && <Key className="h-3 w-3 ml-1 text-amber-500" />}
+              <Badge variant="outline" className="gap-1 bg-green-500/10 text-green-600 border-green-500/30">
+                <Users className="h-3 w-3" />
+                <span className="tabular-nums">{stats.staff}</span>
+                <span>Staff</span>
+                {staffKey && <Key className="h-3 w-3 text-amber-500" />}
               </Badge>
             )}
             {stats.asin > 0 && (
-              <Badge variant="outline" className="bg-orange-500/10 text-orange-600 border-orange-500/30">
-                <Package className="h-3 w-3 mr-1" />
-                <span className="tabular-nums">{stats.asin}</span> ASIN
+              <Badge variant="outline" className="gap-1 bg-orange-500/10 text-orange-600 border-orange-500/30">
+                <Package className="h-3 w-3" />
+                <span className="tabular-nums">{stats.asin}</span>
+                <span>ASIN</span>
               </Badge>
             )}
             {stats.weekly > 0 && (
-              <Badge variant="outline" className="bg-purple-500/10 text-purple-600 border-purple-500/30">
-                <Calendar className="h-3 w-3 mr-1" />
-                <span className="tabular-nums">{stats.weekly}</span> Weekly
+              <Badge variant="outline" className="gap-1 bg-purple-500/10 text-purple-600 border-purple-500/30">
+                <Calendar className="h-3 w-3" />
+                <span className="tabular-nums">{stats.weekly}</span>
+                <span>Weekly</span>
               </Badge>
             )}
             {stats.computed > 0 && (
-              <Badge variant="outline" className="bg-cyan-500/10 text-cyan-600 border-cyan-500/30">
-                <Calculator className="h-3 w-3 mr-1" />
-                <span className="tabular-nums">{stats.computed}</span> Computed
+              <Badge variant="outline" className="gap-1 bg-cyan-500/10 text-cyan-600 border-cyan-500/30">
+                <Calculator className="h-3 w-3" />
+                <span className="tabular-nums">{stats.computed}</span>
+                <span>Computed</span>
               </Badge>
             )}
             {stats.skip > 0 && (
-              <Badge variant="outline" className="bg-gray-500/10 text-gray-600 border-gray-500/30">
-                <SkipForward className="h-3 w-3 mr-1" />
-                <span className="tabular-nums">{stats.skip}</span> Skip
+              <Badge variant="outline" className="gap-1 bg-gray-500/10 text-gray-600 border-gray-500/30">
+                <SkipForward className="h-3 w-3" />
+                <span className="tabular-nums">{stats.skip}</span>
+                <span>Skip</span>
               </Badge>
             )}
             {stats.unclassified > 0 && (
-              <Badge variant="outline" className="text-muted-foreground">
-                <span className="tabular-nums">{stats.unclassified}</span> unclassified
+              <Badge variant="outline" className="gap-1 text-muted-foreground">
+                <span className="tabular-nums">{stats.unclassified}</span>
+                <span>unclassified</span>
               </Badge>
             )}
           </div>
@@ -2734,72 +2708,82 @@ function MapPhase({
 
   const getSample = (colIndex: number) => sampleRows[0]?.[colIndex] || ''
 
-  const renderColumnMapper = (col: ColumnClassification, fields: FieldDef[], colorClass: string) => (
-    <motion.div
-      key={col.sourceIndex}
-      layout
-      className={`p-3 rounded-lg border ${colorClass}`}
-    >
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <span className="font-medium text-sm">{col.sourceColumn}</span>
-          {col.isKey && (
-            <Badge className="bg-amber-500 text-white text-[10px] px-1.5 py-0">
-              <Key className="h-3 w-3 mr-0.5" />
-              Key
-            </Badge>
-          )}
-        </div>
-      </div>
-      <p className="text-xs text-muted-foreground mb-2 truncate">{getSample(col.sourceIndex) || '(empty)'}</p>
-
-      <Select
-        value={col.targetField || '__none__'}
-        onValueChange={(value) => onFieldChange(col.sourceIndex, value === '__none__' ? null : value)}
+  const renderColumnMapper = (col: ColumnClassification, entityType: EntityType, colorClass: string) => {
+    const groupedFields = getGroupedFieldDefs(entityType)
+    return (
+      <motion.div
+        key={col.sourceIndex}
+        layout
+        className={`p-3 rounded-lg border ${colorClass}`}
       >
-        <SelectTrigger className="h-8 text-xs">
-          <SelectValue placeholder="Map to field..." />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="__none__">
-            <span className="text-muted-foreground">Don&apos;t map</span>
-          </SelectItem>
-          {fields.map(field => (
-            <SelectItem key={field.value} value={field.value}>
-              {field.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-
-      {col.targetField && (
-        <div className="flex items-center gap-1 mt-2">
-          <button
-            onClick={() => onAuthorityChange(col.sourceIndex, 'source_of_truth')}
-            className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-all ${
-              col.authority === 'source_of_truth'
-                ? 'bg-amber-500/10 text-amber-600 ring-1 ring-amber-500/30'
-                : 'bg-muted/50 text-muted-foreground hover:bg-muted'
-            }`}
-          >
-            <Star className={`h-3 w-3 ${col.authority === 'source_of_truth' ? 'fill-amber-500' : ''}`} />
-            Source
-          </button>
-          <button
-            onClick={() => onAuthorityChange(col.sourceIndex, 'reference')}
-            className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-all ${
-              col.authority === 'reference'
-                ? 'bg-slate-500/10 text-slate-600 ring-1 ring-slate-500/30'
-                : 'bg-muted/50 text-muted-foreground hover:bg-muted'
-            }`}
-          >
-            <FileText className="h-3 w-3" />
-            Reference
-          </button>
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <span className="font-medium text-sm">{col.sourceColumn}</span>
+            {col.isKey && (
+              <Badge className="bg-amber-500 text-white text-[10px] px-1.5 py-0">
+                <Key className="h-3 w-3 mr-0.5" />
+                Key
+              </Badge>
+            )}
+          </div>
         </div>
-      )}
-    </motion.div>
-  )
+        <p className="text-xs text-muted-foreground mb-2 truncate">{getSample(col.sourceIndex) || '(empty)'}</p>
+
+        <Select
+          value={col.targetField || '__none__'}
+          onValueChange={(value) => onFieldChange(col.sourceIndex, value === '__none__' ? null : value)}
+        >
+          <SelectTrigger className="h-8 text-xs">
+            <SelectValue placeholder="Map to field..." />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__none__">
+              <span className="text-muted-foreground">Don&apos;t map</span>
+            </SelectItem>
+            {groupedFields.map((group) => (
+              <SelectGroup key={group.group}>
+                <SelectLabel className="text-[10px] uppercase tracking-wider text-muted-foreground/70">
+                  {group.group}
+                </SelectLabel>
+                {group.fields.map((field) => (
+                  <SelectItem key={field.value} value={field.value}>
+                    {field.label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {col.targetField && (
+          <div className="flex items-center gap-1 mt-2">
+            <button
+              onClick={() => onAuthorityChange(col.sourceIndex, 'source_of_truth')}
+              className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-all ${
+                col.authority === 'source_of_truth'
+                  ? 'bg-amber-500/10 text-amber-600 ring-1 ring-amber-500/30'
+                  : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+              }`}
+            >
+              <Star className={`h-3 w-3 ${col.authority === 'source_of_truth' ? 'fill-amber-500' : ''}`} />
+              Source
+            </button>
+            <button
+              onClick={() => onAuthorityChange(col.sourceIndex, 'reference')}
+              className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-all ${
+                col.authority === 'reference'
+                  ? 'bg-slate-500/10 text-slate-600 ring-1 ring-slate-500/30'
+                  : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+              }`}
+            >
+              <FileText className="h-3 w-3" />
+              Reference
+            </button>
+          </div>
+        )}
+      </motion.div>
+    )
+  }
 
   return (
     <motion.div {...fadeInUp} className="space-y-6">
@@ -2824,7 +2808,7 @@ function MapPhase({
                 </h4>
                 <ScrollArea className="h-[300px]">
                   <div className="space-y-2 pr-2">
-                    {partnerColumns.map(col => renderColumnMapper(col, PARTNER_FIELDS, 'bg-blue-500/5 border-blue-500/20'))}
+                    {partnerColumns.map(col => renderColumnMapper(col, 'partners', 'bg-blue-500/5 border-blue-500/20'))}
                   </div>
                 </ScrollArea>
               </div>
@@ -2839,7 +2823,7 @@ function MapPhase({
                 </h4>
                 <ScrollArea className="h-[300px]">
                   <div className="space-y-2 pr-2">
-                    {staffColumns.map(col => renderColumnMapper(col, STAFF_FIELDS, 'bg-green-500/5 border-green-500/20'))}
+                    {staffColumns.map(col => renderColumnMapper(col, 'staff', 'bg-green-500/5 border-green-500/20'))}
                   </div>
                 </ScrollArea>
               </div>
@@ -2854,7 +2838,7 @@ function MapPhase({
                 </h4>
                 <ScrollArea className="h-[300px]">
                   <div className="space-y-2 pr-2">
-                    {asinColumns.map(col => renderColumnMapper(col, ASIN_FIELDS, 'bg-orange-500/5 border-orange-500/20'))}
+                    {asinColumns.map(col => renderColumnMapper(col, 'asins', 'bg-orange-500/5 border-orange-500/20'))}
                   </div>
                 </ScrollArea>
               </div>

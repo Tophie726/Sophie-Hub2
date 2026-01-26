@@ -5,6 +5,7 @@ import { hasSystemSetting, getAnthropicApiKey } from '@/lib/settings'
 import { checkRateLimit, rateLimitHeaders } from '@/lib/rate-limit'
 import { z } from 'zod'
 import Anthropic from '@anthropic-ai/sdk'
+import { getSchemaDescription } from '@/lib/entity-fields'
 
 // =============================================================================
 // Validation Schema
@@ -145,18 +146,7 @@ export async function POST(request: NextRequest) {
 
 ## Core Entities & Key Fields
 
-### partners (Client brands we manage)
-**PRIMARY KEY: brand_name**
-Fields: brand_name, client_email, status, tier, pod_leader_id, account_manager_id, etc.
-Note: Staff assignments (POD Leader, Account Manager) are stored ON the partner record as FKs.
-
-### staff (Team members)
-**PRIMARY KEY: full_name**
-Fields: full_name, email, role, department, hire_date, etc.
-
-### asins (Amazon products per partner)
-**PRIMARY KEY: asin_code**
-Fields: asin_code, title, sku, brand_name (FK to partner), etc.
+${getSchemaDescription()}
 
 ## Your Task
 Analyze the source structure and determine:

@@ -5,9 +5,11 @@ import { useSearchParams, useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { PageHeader } from '@/components/layout/page-header'
 import { CategoryHub, SourceBrowser } from '@/components/data-enrichment/browser'
+import { DataFlowMap } from '@/components/data-enrichment/lineage'
 import { Button } from '@/components/ui/button'
+import { Network } from 'lucide-react'
 
-type DataBrowserView = 'hub' | 'sheets-overview' | 'sheets-browser' | 'forms' | 'docs'
+type DataBrowserView = 'hub' | 'sheets-overview' | 'sheets-browser' | 'forms' | 'docs' | 'flow-map'
 
 const easeOut: [number, number, number, number] = [0.22, 1, 0.36, 1]
 
@@ -67,7 +69,17 @@ export default function DataEnrichmentPage() {
         <PageHeader
           title="Data Enrichment"
           description="Connect and map your data sources to Sophie Hub"
-        />
+        >
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setBrowserView('flow-map')}
+            className="gap-2 text-muted-foreground hover:text-foreground"
+          >
+            <Network className="h-4 w-4" />
+            <span className="hidden sm:inline">Data Flow</span>
+          </Button>
+        </PageHeader>
       )}
 
       <div className={browserView === 'hub' ? 'p-4 md:p-8' : ''}>
@@ -86,6 +98,14 @@ export default function DataEnrichmentPage() {
               initialTabId={selectedTabId}
               onSourceChange={setSelectedSourceId}
               onTabChange={setSelectedTabId}
+            />
+          )}
+
+          {/* Flow Map View */}
+          {browserView === 'flow-map' && (
+            <DataFlowMap
+              key="flow-map"
+              onBack={() => setBrowserView('hub')}
             />
           )}
 

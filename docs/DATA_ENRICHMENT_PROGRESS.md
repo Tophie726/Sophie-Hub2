@@ -1,7 +1,7 @@
 # Data Enrichment Progress Tracker
 
 > Tracking the implementation of Sophie Hub's data enrichment system.
-> Last updated: 2026-01-25 (Settings Pages + API Key Management)
+> Last updated: 2026-01-26 (Data Flow Map - Phase 1)
 
 ---
 
@@ -61,8 +61,9 @@
 | Sync button in TabOverviewDashboard | Done | HIGH | "Sync Now" button with tooltip status |
 | Sync history panel | Done | MEDIUM | Collapsible panel with expandable error details |
 | Authority toggle UI | Done | MEDIUM | Already implemented in SmartMapper MapPhase |
-| Visual data map component | Pending | LOW | Canvas/SVG visualization |
-| Lineage visualization | Pending | LOW | "Where did this value come from?" |
+| Visual data map component | Done | MEDIUM | Phase 5.1: React Flow canvas + mobile card list |
+| Lineage visualization | Pending | MEDIUM | "Where did this value come from?" |
+| Entity field registry | Done | HIGH | `src/lib/entity-fields/` - single source of truth |
 
 ---
 
@@ -98,6 +99,54 @@
   - `/api/sync/tab/[id]` - sync operations
   - `/api/sheets/*` - all Google Sheets API calls
 - **Response headers:** `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`
+
+---
+
+## Phase 5: Visual Data Flow Map
+
+### Phase 5.1: Foundation (Complete)
+
+| Task | Status | Date | Notes |
+|------|--------|------|-------|
+| Install @xyflow/react | Done | 2026-01-26 | React Flow v12, MIT, ~180KB |
+| GET /api/flow-map endpoint | Done | 2026-01-26 | 3-query optimization pattern |
+| DataFlowMap orchestrator | Done | 2026-01-26 | Mobile/desktop switch at 768px |
+| FlowCanvas (desktop) | Done | 2026-01-26 | React Flow with pan, zoom, minimap |
+| MobileFlowList (mobile) | Done | 2026-01-26 | Hierarchical card layout |
+| EntityNode custom node | Done | 2026-01-26 | Progress ring, expandable groups |
+| SourceNode custom node | Done | 2026-01-26 | Sheet icon, tab count badge |
+| FieldGroupNode custom node | Done | 2026-01-26 | Mini progress bar per group |
+| MappingEdge (solid) | Done | 2026-01-26 | Source-to-entity, scaled stroke |
+| ReferenceEdge (dashed) | Done | 2026-01-26 | Entity-to-entity reference |
+| FlowLegend panel | Done | 2026-01-26 | Color coding + edge type legend |
+| Category Hub integration | Done | 2026-01-26 | Top-right "Data Flow" button in page header |
+| useFlowData hook | Done | 2026-01-26 | Fetch + transform API data |
+| useFlowLayout hook | Done | 2026-01-26 | Layout + entity expansion state |
+| usePinnedFields hook | Done | 2026-01-26 | localStorage persistence |
+| useFlowFilters hook | Done | 2026-01-26 | Entity + status filter state |
+| Fix source_column API bug | Done | 2026-01-26 | Added source_column to SELECT, fixed field reference |
+| Fix edge crossing layout | Done | 2026-01-26 | Sort sources by primary entity, separate handle routing |
+| Move entry point to header | Done | 2026-01-26 | Replaced card with top-right "Data Flow" button |
+
+### Phase 5.2: Interaction (Planned)
+
+| Task | Status | Priority | Notes |
+|------|--------|----------|-------|
+| Level 2 - Group expanded fields | Pending | HIGH | Individual fields within groups |
+| Level 3 - Field detail panel | Pending | HIGH | Slide-in from right |
+| GET /api/flow-map/field/[name] | Pending | HIGH | Cross-references + lineage |
+| Pin/lock feature | Pending | MEDIUM | Pin icon overlay + glow ring |
+| Filter controls UI | Pending | MEDIUM | Entity + status filter bar |
+| "View in Flow Map" button | Pending | LOW | On Tab Overview Dashboard |
+
+### Phase 5.3: Intelligence (Future)
+
+| Task | Status | Priority | Notes |
+|------|--------|----------|-------|
+| AI insight badges | Pending | LOW | AI analysis on nodes |
+| Lineage timeline | Pending | LOW | From field_lineage table |
+| Live refresh | Pending | LOW | SWR revalidation |
+| Export as image | Pending | LOW | Download flow map |
 
 ---
 
@@ -236,6 +285,11 @@ In-app AI co-pilot for column mapping at multiple granularity levels.
 - `src/app/api/sync/runs/route.ts` - GET list of sync runs
 - `src/app/api/sync/runs/[id]/route.ts` - GET sync run details
 
+### Entity Field Registry (Single Source of Truth for Field Definitions)
+- `src/lib/entity-fields/index.ts` - Barrel exports
+- `src/lib/entity-fields/types.ts` - FieldDefinition, ReferenceConfig, FieldGroup types
+- `src/lib/entity-fields/registry.ts` - 20 partner + 17 staff + 10 ASIN fields with reference relationships, helper functions
+
 ### Types (Single Source of Truth)
 - `src/types/entities.ts` - CategoryStats, ColumnCategory, EntityType
 - `src/types/enrichment.ts` - Enrichment-specific types
@@ -261,6 +315,25 @@ In-app AI co-pilot for column mapping at multiple granularity levels.
 - `src/components/data-enrichment/ai-suggestion-button.tsx` - Sparkle button + popover
 - `src/components/data-enrichment/ai-suggest-all-dialog.tsx` - Bulk review dialog
 - `src/components/ui/popover.tsx` - Popover component (shadcn/ui)
+
+### Data Flow Map (Visual Lineage)
+- `src/components/data-enrichment/lineage/DataFlowMap.tsx` - Main orchestrator (mobile/desktop switch)
+- `src/components/data-enrichment/lineage/FlowCanvas.tsx` - React Flow canvas (desktop)
+- `src/components/data-enrichment/lineage/MobileFlowList.tsx` - Card layout (mobile)
+- `src/components/data-enrichment/lineage/nodes/EntityNode.tsx` - Entity node (Partners/Staff/ASINs)
+- `src/components/data-enrichment/lineage/nodes/SourceNode.tsx` - Data source node
+- `src/components/data-enrichment/lineage/nodes/FieldGroupNode.tsx` - Field group node
+- `src/components/data-enrichment/lineage/edges/MappingEdge.tsx` - Source-to-entity edge (solid)
+- `src/components/data-enrichment/lineage/edges/ReferenceEdge.tsx` - Entity-to-entity edge (dashed)
+- `src/components/data-enrichment/lineage/panels/FlowLegend.tsx` - Color coding legend
+- `src/components/data-enrichment/lineage/hooks/useFlowData.ts` - Fetch + transform
+- `src/components/data-enrichment/lineage/hooks/useFlowLayout.ts` - Layout computation
+- `src/components/data-enrichment/lineage/hooks/usePinnedFields.ts` - Pin state (localStorage)
+- `src/components/data-enrichment/lineage/hooks/useFlowFilters.ts` - Filter state
+- `src/components/data-enrichment/lineage/utils/transform.ts` - API -> React Flow nodes/edges
+- `src/components/data-enrichment/lineage/utils/layout.ts` - Node positioning
+- `src/components/data-enrichment/lineage/utils/colors.ts` - Entity color map
+- `src/app/api/flow-map/route.ts` - GET /api/flow-map aggregated endpoint
 
 ### Settings & API Key Management
 - `src/app/(dashboard)/settings/page.tsx` - User settings (profile, theme)
@@ -301,6 +374,13 @@ In-app AI co-pilot for column mapping at multiple granularity levels.
 | 2026-01-25 | Settings pages + API key management | Admin can configure Claude API key in UI |
 | 2026-01-25 | Tab scroll indicators | Chevron buttons show when tabs overflow |
 | 2026-01-25 | Google profile images in sidebar | Session-based avatars with settings link |
+| 2026-01-26 | Entity field registry | Single source of truth replaces 3 disconnected field defs |
+| 2026-01-26 | @xyflow/react for flow map | Custom React nodes + built-in pan/zoom/minimap vs custom SVG |
+| 2026-01-26 | Mobile card list for flow map | Canvas unusable on phone, structured cards instead |
+| 2026-01-26 | 3-query flow-map API | Same optimization pattern as /api/data-sources |
+| 2026-01-26 | Flow map as header button | Separate from integration cards (Sheets/Forms/Docs) per UX feedback |
+| 2026-01-26 | Named handles for edges | Mapping edges use left handles, reference edges use right handles to avoid crossing |
+| 2026-01-26 | Sort sources by primary entity | Minimizes edge crossings by aligning sources near their target entity |
 
 ---
 
@@ -315,9 +395,10 @@ In-app AI co-pilot for column mapping at multiple granularity levels.
 7. [x] AI "Suggest All" button + bulk review (Phase 6.3) - DONE
 8. [x] Auth error handling with retry button - DONE (2026-01-25)
 9. [ ] **Test full pipeline with real data** - Connect sheet, map columns, sync
-10. [ ] Nested sheet extraction UX design (Phase 5)
-11. [ ] Phase 4: Additional connectors (Close.io, Typeform, etc.)
-12. [ ] Phase 2: Visual data map component
+10. [x] Phase 5.1: Visual data flow map (foundation) - DONE (2026-01-26)
+11. [ ] Phase 5.2: Data flow map interaction (field detail, pin/lock, filters)
+12. [ ] Nested sheet extraction UX design
+13. [ ] Phase 4: Additional connectors (Close.io, Typeform, etc.)
 
 ---
 
