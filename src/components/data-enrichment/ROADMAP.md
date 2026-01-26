@@ -675,16 +675,19 @@ const duration = {
 - [ ] Components abstracted (Phase 1.4 - future work)
 
 ### Phase 2 Progress: Sync Engine
-- [x] SyncEngine class (`src/lib/sync/engine.ts`)
-- [x] Transform pipeline (`src/lib/sync/transforms.ts`)
-- [x] Sync types (`src/lib/sync/types.ts`)
+- [x] SyncEngine class (`src/lib/sync/engine.ts`) — 596 lines, fully functional
+- [x] Transform pipeline (`src/lib/sync/transforms.ts`) — date, currency, boolean, number
+- [x] Sync types (`src/lib/sync/types.ts`) — SyncOptions, SyncResult, EntityChange
 - [x] Field lineage migration (`20260124_field_lineage.sql`)
-- [x] POST /api/sync/tab/[id] endpoint
-- [x] GET /api/sync/runs endpoint
-- [x] GET /api/sync/runs/[id] endpoint
-- [x] Sync button in TabOverviewDashboard
-- [x] Sync history panel component
+- [x] POST /api/sync/tab/[id] endpoint — supports `dry_run: true`
+- [x] GET /api/sync/runs endpoint — list with filtering
+- [x] GET /api/sync/runs/[id] endpoint — run details with changes
+- [x] Sync button in TabOverviewDashboard — with loading states
+- [x] Sync history panel component — collapsible with expandable error details
 - [x] Visual data map (React Flow canvas + entity-centric field detail)
+- [ ] **Dry run preview UI** — API supports dry_run but no UI to show preview before commit
+- [ ] End-to-end sync verification — full pipeline test with real data
+- [ ] Error recovery UX — better handling for partial sync failures
 
 ### Phase 3 Progress
 - [x] Audit logging implemented (`src/lib/audit/index.ts`)
@@ -835,5 +838,5 @@ const duration = {
 
 ---
 
-*Last updated: 2026-01-26 (Fix: preview always fetches for tab discovery + critical invariants checklist)*
+*Last updated: 2026-01-26 (Sync engine audit: backend complete, next = dry run preview UI + Playwright E2E)*
 *Architecture audit by Claude Opus 4.5*

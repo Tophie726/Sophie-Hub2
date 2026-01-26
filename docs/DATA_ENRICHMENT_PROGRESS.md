@@ -1,7 +1,7 @@
 # Data Enrichment Progress Tracker
 
 > Tracking the implementation of Sophie Hub's data enrichment system.
-> Last updated: 2026-01-26 (SmartMapper perf: parallel Google API, client cache, deferred fetches)
+> Last updated: 2026-01-26 (Sync engine audit: backend complete, next = dry run preview UI + Playwright E2E)
 
 ---
 
@@ -62,8 +62,11 @@
 | Sync history panel | Done | MEDIUM | Collapsible panel with expandable error details |
 | Authority toggle UI | Done | MEDIUM | Already implemented in SmartMapper MapPhase |
 | Visual data map component | Done | MEDIUM | Phase 5.1: React Flow canvas + mobile card list |
-| Lineage visualization | Pending | MEDIUM | "Where did this value come from?" |
 | Entity field registry | Done | HIGH | `src/lib/entity-fields/` - single source of truth |
+| **Dry run preview UI** | **Pending** | **HIGH** | API supports `dry_run: true` — need UI to show create/update/skip preview before committing |
+| End-to-end sync verification | Pending | HIGH | Full pipeline test: map columns → sync → verify entity tables |
+| Error recovery UX | Pending | MEDIUM | Better error handling for partial sync failures |
+| Lineage visualization | Pending | MEDIUM | "Where did this value come from?" |
 
 ---
 
@@ -408,6 +411,8 @@ In-app AI co-pilot for column mapping at multiple granularity levels.
 | 2026-01-26 | Parallel Google Sheets API in getSheetRawRows | Two sequential Google API calls → Promise.all. Halves network latency |
 | 2026-01-26 | Client-side raw data cache in SmartMapper | Module-level Map with 5min TTL. Avoids Google API entirely on tab revisit |
 | 2026-01-26 | Defer field tags to Classify phase | Tags only needed for classification UI, not for Preview phase |
+| 2026-01-26 | Sync engine backend complete | 596-line SyncEngine class, API endpoints, UI button + history panel all functional. Missing: dry run preview UI |
+| 2026-01-26 | Playwright over Vitest for regression tests | Integration bugs (missing tabs, lost mappings) aren't catchable by unit tests. Playwright E2E covers real browser flows |
 
 ---
 
@@ -421,12 +426,13 @@ In-app AI co-pilot for column mapping at multiple granularity levels.
 6. [x] AI sparkle button + suggestion popover (Phase 6.2) - DONE
 7. [x] AI "Suggest All" button + bulk review (Phase 6.3) - DONE
 8. [x] Auth error handling with retry button - DONE (2026-01-25)
-9. [ ] **Test full pipeline with real data** - Connect sheet, map columns, sync
-10. [x] Phase 5.1: Visual data flow map (foundation) - DONE (2026-01-26)
-11. [~] Phase 5.2: Data flow map interaction - entity field detail DONE, pin/lock/filters remaining
-12. [x] Mapping persistence fix - 3-step restore cascade - DONE (2026-01-26)
-13. [ ] Nested sheet extraction UX design
-13. [ ] Phase 4: Additional connectors (Close.io, Typeform, etc.)
+9. [x] Phase 5.1: Visual data flow map (foundation) - DONE (2026-01-26)
+10. [~] Phase 5.2: Data flow map interaction - entity field detail DONE, pin/lock/filters remaining
+11. [x] Mapping persistence fix - 3-step restore cascade - DONE (2026-01-26)
+12. [ ] **Sync Engine UX: Dry Run Preview** - Show what will be created/updated/skipped before committing
+13. [ ] **Playwright E2E tests** - Critical path regression tests (tab discovery, mapping persistence, sync)
+14. [ ] Nested sheet extraction UX design
+15. [ ] Phase 4: Additional connectors (Close.io, Typeform, etc.)
 
 ---
 
