@@ -151,6 +151,7 @@
 | Cache-Control on sheets/raw-rows, ai/save-summary, field-tags | Done | MEDIUM | Browser caching on all read-heavy SmartMapper endpoints |
 | Deferred field tags fetch | Done | LOW | Only fetch when entering Classify phase, not on SmartMapper mount |
 | Dry run preview dialog | Done | HIGH | `SyncPreviewDialog`: click Sync → dry run all tabs → review creates/updates/skips → confirm → apply |
+| Saved mapping restore merge fix | Done | HIGH | Step 3 now merges saved mappings with full sheet headers — unmapped columns preserved |
 | Level 3 - Field detail panel | Pending | HIGH | Slide-in from right |
 | GET /api/flow-map/field/[name] | Pending | HIGH | Cross-references + lineage |
 | Pin/lock feature | Pending | MEDIUM | Pin icon overlay + glow ring |
