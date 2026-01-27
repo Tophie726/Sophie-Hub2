@@ -257,11 +257,15 @@ The heart of this rebuild. A visual interface that:
 
 ## Current Phase
 
-**Phase 1: Foundation** (In Progress)
-- Project structure setup
-- Database schema design
-- CLAUDE.md documentation
-- Basic app shell
+**Phase 2: Data Mapping & Flow** (In Progress)
+- Phase 1 (Foundation) complete: app shell, auth, database schema, RBAC
+- Data Enrichment browser with source/tab navigation
+- SmartMapper: classify columns → map fields → save to DB
+- Draft persistence (DB + localStorage with timestamp comparison, flush-on-unmount)
+- Saved mapping restoration from `column_mappings` table
+- Entity-centric Data Flow Map with field-level detail
+- Sync preview (dry-run) dialog
+- Next: actual data sync execution, computed field runner
 
 ## Important Context
 
@@ -628,6 +632,19 @@ All buttons have tactile press feedback built-in:
 // Already in src/components/ui/button.tsx
 active:scale-[0.97]
 ```
+
+### Shimmer Loading
+
+Skeleton loaders use a diagonal-sweep shimmer wave (`ease-in-out`, `background-position` only). Constants in `@/lib/animations`, components in `@/components/ui/shimmer-grid`:
+
+```tsx
+import { ShimmerGrid, ShimmerBar } from '@/components/ui/shimmer-grid'
+
+<ShimmerGrid variant="table" rows={8} columns={5} showRowNumbers />
+<ShimmerBar width={120} height={16} />
+```
+
+See `src/UX-STANDARDS.md` §2 for full shimmer documentation.
 
 ---
 

@@ -236,8 +236,7 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
   const [columns, setColumns] = useState<ColumnClassification[]>([])
   const [columnsHistory, setColumnsHistory] = useState<ColumnClassification[][]>([])
   const [draftRestored, setDraftRestored] = useState(false)
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [isSavingDraft, setIsSavingDraft] = useState(false) // TODO: Show saving indicator in UI
+  const [isSavingDraft, setIsSavingDraft] = useState(false)
   const [availableTags, setAvailableTags] = useState<FieldTag[]>([])
   // AI Tab Summary - provides context for per-column suggestions
   const [tabSummary, setTabSummary] = useState<TabSummary | null>(null)
@@ -868,6 +867,7 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
           tabSummary={tabSummary}
           onTabSummaryChange={setTabSummary}
           dataSourceId={dataSourceId}
+          isSavingDraft={isSavingDraft}
         />
       )}
       {phase === 'map' && (
@@ -1221,6 +1221,7 @@ function ClassifyPhase({
   tabSummary,
   onTabSummaryChange,
   dataSourceId,
+  isSavingDraft = false,
 }: {
   sheetName: string
   tabName: string
@@ -1239,6 +1240,7 @@ function ClassifyPhase({
   tabSummary: TabSummary | null
   onTabSummaryChange: (summary: TabSummary) => void
   dataSourceId?: string
+  isSavingDraft?: boolean
 }) {
   // State for computed field config modal
   const [configureComputedIndex, setConfigureComputedIndex] = useState<number | null>(null)
@@ -1535,7 +1537,12 @@ function ClassifyPhase({
               </Button>
               <div className="text-right">
                 <div className="text-2xl font-bold tabular-nums">{totalClassified}/{totalColumns}</div>
-                <div className="text-xs text-muted-foreground">classified</div>
+                <div className="text-xs text-muted-foreground flex items-center justify-end gap-1.5">
+                  classified
+                  <span className={`inline-flex items-center gap-1 transition-opacity duration-200 ${isSavingDraft ? 'opacity-100' : 'opacity-0'}`}>
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  </span>
+                </div>
               </div>
             </div>
           </div>
