@@ -1,13 +1,13 @@
 # Data Enrichment Progress Tracker
 
 > Tracking the implementation of Sophie Hub's data enrichment system.
-> Last updated: 2026-01-26 (Dry run preview UI: SyncPreviewDialog shows changes before committing sync)
+> Last updated: 2026-01-27 (Sync engine hardening, weekly pivot, AI badges, empty column detection, Product Centre)
 
 ---
 
-## Current Phase: Production Ready for Google Sheets
+## Current Phase: Sync Hardening & Entity Pages
 
-### Status: Core pipeline complete, ready for real data testing
+### Status: Sync engine production-ready, needs end-to-end verification with real data
 
 ---
 
@@ -64,6 +64,11 @@
 | Visual data map component | Done | MEDIUM | Phase 5.1: React Flow canvas + mobile card list |
 | Entity field registry | Done | HIGH | `src/lib/entity-fields/` - single source of truth |
 | **Dry run preview UI** | **Done** | **HIGH** | `SyncPreviewDialog`: dry run → preview creates/updates/skips → confirm → actual sync |
+| **Entity ID capture after insert** | **Done** | **HIGH** | `.insert(batch).select('id, keyField')` maps real IDs back to EntityChange objects |
+| **`last_synced_at` timestamp update** | **Done** | **HIGH** | Updates `tab_mappings.last_synced_at` after successful sync |
+| **Failed batch tracking** | **Done** | **HIGH** | Failed insert batches mark changes as `skip` with error message instead of silent failure |
+| **Weekly status pivot** | **Done** | **HIGH** | `processWeeklyColumns()` matches column patterns, parses week dates, upserts into `weekly_statuses` |
+| **`parseWeekDate()` helper** | **Done** | **MEDIUM** | Handles M/D, MM/DD/YYYY, ISO date formats; normalizes to Monday of week |
 | End-to-end sync verification | Pending | HIGH | Full pipeline test: map columns → sync → verify entity tables |
 | Error recovery UX | Pending | MEDIUM | Better error handling for partial sync failures |
 | Lineage visualization | Pending | MEDIUM | "Where did this value come from?" |
@@ -168,6 +173,33 @@
 | Lineage timeline | Pending | LOW | From field_lineage table |
 | Live refresh | Pending | LOW | SWR revalidation |
 | Export as image | Pending | LOW | Download flow map |
+
+---
+
+## SmartMapper UX Improvements (2026-01-27)
+
+| Task | Status | Date | Notes |
+|------|--------|------|-------|
+| AI suggestion badge (`aiSuggested`, `aiConfidence`) | Done | 2026-01-27 | Purple "AI" badge with confidence tooltip on AI-classified columns |
+| Clear AI flags on manual override | Done | 2026-01-27 | Changing category manually clears `aiSuggested`/`aiConfidence` |
+| Auto-hide empty columns | Done | 2026-01-27 | `isEmpty` detection → auto-skip + collapsible section |
+| Collapsible empty column section | Done | 2026-01-27 | "Empty columns (N) — auto-skipped" with expand/collapse |
+| Letter keyboard shortcuts | Done | 2026-01-27 | P=Partner, S=Staff, A=ASIN, W=Weekly, C=Computed, X=Skip (was 1-5 numbers) |
+
+---
+
+## Product Centre (2026-01-27)
+
+| Task | Status | Date | Notes |
+|------|--------|------|-------|
+| Product Centre page | Done | 2026-01-27 | `/admin/products` — Cards, Rows, Composition views |
+| Product data model | Done | 2026-01-27 | 8 products with `composedOf` hierarchy |
+| Cards view (default) | Done | 2026-01-27 | 2-column grid with icons, service tags, partner count placeholder |
+| Rows view | Done | 2026-01-27 | Compact list with inline service tags |
+| Composition view (SVG mind map) | Done | 2026-01-27 | Bezier curves, hover highlighting with recursive descendant detection |
+| Mobile tree fallback | Done | 2026-01-27 | Recursive `MobileTreeNode` for composition view on mobile |
+| Sidebar + admin hub integration | Done | 2026-01-27 | Package icon in sidebar nav, card on admin page |
+| Product/Service doc | Done | 2026-01-27 | `docs/features/PRODUCT_SERVICE_CENTRES.md` |
 
 ---
 
@@ -357,6 +389,10 @@ In-app AI co-pilot for column mapping at multiple granularity levels.
 - `src/components/data-enrichment/lineage/utils/colors.ts` - Entity color map
 - `src/app/api/flow-map/route.ts` - GET /api/flow-map aggregated endpoint
 
+### Product Centre
+- `src/app/(dashboard)/admin/products/page.tsx` - Product Centre with Cards/Rows/Composition views
+- `docs/features/PRODUCT_SERVICE_CENTRES.md` - Product/service vision document
+
 ### Settings & API Key Management
 - `src/app/(dashboard)/settings/page.tsx` - User settings (profile, theme)
 - `src/app/(dashboard)/admin/settings/page.tsx` - Admin settings (API keys)
@@ -422,11 +458,18 @@ In-app AI co-pilot for column mapping at multiple granularity levels.
 | 2026-01-26 | Math.max for tab count badge | `s.tabs.length \|\| preview` short-circuits when DB tabs > 0. Changed to `Math.max()` so badge shows the higher of DB vs preview count |
 | 2026-01-26 | Cache bypass on restoreDraft fetches | `/api/mappings/load` has 30s browser cache. After save (which clears drafts), restoreDraft Step 3 fetched stale cached data with no saved mappings → key lost. Fix: `cache: 'no-store'` on both draft and mappings/load fetches in restoreDraft |
 | 2026-01-26 | Fix apiSuccess data access after save | `result.tab_mapping_id` → `result.data?.tab_mapping_id` — save API wraps response in apiSuccess but source-browser read the unwrapped field |
+| 2026-01-27 | .insert().select() for entity ID capture | Bulk insert returns inserted rows with IDs, mapped back to EntityChange objects for lineage |
+| 2026-01-27 | Failed batch → skip with error message | Silent failures replaced with explicit skip + error propagation |
+| 2026-01-27 | Letter keyboard shortcuts over numbers | P/S/A/W/C/X more mnemonic than 1-5 for column classification |
+| 2026-01-27 | SVG exact pixel dimensions for composition | `width="100%"` with preserveAspectRatio caused coordinate mismatch — exact pixels match CSS positions |
+| 2026-01-27 | Recursive descendant highlighting | `getDescendants()` with cache for O(1) lookups on hover — highlights full product hierarchy |
+| 2026-01-27 | Product Centre three-view layout | Cards (default, premium feel), Rows (compact), Composition (SVG hierarchy) — sliding tab switcher |
 
 ---
 
 ## Next Session Priorities
 
+### Completed
 1. [x] Apply database migrations - DONE
 2. [x] Audit logging system - DONE
 3. [x] Rate limiting - DONE
@@ -436,13 +479,23 @@ In-app AI co-pilot for column mapping at multiple granularity levels.
 7. [x] AI "Suggest All" button + bulk review (Phase 6.3) - DONE
 8. [x] Auth error handling with retry button - DONE (2026-01-25)
 9. [x] Phase 5.1: Visual data flow map (foundation) - DONE (2026-01-26)
-10. [~] Phase 5.2: Data flow map interaction - entity field detail DONE, pin/lock/filters remaining
-11. [x] Mapping persistence fix - 3-step restore cascade - DONE (2026-01-26)
-12. [x] **Sync Engine UX: Dry Run Preview** - DONE (SyncPreviewDialog)
-13. [ ] **End-to-end sync verification** - Full pipeline test with real data
-14. [ ] **Playwright E2E tests** - Critical path regression tests (tab discovery, mapping persistence, sync)
-14. [ ] Nested sheet extraction UX design
-15. [ ] Phase 4: Additional connectors (Close.io, Typeform, etc.)
+10. [x] Mapping persistence fix - 3-step restore cascade - DONE (2026-01-26)
+11. [x] Sync Engine UX: Dry Run Preview - DONE (SyncPreviewDialog) (2026-01-26)
+12. [x] Sync engine hardening (entity ID capture, last_synced_at, failed batch tracking) - DONE (2026-01-27)
+13. [x] Weekly status pivot (processWeeklyColumns + parseWeekDate) - DONE (2026-01-27)
+14. [x] SmartMapper UX: AI badges, empty column detection, letter shortcuts - DONE (2026-01-27)
+15. [x] Product Centre: Cards/Rows/Composition views - DONE (2026-01-27)
+
+### Up Next
+1. [ ] **End-to-end sync verification** — Full pipeline test with real data (HIGH)
+2. [ ] **Partner entity page** — List view with search/filter, detail page with assignments + ASINs (HIGH)
+3. [ ] **Staff entity page** — Team directory with roles, squads, capacity (HIGH)
+4. [ ] **Lineage visualization** — "Where did this value come from?" on entity detail pages (MEDIUM)
+5. [~] Phase 5.2 remaining — Field detail panel, pin/lock, filter controls (MEDIUM)
+6. [ ] **Playwright E2E tests** — Critical path regression tests (tab discovery, mapping persistence, sync) (MEDIUM)
+7. [ ] Nested sheet extraction UX design (LOW)
+8. [ ] Phase 4: Additional connectors — Close.io, Typeform, etc. (LOW)
+9. [ ] Product Centre analytics sub-tab — Partner counts per product over time (LOW)
 
 ---
 

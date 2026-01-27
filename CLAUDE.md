@@ -257,15 +257,14 @@ The heart of this rebuild. A visual interface that:
 
 ## Current Phase
 
-**Phase 2: Data Mapping & Flow** (In Progress)
+**Phase 3: Sync Hardening & Entity Pages** (In Progress)
 - Phase 1 (Foundation) complete: app shell, auth, database schema, RBAC
-- Data Enrichment browser with source/tab navigation
-- SmartMapper: classify columns → map fields → save to DB
-- Draft persistence (DB + localStorage with timestamp comparison, flush-on-unmount)
-- Saved mapping restoration from `column_mappings` table
-- Entity-centric Data Flow Map with field-level detail
-- Sync preview (dry-run) dialog
-- Next: actual data sync execution, computed field runner
+- Phase 2 (Data Mapping) complete: SmartMapper, AI suggestions, draft persistence, data flow map, sync engine
+- Sync engine hardened: entity ID capture, failed batch tracking, `last_synced_at` timestamps
+- Weekly status pivot: `processWeeklyColumns()` matches patterns and upserts into `weekly_statuses`
+- SmartMapper UX: AI suggestion badges, auto-hide empty columns, letter keyboard shortcuts (P/S/A/W/C/X)
+- Product Centre: `/admin/products` with Cards, Rows, and Composition (SVG mind map) views
+- Next: end-to-end sync verification with real data, partner/staff entity pages, lineage visualization
 
 ## Important Context
 

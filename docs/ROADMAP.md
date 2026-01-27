@@ -1,6 +1,7 @@
 # Sophie Hub v2 - Roadmap & Priorities
 
 > This document outlines what we're building, in what order, and why.
+> Last updated: 2026-01-27
 
 ---
 
@@ -14,183 +15,130 @@ Replace fragmented Google Sheets with a **beautiful, unified internal platform**
 
 ---
 
-## Current Phase: Foundation + Data Enrichment MVP
+## Current Phase: Sync Verification & Entity Pages
 
-### Completed ✓
-
-| Item | Status | Notes |
-|------|--------|-------|
-| Project structure | Done | Next.js 14, TypeScript, Tailwind, shadcn/ui |
-| Database schema | Done | 17 tables, entity-first design |
-| Supabase connection | Done | Connected and migrated |
-| App shell | Done | Sidebar, routing, layouts |
-| Dashboard | Done | Welcome flow, stats, quick actions |
-| Data Enrichment UI | Done | Overview page with wizard structure |
-| Partners page | Done | Empty state, ready for data |
-| Staff page | Done | Empty state, ready for data |
-| Team page | Done | Placeholder |
-| CLAUDE.md | Done | Design principles documented |
-| GitHub repo | Done | github.com/Tophie726/Sophie-Hub2 |
-
-### In Progress
-
-| Item | Priority | Description |
-|------|----------|-------------|
-| Google Sheets connection | HIGH | OAuth + search for sheets in user's Drive |
-| Data Enrichment wizard | HIGH | Full flow: Connect → Discover → Map → Review → Commit |
+The data enrichment pipeline is functionally complete — sources connect, columns classify, fields map, and sync writes to entity tables. The next focus is **verifying the full pipeline end-to-end with real data** and building the entity pages (Partners, Staff) that display the synced data.
 
 ---
 
-## Priority Stack (What We're Building)
+## Completed Phases
+
+### Phase 1: Foundation (Done)
+
+| Item | Notes |
+|------|-------|
+| Project structure | Next.js 14, TypeScript, Tailwind, shadcn/ui |
+| Database schema | 17+ tables, entity-first design |
+| Supabase connection | Connected and migrated |
+| App shell | Sidebar, routing, layouts, mobile responsive |
+| Dashboard | Welcome flow, stats, quick actions |
+| Google OAuth | NextAuth.js, refresh tokens, Tailscale mobile support |
+| Role-based access control | Admin/Pod Leader/Staff roles, middleware guards |
+| Dark mode | Light/dark/system via next-themes |
+
+### Phase 2: Data Enrichment Pipeline (Done)
+
+| Item | Notes |
+|------|-------|
+| Google Sheets connector | Search Drive, preview tabs, raw row extraction |
+| SmartMapper wizard | 4-phase: Preview → Classify → Map → Summary |
+| Column classification | 6 categories: Partner, Staff, ASIN, Weekly, Computed, Skip |
+| AI-assisted mapping | Claude API with per-column and bulk suggestion modes |
+| Field mapping with authority | Source of truth vs reference, grouped dropdowns from field registry |
+| Draft persistence | Auto-save to DB, 3-step restore cascade |
+| Column patterns | Regex/keyword patterns for auto-matching weekly columns |
+| Sync engine | SyncEngine class, batch inserts, value transforms, field lineage |
+| Dry run preview | SyncPreviewDialog: preview creates/updates/skips before committing |
+| Visual data flow map | React Flow canvas (desktop) + card layout (mobile) |
+| Audit logging | mapping_audit_log table, integrated in sync + save flows |
+| Rate limiting | Sliding window for Google API + sync operations |
+| Entity field registry | Single source of truth for all field definitions |
+
+### Phase 3: Sync Hardening & UX Polish (Done - 2026-01-27)
+
+| Item | Notes |
+|------|-------|
+| Entity ID capture after bulk insert | `.insert().select()` maps real IDs back for lineage |
+| `last_synced_at` timestamp | Updated on tab_mappings after successful sync |
+| Failed batch tracking | Explicit skip + error propagation instead of silent failures |
+| Weekly status pivot | `processWeeklyColumns()` with date parsing, upserts to `weekly_statuses` |
+| AI suggestion badges | Purple "AI" badge with confidence tooltip |
+| Auto-hide empty columns | Detection + collapsible "Empty columns (N)" section |
+| Letter keyboard shortcuts | P/S/A/W/C/X mnemonic keys for classification |
+| Product Centre | Cards, Rows, and Composition (SVG mind map) views |
+
+---
+
+## Up Next
 
 ### P0: Critical Path (Now)
 
-1. **Google OAuth & Sheets Search**
-   - Connect user's Google account
-   - Search/browse sheets in their Drive
-   - Preview sheet contents before importing
-   - WHY: Can't enrich data without connecting to data sources
+1. **End-to-End Sync Verification**
+   - Full pipeline test: map columns → sync → verify entity tables have correct data
+   - Validate field_lineage records have real entity IDs
+   - Test weekly status pivot with real weekly columns
+   - WHY: Everything is built but unverified with real data
 
-2. **Field Discovery & Mapping**
-   - Auto-detect columns from selected sheet
-   - Classify each field (Partner/Staff/ASIN/Skip)
-   - Map to target table columns
-   - Handle transforms (dates, currencies, etc.)
-   - WHY: Core functionality of the data enrichment wizard
+2. **Partner Entity Page**
+   - List view with search, filter, sort
+   - Partner detail page with assignments, ASINs, weekly status history
+   - Data sourced from synced entity tables
+   - WHY: The whole point of the pipeline — users need to see the data
 
-3. **Staging & Review**
-   - Stage discovered data before committing
-   - Diff view (what will be created/updated)
-   - Batch approve/reject
-   - WHY: Data accuracy is paramount—never auto-commit
-
-4. **Apply Changes**
-   - Commit approved changes to master tables
-   - Track lineage (which source provided which value)
-   - Sync logging
-   - WHY: Actually get data into the system
+3. **Staff Entity Page**
+   - Team directory with roles, squads, capacity
+   - Staff detail page with assignments, training
+   - WHY: Second core entity, needed for daily operations
 
 ### P1: Essential Features (Next)
 
-5. **Partner Management**
-   - List view with search/filter
-   - Partner detail page
-   - Assignment management
-   - ASIN list per partner
+4. **Lineage Visualization**
+   - "Where did this value come from?" on entity detail pages
+   - Field-level provenance from field_lineage table
+   - WHY: Trust through transparency — admins need to verify data origins
 
-6. **Staff Management**
-   - Team directory
-   - Role and squad assignment
-   - Capacity tracking
+5. **Data Flow Map Interaction (Phase 5.2 remaining)**
+   - Level 3: Field detail slide-in panel
+   - Pin/lock feature for important fields
+   - Filter controls (entity + status)
+   - WHY: Power-user features for managing complex mappings
 
-7. **Auth & Permissions**
-   - Google OAuth login
-   - Role-based access (Admin vs Pod Leader vs Staff)
-   - Row-level security in Supabase
+6. **Product Centre Analytics**
+   - Partner counts per product (live from DB)
+   - Line chart: partner/revenue per product over time
+   - Analytics sub-tab under Products
+   - WHY: Business visibility into service distribution
 
 ### P2: Enhanced Functionality (After)
 
-8. **Weekly Status Tracking**
-   - Time-series partner health
-   - Pod leader reporting interface
+7. **Scheduled Syncs**
+   - Cron-based auto-refresh from Google Sheets
+   - Webhook triggers on sheet changes
+   - WHY: Remove manual sync step
 
-9. **Team Structure**
-   - Squad management
-   - Org chart visualization
-   - Leader/captain hierarchy
+8. **Nested Sheet Extraction**
+   - Brand Information Sheets → ASIN sub-sheets
+   - Template-based extraction rules
+   - WHY: Complex data structures in real sheets
 
-10. **PTO Calendar**
-    - Request/approve workflow
-    - Calendar visualization
-    - Capacity impact
+9. **Playwright E2E Tests**
+   - Critical path: tab discovery, mapping persistence, sync flow
+   - Regression prevention for browser-level bugs
+   - WHY: Integration bugs not catchable by unit tests
+
+10. **Team Structure**
+    - Squad management
+    - Org chart visualization
+    - Leader/captain hierarchy
 
 ### P3: Future Features (Later)
 
-11. **Form Support** (Google Forms, TypeForm)
-12. **API Connectors** (Close IO, Zoho, Amazon)
-13. **Reporting Dashboard** (Custom widgets, metrics)
-14. **Scheduled Syncs** (Cron-based auto-refresh)
-15. **Education/Training Module**
-16. **Ticketing System**
-17. **Partner Feedback/Escalations**
-
----
-
-## Feature Deep Dives
-
-### Data Enrichment Wizard (P0)
-
-The heart of the system. A visual, guided experience for bringing data in.
-
-```
-┌────────────────────────────────────────────────────────────────┐
-│                    DATA ENRICHMENT FLOW                        │
-└────────────────────────────────────────────────────────────────┘
-                              │
-      ┌───────────────────────┼───────────────────────┐
-      ▼                       ▼                       ▼
-┌───────────┐          ┌───────────┐          ┌───────────┐
-│  Connect  │          │  Discover │          │  Classify │
-│  Google   │────────▶ │  Sheets   │────────▶ │  Fields   │
-│  Account  │          │  & Tabs   │          │           │
-└───────────┘          └───────────┘          └───────────┘
-                              │                       │
-                              ▼                       ▼
-                       ┌───────────┐          ┌───────────┐
-                       │   Map     │          │  Review   │
-                       │  to       │◀──────── │  Staged   │
-                       │  Tables   │          │  Changes  │
-                       └───────────┘          └───────────┘
-                              │                       │
-                              ▼                       ▼
-                       ┌───────────┐          ┌───────────┐
-                       │  Commit   │────────▶ │  Track    │
-                       │  Changes  │          │  Lineage  │
-                       └───────────┘          └───────────┘
-```
-
-**User Experience Goals:**
-- Feel like a conversation, not a form
-- Show progress and what's coming
-- Allow going back without losing work
-- Celebrate success at the end
-
-### Google Connection (P0)
-
-**Flow:**
-1. User clicks "Connect Google Account"
-2. OAuth popup → user grants access
-3. App can now access their Google Drive
-4. Search bar to find sheets by name
-5. Click sheet → see preview (tabs, columns, sample data)
-6. Select sheet to begin wizard
-
-**Technical:**
-- NextAuth.js with Google provider
-- googleapis npm package
-- Store refresh token securely
-- Request minimal scopes (Drive read-only, Sheets read-only)
-
----
-
-## Technical Priorities
-
-### Must Have
-- [ ] Google OAuth integration
-- [ ] Sheets API connection
-- [ ] Server-side API routes
-- [ ] Proper error handling
-- [ ] Loading states everywhere
-
-### Should Have
-- [ ] Optimistic UI updates
-- [ ] Keyboard navigation
-- [ ] Mobile-responsive (at least not broken)
-
-### Nice to Have
-- [ ] Undo/redo in wizard
-- [ ] Offline indicator
-- [ ] Dark mode
+11. **Additional Connectors** — Close.io, Zoho, Typeform, ClickUp, Asana
+12. **Reporting Dashboard** — Custom widgets, metrics, exports
+13. **Education/Training Module** — Training progress per staff
+14. **PTO Calendar** — Request/approve workflow with capacity impact
+15. **Ticketing System** — Internal task management
+16. **Partner Feedback/Escalations** — External communication tracking
 
 ---
 
@@ -208,24 +156,27 @@ Before any feature ships, verify:
 
 ## Success Metrics
 
-### Phase 1 Success
-- [ ] Can connect a Google Sheet
-- [ ] Can map fields to Partner table
-- [ ] Can review and approve staged changes
-- [ ] Can see data in Partners list
-- [ ] UI feels polished and professional
+### Phase 1-3 Success (Achieved)
+- [x] Can connect a Google Sheet
+- [x] Can map fields to Partner/Staff/ASIN tables
+- [x] Can review and approve staged changes (dry run preview)
+- [x] Sync writes to entity tables with lineage
+- [x] UI feels polished and professional
+- [x] Auth with role-based access
+- [x] AI assists with column classification
 
-### Phase 2 Success
-- [ ] Staff data imported
-- [ ] Assignments working
-- [ ] Basic CRUD for partners/staff
-- [ ] Auth with role-based access
+### Phase 4 Success (Next Target)
+- [ ] Partners list shows real synced data
+- [ ] Staff directory shows real synced data
+- [ ] Full sync pipeline verified end-to-end
+- [ ] Weekly statuses populate from sheet columns
+- [ ] Users actively using the tool daily
 
-### Phase 3 Success
-- [ ] Multiple data sources connected
-- [ ] Weekly status tracking
+### Phase 5 Success (Future)
+- [ ] Multiple data sources connected (not just Google Sheets)
+- [ ] Scheduled syncs running automatically
 - [ ] Team structure visualized
-- [ ] Users actively using the tool
+- [ ] Education module tracking training
 
 ---
 
@@ -235,11 +186,14 @@ Before any feature ships, verify:
 Previous approach crawled sheets one-by-one, creating tables as needed. Result: 100+ tables, no coherence. New approach: Define Partners and Staff first, then map everything to those.
 
 ### Why Staging?
-Data accuracy > speed. All changes go through review before committing. This builds trust and catches errors.
+Data accuracy > speed. All changes go through dry run preview before committing. This builds trust and catches errors.
 
 ### Why Design-Led?
 People need to actually use this tool every day. If it's ugly or confusing, they'll go back to spreadsheets. Delight drives adoption.
 
+### Why Product Centre?
+Products (PPC Basic, C&C, FAM, etc.) are composable — FAM includes Sophie PPC Partnership, which includes PPC Basic + C&C. The composition view makes this hierarchy visible. Future: per-product analytics, partner counts, revenue tracking.
+
 ---
 
-*Last updated: January 2026*
+*See `docs/DATA_ENRICHMENT_PROGRESS.md` for granular task tracking.*
