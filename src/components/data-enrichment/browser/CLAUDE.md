@@ -57,9 +57,20 @@ Renders tabs for navigating between sheet tabs within a source. Features:
 Per-source dashboard showing all tabs at a glance. Features:
 - Grid/List view toggle (persisted in state)
 - Overall progress bar (calculated from all tab stats)
+- **Progress flash prevention**: When `isLoadingPreview` is true, shows shimmer animation instead of misleading percentage (DB-only tab count gives inflated %). Subtitle shows "discovering tabs..." with spinner.
 - Tab cards/rows showing: header status, progress, category breakdown, last edit
 - Hidden tabs toggle (only place to access hidden tabs)
 - Flagged tabs collapsible section (subtle styling, only place to access flagged tabs)
+- **Compact header controls**: AI Source Analysis (sparkles icon) and Sync History (clock icon) are popover buttons in the header row, not full-width sections
+
+#### AI Source Analysis (Popover)
+- Sparkles icon button in header → opens Popover with `AISourceAnalysis compact` mode
+- Compact mode: no outer card border (popover provides container), starts expanded, summary + details inline
+- Full mode (standalone): collapsible card with trigger row
+
+#### Sync History (Popover)
+- Clock icon button in header → opens Popover with `SyncHistoryPanel`
+- Compact layout: 360px popover with scrollable history list
 
 ### TabCard
 Card component for grid view. Shows:
@@ -95,9 +106,40 @@ When user confirms a header in SmartMapper:
 
 This avoids requiring a full page refresh to see updated status.
 
+### Mapping Save → Sync Flow (Continuous)
+
+When the user clicks "Complete Mapping" in MapPhase, a **3-phase full-card takeover** runs automatically with no extra button presses:
+
+1. **Phase 1 — "Saving your mapping..."** (spinner, full card takeover)
+   - `handleCompleteWithClear` clears localStorage draft + DB draft
+   - Calls `onComplete()` which POSTs to `/api/mappings/save`
+2. **Phase 2 — "Mapping Saved"** (animated green checkmark + stat badges)
+   - Auto-transitions after save completes
+   - Shows field count stats (mapped fields, entity breakdown)
+   - 1.2s display before next phase
+3. **Phase 3 — "Starting sync..."** (rotating RefreshCw icon)
+   - Auto-transitions at 2.0s after Phase 2
+   - Calls `onSyncAfterSave()` → `handleSync()` directly
+   - **Stays on current tab** — sync dialog opens as modal overlay, no navigation to Overview
+
+**State management:**
+```typescript
+const [isSavingMapping, setIsSavingMapping] = useState(false)
+const [saveMappingSuccess, setSaveMappingSuccess] = useState(false)
+const [successPhase, setSuccessPhase] = useState<'complete' | 'syncing'>('complete')
+```
+
+**Key design decisions:**
+- Full-card takeover replaces tiny button-only feedback
+- Continuous flow: save → success → sync with no user interaction needed between phases
+- `AnimatePresence mode="wait"` for crossfade between phases
+- Spring physics (`bounce: 0.35`) on checkmark entrance
+- Error re-thrown from `onComplete` so MapPhase can revert to default state
+- If `onSyncAfterSave` not provided, falls back to "Continue to Overview" button
+
 ### Sync Flow (Dry Run Preview)
 
-When user clicks the "Sync" button in TabOverviewDashboard:
+When user clicks "Sync" button or auto-triggered after mapping save:
 1. `handleSync` opens `SyncPreviewDialog` and starts loading
 2. For each active tab, calls `POST /api/sync/tab/[id]` with `{ dry_run: true }`
 3. API returns `EntityChange[]` (creates, updates, skips) without writing to DB
@@ -106,9 +148,38 @@ When user clicks the "Sync" button in TabOverviewDashboard:
 6. User clicks "Confirm Sync" → `handleConfirmSync` runs actual sync (no dry_run)
 7. Toast shows results, sync status updated
 
+**Important:** `SyncPreviewDialog` renders at the root level of SourceBrowser, not inside any tab view. It works as a modal overlay from any active tab — no navigation required.
+
 **Key files:**
 - `sync-preview-dialog.tsx` — Dialog with stats, entity sections, change detail
 - `source-browser.tsx` — `handleSync` (dry run) + `handleConfirmSync` (actual write)
+
+### Tab Ordering Stability
+
+Tabs are sorted **alphabetically** in the `sheetTabs` computed value to prevent visual reordering when preview data arrives. Without this:
+- DB returns tabs alphabetically (`.order('tab_name')`)
+- Google Sheets preview returns tabs in sheet order
+- Merging would cause tabs to jump positions when preview loads
+
+Both the DB-only path and the merged path apply `.sort((a, b) => a.name.localeCompare(b.name))`.
+
+### Performance Optimizations
+
+**Parallelized Google Sheets API calls** (`src/lib/google/sheets.ts`):
+- `getSheetPreview()` fetches metadata and first-tab preview data in parallel via `Promise.all()`
+- Range `A1:Z6` without sheet name defaults to first visible sheet
+- Saves ~500ms per preview fetch (previously sequential)
+
+**Cache headers on `/api/sheets/preview`**:
+- `Cache-Control: private, max-age=300, stale-while-revalidate=600`
+- Revisiting the same source within 5 minutes uses cached response
+- Previously: no caching, every source switch = fresh 1-3s Google API call
+
+**Client-side caching**:
+- `sheetPreviews` state: in-memory cache per source, survives tab switches
+- `rawDataCache`: module-level cache in SmartMapper, 5-minute TTL
+- `/api/data-sources`: `max-age=30, stale-while-revalidate=60`
+- `/api/sheets/raw-rows`: `max-age=60, stale-while-revalidate=120`
 
 ## API Integration
 
@@ -120,7 +191,7 @@ Returns sources with per-tab stats:
     tabs: [{
       id, tab_name, primary_entity, header_row,
       header_confirmed,  // Boolean - user confirmed header
-      columnCount, categoryStats, status, notes, updated_at
+      columnCount, totalColumns, categoryStats, status, notes, updated_at
     }]
   }]
 }
@@ -268,6 +339,8 @@ const HIGH_CONFIDENCE_THRESHOLD = 80
 
 **NO FAKE DATA**: All stats displayed must come from database queries via the API. The dashboard is a window into the database, not static UI. Progress percentages, category counts, and timestamps are all derived from actual `column_mappings` and `tab_mappings` records.
 
+**ACCURATE PROGRESS**: Progress denominator is `tab_mappings.total_columns` (total columns in the source sheet), NOT `column_mappings.length` (only saved columns). Unsaved columns count as unmapped. Without `total_columns`, a tab with 11/241 columns saved would show 100% (11/11).
+
 **VISUAL CONSISTENCY**: When the same data is displayed in multiple places, it must look the same everywhere. The header status indicator is the canonical example - grey/orange/green dot appears identically in tab bar, cards, and list rows.
 
 ---
@@ -325,6 +398,12 @@ These invariants MUST hold true at all times. If a change breaks any of these, i
 - Do NOT use `||` — it short-circuits when DB tabs exist (e.g., 11 is truthy), hiding the preview count (e.g., 20+)
 - **Violation example**: `s.tabs.length || previewCount` → shows 11 instead of 20+ when 11 DB tabs exist
 
+### INV-8: Tab order must be stable across data loads
+**Tabs must not visually reorder when preview data arrives.** This requires:
+- Both DB-only and merged tab lists sorted alphabetically: `.sort((a, b) => a.name.localeCompare(b.name))`
+- DB returns alphabetically (`.order('tab_name')`), Google Sheets returns sheet order — without sorting, tabs jump positions when preview loads
+- **Violation example**: Removing alphabetical sort → tabs shuffle when preview merges in
+
 ---
 
 ## PRE-CHANGE VERIFICATION CHECKLIST
@@ -347,6 +426,8 @@ Run through this BEFORE committing any change to the data-enrichment browser:
 - [ ] Classify columns → Save → Navigate away → Return → Classifications restored
 - [ ] Draft saves to DB (check Network tab for POST /api/tab-mappings/draft)
 - [ ] Saved mappings load when no draft exists
+- [ ] Complete Mapping button: Default → "Saving..." (spinner) → "Mapping Saved" (green) → Overview
+- [ ] No auto-sync triggered after save (user must click Sync manually)
 
 ### Performance (verify no regressions)
 - [ ] DB tabs render before Google Sheets preview completes

@@ -1,7 +1,7 @@
 # Data Enrichment Progress Tracker
 
 > Tracking the implementation of Sophie Hub's data enrichment system.
-> Last updated: 2026-01-27 (classify row UX, input mode switching, AI Opus 4.5, tag auto-classify)
+> Last updated: 2026-01-27 (entity versioning, progress fix, confirm mapping UX, lag fix)
 
 ---
 
@@ -201,6 +201,15 @@
 | Excel-style column letters | Done | 2026-01-27 | Empty columns show "Column N" letter ref instead of number |
 | Live overview progress | Done | 2026-01-27 | `onStatsChange` callback reports draft classification stats to Overview |
 | Field alias auto-matching | Done | 2026-01-27 | `aliases` on FieldDefinition. "Email Address" → client_email, "Phone Number" → client_phone, etc. |
+| Actionable workload counter | Done | 2026-01-27 | Counter shows "X left to classify" — excludes weekly + empty auto-handled columns |
+| Weekly columns collapsed section | Done | 2026-01-27 | Weekly columns shown in separate collapsed "Weekly columns (N) — auto-mapped to weekly_statuses" section |
+| Classify viewport layout | Done | 2026-01-27 | Flex-col layout fills viewport height. Footer buttons always visible, scroll area grows to fill |
+| Empty column auto-skip on draft restore | Done | 2026-01-27 | Case 2 draft restore re-checks isEmpty and auto-skips empty+unclassified columns |
+| Accurate progress calculation | Done | 2026-01-27 | `total_columns` on tab_mappings. API uses it as denominator instead of column_mappings.length |
+| Classify keyboard nav lag fix | Done | 2026-01-27 | scrollIntoView behavior: 'instant' (was 'smooth'). Removed Framer Motion `layout` on MapPhase cards |
+| Confirm mapping UX | Done | 2026-01-27 | Inline button states (Saving → Saved), 1.2s pause, no auto-sync. Per Emil's instant-feedback principle |
+| Sync triggered_by fix | Done | 2026-01-27 | Changed sync_runs.triggered_by from UUID to TEXT (auth user ID can be email) |
+| Entity versioning (time machine) | Done | 2026-01-27 | PostgreSQL triggers on partners/staff/asins → entity_versions table. Full row snapshots on every change |
 
 ---
 

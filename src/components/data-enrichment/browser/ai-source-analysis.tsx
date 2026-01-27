@@ -56,6 +56,8 @@ interface AISourceAnalysisProps {
   tabs: TabInfo[]
   onAnalysisComplete?: (analysis: SourceAnalysis) => void
   className?: string
+  /** Compact mode for rendering inside popovers — no outer border/card */
+  compact?: boolean
 }
 
 // =============================================================================
@@ -87,11 +89,12 @@ export function AISourceAnalysis({
   tabs,
   onAnalysisComplete,
   className,
+  compact,
 }: AISourceAnalysisProps) {
   const [analysis, setAnalysis] = useState<SourceAnalysis | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [isExpanded, setIsExpanded] = useState(false)
+  const [isExpanded, setIsExpanded] = useState(compact ?? false)
   const [hasRun, setHasRun] = useState(false)
 
   const fetchAnalysis = async () => {
@@ -166,7 +169,10 @@ export function AISourceAnalysis({
   // Not yet analyzed state
   if (!hasRun && !isLoading) {
     return (
-      <div className={cn('rounded-lg border border-dashed border-purple-500/30 bg-purple-500/5 p-4', className)}>
+      <div className={cn(
+        compact ? 'p-4' : 'rounded-lg border border-dashed border-purple-500/30 bg-purple-500/5 p-4',
+        className
+      )}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-purple-500/10">
@@ -195,7 +201,7 @@ export function AISourceAnalysis({
   // Loading state
   if (isLoading) {
     return (
-      <div className={cn('rounded-lg border bg-card p-4', className)}>
+      <div className={cn(compact ? 'p-4' : 'rounded-lg border bg-card p-4', className)}>
         <div className="flex items-center gap-3">
           <Loader2 className="h-5 w-5 animate-spin text-purple-500" />
           <div>
@@ -212,7 +218,10 @@ export function AISourceAnalysis({
   // Error state
   if (error) {
     return (
-      <div className={cn('rounded-lg border border-red-500/30 bg-red-500/5 p-4', className)}>
+      <div className={cn(
+        compact ? 'p-4' : 'rounded-lg border border-red-500/30 bg-red-500/5 p-4',
+        className
+      )}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <HelpCircle className="h-5 w-5 text-red-500" />
@@ -233,6 +242,113 @@ export function AISourceAnalysis({
   // Analysis complete
   if (!analysis) return null
 
+  // Shared detail content (used in both compact and full modes)
+  const detailContent = (
+    <div className={cn(compact ? 'p-4 space-y-4' : 'px-4 pb-4 pt-0 space-y-4 border-t')}>
+      {/* Summary (compact only — full mode shows it in the collapsible trigger) */}
+      {compact && (
+        <div className="flex items-center gap-3 pb-2">
+          <div className={cn('flex h-8 w-8 items-center justify-center rounded-lg', config?.bg)}>
+            <EntityIcon className={cn('h-4 w-4', config?.color)} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium">{config?.label} Data</span>
+              <Badge variant="outline" className="text-[10px] h-5">
+                <span className={confidenceInfo?.color}>
+                  {Math.round(analysis.confidence * 100)}% {confidenceInfo?.label}
+                </span>
+              </Badge>
+              {analysis.weekly_columns_detected && (
+                <Badge variant="outline" className="text-[10px] h-5 bg-purple-500/10 text-purple-600 border-purple-500/30">
+                  <Calendar className="h-3 w-3 mr-1" />
+                  Weekly
+                </Badge>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground truncate mt-0.5">
+              {analysis.reasoning}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Key columns */}
+      {analysis.key_column_candidates.length > 0 && (
+        <div className={compact ? '' : 'pt-4'}>
+          <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground mb-2">
+            <Key className="h-3.5 w-3.5" />
+            Key Column Candidates
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {analysis.key_column_candidates.map((col, i) => (
+              <code key={i} className="text-xs bg-muted px-2 py-0.5 rounded">
+                {col}
+              </code>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Strategy */}
+      <div>
+        <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground mb-2">
+          <Lightbulb className="h-3.5 w-3.5" />
+          Suggested Strategy
+        </div>
+        <p className="text-sm text-muted-foreground bg-muted/50 rounded p-3">
+          {analysis.suggested_strategy}
+        </p>
+      </div>
+
+      {/* Per-tab breakdown */}
+      {analysis.tab_summaries && analysis.tab_summaries.length > 1 && (
+        <div>
+          <div className="text-xs font-medium text-muted-foreground mb-2">
+            Per-Tab Breakdown
+          </div>
+          <div className="space-y-1">
+            {analysis.tab_summaries.map((tab, i) => {
+              const tabConfig = entityConfig[tab.entity_type as keyof typeof entityConfig] || entityConfig.unknown
+              const TabIcon = tabConfig.icon
+              return (
+                <div key={i} className="flex items-center gap-2 text-xs">
+                  <TabIcon className={cn('h-3.5 w-3.5', tabConfig.color)} />
+                  <span className="truncate flex-1">{tab.tab_name}</span>
+                  <span className="text-muted-foreground tabular-nums">
+                    {Math.round(tab.confidence * 100)}%
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Re-analyze button */}
+      <div className={compact ? '' : 'pt-2'}>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={(e) => {
+            e.stopPropagation()
+            fetchAnalysis()
+          }}
+          className="text-xs text-muted-foreground"
+        >
+          <RefreshCw className="h-3 w-3 mr-1.5" />
+          Re-analyze
+        </Button>
+      </div>
+    </div>
+  )
+
+  // Compact mode: render content directly (popover provides container)
+  if (compact) {
+    return <div className={className}>{detailContent}</div>
+  }
+
+  // Full mode: collapsible card
   return (
     <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
       <div className={cn('rounded-lg border bg-card overflow-hidden', className)}>
@@ -279,77 +395,8 @@ export function AISourceAnalysis({
 
         {/* Expanded details */}
         <CollapsibleContent>
-          <motion.div
-            initial={false}
-            className="px-4 pb-4 pt-0 space-y-4 border-t"
-          >
-            {/* Key columns */}
-            {analysis.key_column_candidates.length > 0 && (
-              <div className="pt-4">
-                <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground mb-2">
-                  <Key className="h-3.5 w-3.5" />
-                  Key Column Candidates
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {analysis.key_column_candidates.map((col, i) => (
-                    <code key={i} className="text-xs bg-muted px-2 py-0.5 rounded">
-                      {col}
-                    </code>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Strategy */}
-            <div>
-              <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground mb-2">
-                <Lightbulb className="h-3.5 w-3.5" />
-                Suggested Strategy
-              </div>
-              <p className="text-sm text-muted-foreground bg-muted/50 rounded p-3">
-                {analysis.suggested_strategy}
-              </p>
-            </div>
-
-            {/* Per-tab breakdown */}
-            {analysis.tab_summaries && analysis.tab_summaries.length > 1 && (
-              <div>
-                <div className="text-xs font-medium text-muted-foreground mb-2">
-                  Per-Tab Breakdown
-                </div>
-                <div className="space-y-1">
-                  {analysis.tab_summaries.map((tab, i) => {
-                    const tabConfig = entityConfig[tab.entity_type as keyof typeof entityConfig] || entityConfig.unknown
-                    const TabIcon = tabConfig.icon
-                    return (
-                      <div key={i} className="flex items-center gap-2 text-xs">
-                        <TabIcon className={cn('h-3.5 w-3.5', tabConfig.color)} />
-                        <span className="truncate flex-1">{tab.tab_name}</span>
-                        <span className="text-muted-foreground tabular-nums">
-                          {Math.round(tab.confidence * 100)}%
-                        </span>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Re-analyze button */}
-            <div className="pt-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  fetchAnalysis()
-                }}
-                className="text-xs text-muted-foreground"
-              >
-                <RefreshCw className="h-3 w-3 mr-1.5" />
-                Re-analyze
-              </Button>
-            </div>
+          <motion.div initial={false}>
+            {detailContent}
           </motion.div>
         </CollapsibleContent>
       </div>

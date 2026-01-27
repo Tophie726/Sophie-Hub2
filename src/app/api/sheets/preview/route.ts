@@ -37,7 +37,11 @@ export async function GET(request: NextRequest) {
 
     const preview = await getSheetPreview(session.accessToken, spreadsheetId)
 
-    return NextResponse.json({ preview })
+    return NextResponse.json({ preview }, {
+      headers: {
+        'Cache-Control': 'private, max-age=300, stale-while-revalidate=600',
+      },
+    })
   } catch (error) {
     console.error('Error getting sheet preview:', error)
     return NextResponse.json(

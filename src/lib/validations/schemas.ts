@@ -137,6 +137,7 @@ export const SaveMappingSchema = z.object({
     tab_name: z.string().min(1),
     header_row: z.number().int().min(0),
     primary_entity: z.enum(['partners', 'staff', 'asins']),
+    total_columns: z.number().int().min(0).optional(),
   }),
   columnMappings: z.array(ColumnMappingSchema),
   weeklyPattern: z.object({
@@ -333,6 +334,7 @@ export const SaveMappingSchemaV2 = z.object({
     tab_name: z.string().min(1),
     header_row: z.number().int().min(0),
     primary_entity: z.enum(['partners', 'staff', 'asins']),
+    total_columns: z.number().int().min(0).optional(),
   }),
   columnMappings: z.array(ColumnMappingSchema),
   weeklyPattern: z.object({

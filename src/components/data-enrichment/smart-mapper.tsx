@@ -57,6 +57,7 @@ import {
   Search,
   MessageSquare,
   X,
+  RefreshCw,
   ChevronRight,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -192,8 +193,10 @@ interface SmartMapperProps {
     headerRow: number
     columns: ColumnClassification[]
     primaryEntity: EntityType
-  }) => void
+  }) => void | Promise<void>
   onBack: () => void
+  /** Called when user clicks "Sync Now" from the mapping complete screen */
+  onSyncAfterSave?: () => void
   /** Called when user confirms header row - use to update UI state */
   onHeaderConfirmed?: () => void
   /** When true, renders in a more compact mode for embedding in browser shell */
@@ -243,7 +246,7 @@ interface DraftState {
   timestamp: number
 }
 
-export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, onComplete, onBack, onHeaderConfirmed, embedded = false, headerAlreadyConfirmed = false, confirmedHeaderRow, onStatsChange }: SmartMapperProps) {
+export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, onComplete, onBack, onSyncAfterSave, onHeaderConfirmed, embedded = false, headerAlreadyConfirmed = false, confirmedHeaderRow, onStatsChange }: SmartMapperProps) {
   // Simplified: just preview → classify → map
   // If header already confirmed, skip preview phase
   const [phase, setPhase] = useState<'preview' | 'classify' | 'map'>(headerAlreadyConfirmed ? 'classify' : 'preview')
@@ -255,6 +258,8 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
   const [columnsHistory, setColumnsHistory] = useState<ColumnClassification[][]>([])
   const [draftRestored, setDraftRestored] = useState(false)
   const [isSavingDraft, setIsSavingDraft] = useState(false)
+  const [isSavingMapping, setIsSavingMapping] = useState(false)
+  const [saveMappingSuccess, setSaveMappingSuccess] = useState(false)
   const [availableTags, setAvailableTags] = useState<FieldTag[]>([])
   // AI Tab Summary - provides context for per-column suggestions
   const [tabSummary, setTabSummary] = useState<TabSummary | null>(null)
@@ -503,6 +508,8 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
 
   // Clear draft when completing (both DB and localStorage)
   const handleCompleteWithClear = async () => {
+    setIsSavingMapping(true)
+
     // Clear localStorage
     localStorage.removeItem(draftKey)
 
@@ -518,11 +525,17 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
       }
     }
 
-    onComplete({
-      headerRow,
-      columns,
-      primaryEntity: getPrimaryEntity(),
-    })
+    try {
+      await onComplete({
+        headerRow,
+        columns,
+        primaryEntity: getPrimaryEntity(),
+      })
+      // Show success state briefly before parent navigates away
+      setSaveMappingSuccess(true)
+    } catch {
+      setIsSavingMapping(false)
+    }
   }
 
   // Confirm header row selection (saves to DB)
@@ -669,14 +682,24 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
       return
     }
 
-    // Case 2: Draft restored - preserve classifications but sync header names
+    // Case 2: Draft restored - preserve classifications but sync header names + re-check isEmpty
+    // Old drafts may predate the isEmpty auto-skip feature, so re-evaluate empty columns
     if (draftRestored && columns.length > 0 && lastInitializedHeaderRow.current === null) {
       lastInitializedHeaderRow.current = headerRow
-      // Update sourceColumn names from actual headers to ensure they're current
-      setColumns(prev => prev.map((col, idx) => ({
-        ...col,
-        sourceColumn: headers[idx] || `Column ${columnIndexToLetter(idx)}`,
-      })))
+      setColumns(prev => prev.map((col, idx) => {
+        const header = headers[idx] || ''
+        const isEmpty = isColumnEmpty(idx)
+
+        // Auto-skip columns that are empty AND still unclassified (user hasn't touched them)
+        const shouldAutoSkip = isEmpty && col.category === null
+
+        return {
+          ...col,
+          sourceColumn: header || `Column ${columnIndexToLetter(idx)}`,
+          isEmpty,
+          category: shouldAutoSkip ? 'skip' : col.category,
+        }
+      }))
       return
     }
 
@@ -1018,7 +1041,11 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
           onAuthorityChange={handleAuthorityChange}
           onConfirm={handleCompleteWithClear}
           onBack={() => setPhase('classify')}
+          onNavigateAfterSave={onBack}
+          onSyncAfterSave={onSyncAfterSave}
           embedded={embedded}
+          isSaving={isSavingMapping}
+          saveSuccess={saveMappingSuccess}
         />
       )}
     </AnimatePresence>
@@ -1407,7 +1434,7 @@ function ClassifyPhase({
     if (!hasInteracted.current) return
     const row = classifyRowRefs.current[focusedIndex]
     if (row) {
-      row.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+      row.scrollIntoView({ block: 'nearest', behavior: 'instant' })
     }
   }, [focusedIndex])
 
@@ -1427,20 +1454,23 @@ function ClassifyPhase({
   const sampleRows = rawData.rows.slice(headerRow + 1, headerRow + 2)
   const allValidColumns = columns.filter(c => c.sourceColumn.trim())
 
-  // Separate empty columns (auto-skipped) from normal columns
+  // Separate auto-handled columns from actionable ones
   const emptyColumns = allValidColumns.filter(c => c.isEmpty && c.category === 'skip')
-  const nonEmptyColumns = allValidColumns.filter(c => !(c.isEmpty && c.category === 'skip'))
+  const weeklyColumns = allValidColumns.filter(c => c.category === 'weekly')
+  // Actionable = columns the user actually needs to classify (not empty-skipped, not weekly)
+  const actionableColumns = allValidColumns.filter(c => !(c.isEmpty && c.category === 'skip') && c.category !== 'weekly')
   const [showEmptyColumns, setShowEmptyColumns] = useState(false)
+  const [showWeeklyColumns, setShowWeeklyColumns] = useState(false)
 
   // Data rows for search (first 50 data rows after header)
   const dataRows = rawData.rows.slice(headerRow + 1, headerRow + 51)
 
-  // Apply filter — only to non-empty columns
+  // Apply filter — only to actionable columns (excludes weekly + empty auto-skipped)
   const filteredByCategory = activeFilter === 'all'
-    ? nonEmptyColumns
+    ? actionableColumns
     : activeFilter === 'unclassified'
-    ? nonEmptyColumns.filter(c => c.category === null)
-    : nonEmptyColumns.filter(c => c.category === activeFilter)
+    ? actionableColumns.filter(c => c.category === null)
+    : actionableColumns.filter(c => c.category === activeFilter)
 
   // Apply search filter
   const validColumns = searchQuery.trim()
@@ -1500,15 +1530,14 @@ function ClassifyPhase({
     }
   }
 
-  // Stats (based on non-empty columns — empty auto-skipped columns are in their own section)
+  // Stats (based on actionable columns — weekly + empty are in their own collapsed sections)
   const stats = {
-    partner: nonEmptyColumns.filter(c => c.category === 'partner').length,
-    staff: nonEmptyColumns.filter(c => c.category === 'staff').length,
-    asin: nonEmptyColumns.filter(c => c.category === 'asin').length,
-    weekly: nonEmptyColumns.filter(c => c.category === 'weekly').length,
-    computed: nonEmptyColumns.filter(c => c.category === 'computed').length,
-    skip: nonEmptyColumns.filter(c => c.category === 'skip').length,
-    unclassified: nonEmptyColumns.filter(c => c.category === null).length,
+    partner: actionableColumns.filter(c => c.category === 'partner').length,
+    staff: actionableColumns.filter(c => c.category === 'staff').length,
+    asin: actionableColumns.filter(c => c.category === 'asin').length,
+    computed: actionableColumns.filter(c => c.category === 'computed').length,
+    skip: actionableColumns.filter(c => c.category === 'skip').length,
+    unclassified: actionableColumns.filter(c => c.category === null).length,
   }
 
   const partnerKey = allValidColumns.find(c => c.category === 'partner' && c.isKey)
@@ -1542,8 +1571,9 @@ function ClassifyPhase({
     setKeyConfirmation({ open: false, columnIndex: null, columnName: '', category: null, currentKeyName: null, action: 'set' })
   }
 
-  const totalClassified = stats.partner + stats.staff + stats.asin + stats.weekly + stats.computed + stats.skip
-  const totalColumns = nonEmptyColumns.length
+  const totalClassified = stats.partner + stats.staff + stats.asin + stats.computed + stats.skip
+  const totalActionable = actionableColumns.length
+  const needsAction = stats.unclassified
 
 
   // Category shortcuts mapping — letter keys for quick classification
@@ -1635,33 +1665,35 @@ function ClassifyPhase({
   const hasKeyDesignated = partnerKey || staffKey
 
   return (
-    <motion.div {...fadeInUp} className="space-y-6">
+    <motion.div {...fadeInUp} className="flex flex-col gap-4 h-[calc(100vh-180px)]">
       {/* AI Tab Summary - provides context before column mapping */}
-      <AITabAnalysis
-        tabName={tabName}
-        sourceName={sheetName}
-        columnNames={rawData.rows[headerRow] || []}
-        sampleRows={rawData.rows.slice(headerRow + 1, headerRow + 4)}
-        dataSourceId={dataSourceId}
-        initialSummary={tabSummary}
-        currentMappings={columns.map(c => ({
-          column_name: c.sourceColumn,
-          category: c.category,
-          target_field: c.targetField,
-        }))}
-        allColumnsClassified={columns.length > 0 && columns.every(c => c.category !== null)}
-        onSummaryComplete={onTabSummaryChange}
-        className={embedded ? '' : 'max-w-4xl mx-auto'}
-      />
+      <div className="flex-shrink-0">
+        <AITabAnalysis
+          tabName={tabName}
+          sourceName={sheetName}
+          columnNames={rawData.rows[headerRow] || []}
+          sampleRows={rawData.rows.slice(headerRow + 1, headerRow + 4)}
+          dataSourceId={dataSourceId}
+          initialSummary={tabSummary}
+          currentMappings={columns.map(c => ({
+            column_name: c.sourceColumn,
+            category: c.category,
+            target_field: c.targetField,
+          }))}
+          allColumnsClassified={columns.length > 0 && columns.every(c => c.category !== null)}
+          onSummaryComplete={onTabSummaryChange}
+          className={embedded ? '' : 'max-w-4xl mx-auto'}
+        />
+      </div>
 
       <div
         ref={containerRef}
         tabIndex={0}
         onKeyDown={handleKeyDown}
-        className="focus:outline-none"
+        className="focus:outline-none flex-1 min-h-0 flex flex-col"
       >
-      <Card className={embedded ? '' : 'max-w-4xl mx-auto'}>
-        <CardHeader className={embedded ? 'pb-3' : ''}>
+      <Card className={`${embedded ? '' : 'max-w-4xl mx-auto'} flex flex-col flex-1 min-h-0 overflow-hidden`}>
+        <CardHeader className={`flex-shrink-0 ${embedded ? 'pb-3' : ''}`}>
           {/* Breadcrumb - hide in embedded mode since tabs show context */}
           {!embedded && (
             <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
@@ -1715,19 +1747,36 @@ function ClassifyPhase({
                 AI Suggest All
               </Button>
               <div className="text-right">
-                <div className="text-2xl font-bold tabular-nums">{totalClassified}/{totalColumns}</div>
-                <div className="text-xs text-muted-foreground flex items-center justify-end gap-1.5">
-                  classified
-                  <span className={`inline-flex items-center gap-1 transition-opacity duration-200 ${isSavingDraft ? 'opacity-100' : 'opacity-0'}`}>
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                  </span>
-                </div>
+                {needsAction > 0 ? (
+                  <>
+                    <div className="text-2xl font-bold tabular-nums">{needsAction}</div>
+                    <div className="text-xs text-muted-foreground flex items-center justify-end gap-1.5">
+                      left to classify
+                      <span className={`inline-flex items-center gap-1 transition-opacity duration-200 ${isSavingDraft ? 'opacity-100' : 'opacity-0'}`}>
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      </span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="text-2xl font-bold tabular-nums flex items-center justify-end gap-1.5 text-green-600">
+                      <Check className="h-5 w-5" />
+                      Done
+                    </div>
+                    <div className="text-xs text-muted-foreground flex items-center justify-end gap-1.5">
+                      {totalClassified} classified
+                      <span className={`inline-flex items-center gap-1 transition-opacity duration-200 ${isSavingDraft ? 'opacity-100' : 'opacity-0'}`}>
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      </span>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           </div>
 
           {/* Stats badges - static, no animation noise */}
-          <div className="flex flex-wrap gap-2 mt-4">
+          <div className="flex flex-wrap items-center gap-2 mt-4">
             {stats.partner > 0 && (
               <Badge variant="outline" className="gap-1 bg-blue-500/10 text-blue-600 border-blue-500/30">
                 <Building2 className="h-3 w-3" />
@@ -1751,13 +1800,6 @@ function ClassifyPhase({
                 <span>ASIN</span>
               </Badge>
             )}
-            {stats.weekly > 0 && (
-              <Badge variant="outline" className="gap-1 bg-purple-500/10 text-purple-600 border-purple-500/30">
-                <Calendar className="h-3 w-3" />
-                <span className="tabular-nums">{stats.weekly}</span>
-                <span>Weekly</span>
-              </Badge>
-            )}
             {stats.computed > 0 && (
               <Badge variant="outline" className="gap-1 bg-cyan-500/10 text-cyan-600 border-cyan-500/30">
                 <Calculator className="h-3 w-3" />
@@ -1777,6 +1819,15 @@ function ClassifyPhase({
                 <span className="tabular-nums">{stats.unclassified}</span>
                 <span>unclassified</span>
               </Badge>
+            )}
+            {/* Auto-handled summary — shows what's handled outside the main list */}
+            {(weeklyColumns.length > 0 || emptyColumns.length > 0) && (
+              <span className="text-xs text-muted-foreground ml-1">
+                {weeklyColumns.length > 0 && <span className="tabular-nums">{weeklyColumns.length} weekly</span>}
+                {weeklyColumns.length > 0 && emptyColumns.length > 0 && ' · '}
+                {emptyColumns.length > 0 && <span className="tabular-nums">{emptyColumns.length} empty</span>}
+                <span className="opacity-60"> auto-handled</span>
+              </span>
             )}
           </div>
 
@@ -1814,9 +1865,9 @@ function ClassifyPhase({
             </motion.div>
           )}
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="flex flex-col flex-1 min-h-0 gap-4">
           {/* Subtle filter tabs - scrollable on mobile */}
-          <div className="flex items-center gap-1 pb-2 border-b border-border/50 overflow-x-auto scrollbar-hide">
+          <div className="flex items-center gap-1 pb-2 border-b border-border/50 overflow-x-auto scrollbar-hide flex-shrink-0">
             <span className="text-xs text-muted-foreground mr-2 flex-shrink-0">View:</span>
             <button
               onClick={() => setActiveFilter('all')}
@@ -1826,7 +1877,7 @@ function ClassifyPhase({
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted'
               }`}
             >
-              All ({totalColumns})
+              All ({totalActionable})
             </button>
             {stats.unclassified > 0 && (
               <button
@@ -1876,18 +1927,6 @@ function ClassifyPhase({
                 ASIN ({stats.asin})
               </button>
             )}
-            {stats.weekly > 0 && (
-              <button
-                onClick={() => setActiveFilter('weekly')}
-                className={`px-2 py-1 rounded text-xs transition-all ${
-                  activeFilter === 'weekly'
-                    ? 'bg-purple-500 text-white font-medium'
-                    : 'text-purple-600 hover:bg-purple-500/10'
-                }`}
-              >
-                Weekly ({stats.weekly})
-              </button>
-            )}
             {stats.computed > 0 && (
               <button
                 onClick={() => setActiveFilter('computed')}
@@ -1915,7 +1954,7 @@ function ClassifyPhase({
           </div>
 
           {/* Search bar */}
-          <div className="flex items-center gap-2 py-2">
+          <div className="flex items-center gap-2 py-2 flex-shrink-0">
             <div className="relative flex-1">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/50" />
               <input
@@ -1990,7 +2029,7 @@ function ClassifyPhase({
           </div>
 
           {/* Desktop Table View */}
-          <ScrollArea className="h-[380px] hidden md:block">
+          <ScrollArea className="flex-1 min-h-[200px] hidden md:block">
             <div
               className="space-y-1 pr-3"
               onMouseMove={() => { if (usingKeyboard) setUsingKeyboard(false) }}
@@ -2454,43 +2493,82 @@ function ClassifyPhase({
             </div>
           </ScrollArea>
 
-          {/* Empty columns — auto-skipped, collapsed by default */}
-          {emptyColumns.length > 0 && (
-            <div className="border-t border-border">
-              <button
-                type="button"
-                onClick={() => setShowEmptyColumns(!showEmptyColumns)}
-                className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-muted-foreground hover:bg-muted/50 transition-colors"
-              >
-                <ChevronRight className={`h-4 w-4 transition-transform duration-200 ${showEmptyColumns ? 'rotate-90' : ''}`} />
-                <span>Empty columns ({emptyColumns.length})</span>
-                <span className="text-xs opacity-60">auto-skipped</span>
-              </button>
-              {showEmptyColumns && (
-                <div className="px-4 pb-3 space-y-1">
-                  {emptyColumns.map((col) => {
-                    const idx = col.sourceIndex
-                    return (
-                      <div
-                        key={idx}
-                        className="flex items-center gap-3 px-3 py-2 rounded-lg bg-muted/20 text-sm text-muted-foreground"
-                      >
-                        <span className="text-xs tabular-nums text-muted-foreground/50 w-6 text-right">{idx + 1}</span>
-                        <span className="font-medium">{col.sourceColumn}</span>
-                        <span className="ml-auto flex items-center gap-1.5 text-xs">
-                          <SkipForward className="h-3 w-3" />
-                          Skip
-                        </span>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-          )}
+          {/* Auto-handled sections — collapsed by default, flex-shrink-0 so they don't steal space from scroll area */}
+          <div className="flex-shrink-0">
+            {/* Weekly columns — auto-classified, collapsed by default */}
+            {weeklyColumns.length > 0 && (
+              <div className="border-t border-border">
+                <button
+                  type="button"
+                  onClick={() => setShowWeeklyColumns(!showWeeklyColumns)}
+                  className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-muted-foreground hover:bg-muted/50 transition-colors"
+                >
+                  <ChevronRight className={`h-4 w-4 transition-transform duration-200 ${showWeeklyColumns ? 'rotate-90' : ''}`} />
+                  <Calendar className="h-3.5 w-3.5 text-purple-500" />
+                  <span>Weekly columns ({weeklyColumns.length})</span>
+                  <span className="text-xs opacity-60">auto-mapped to weekly_statuses</span>
+                </button>
+                {showWeeklyColumns && (
+                  <div className="px-4 pb-3 space-y-1 max-h-[200px] overflow-y-auto">
+                    {weeklyColumns.map((col) => {
+                      const idx = col.sourceIndex
+                      return (
+                        <div
+                          key={idx}
+                          className="flex items-center gap-3 px-3 py-2 rounded-lg bg-purple-500/5 text-sm text-muted-foreground"
+                        >
+                          <span className="text-xs tabular-nums text-muted-foreground/50 w-6 text-right">{idx + 1}</span>
+                          <span className="font-medium">{col.sourceColumn}</span>
+                          <span className="ml-auto flex items-center gap-1.5 text-xs text-purple-600">
+                            <Calendar className="h-3 w-3" />
+                            Weekly
+                          </span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Empty columns — auto-skipped, collapsed by default */}
+            {emptyColumns.length > 0 && (
+              <div className="border-t border-border">
+                <button
+                  type="button"
+                  onClick={() => setShowEmptyColumns(!showEmptyColumns)}
+                  className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-muted-foreground hover:bg-muted/50 transition-colors"
+                >
+                  <ChevronRight className={`h-4 w-4 transition-transform duration-200 ${showEmptyColumns ? 'rotate-90' : ''}`} />
+                  <span>Empty columns ({emptyColumns.length})</span>
+                  <span className="text-xs opacity-60">auto-skipped</span>
+                </button>
+                {showEmptyColumns && (
+                  <div className="px-4 pb-3 space-y-1 max-h-[200px] overflow-y-auto">
+                    {emptyColumns.map((col) => {
+                      const idx = col.sourceIndex
+                      return (
+                        <div
+                          key={idx}
+                          className="flex items-center gap-3 px-3 py-2 rounded-lg bg-muted/20 text-sm text-muted-foreground"
+                        >
+                          <span className="text-xs tabular-nums text-muted-foreground/50 w-6 text-right">{idx + 1}</span>
+                          <span className="font-medium">{col.sourceColumn}</span>
+                          <span className="ml-auto flex items-center gap-1.5 text-xs">
+                            <SkipForward className="h-3 w-3" />
+                            Skip
+                          </span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
 
           {/* Keyboard shortcuts legend - hidden on mobile */}
-          <div className="hidden md:block p-3 rounded-lg bg-muted/30 border border-border">
+          <div className="hidden md:block flex-shrink-0 p-3 rounded-lg bg-muted/30 border border-border">
             <div className="text-xs text-muted-foreground mb-2">Shortcuts</div>
             <div className="flex flex-wrap gap-x-5 gap-y-1.5 text-xs text-muted-foreground">
               <div className="flex items-center gap-1.5">
@@ -2536,7 +2614,7 @@ function ClassifyPhase({
             </div>
           </div>
 
-          <div className="flex items-center justify-between pt-4 border-t">
+          <div className="flex items-center justify-between pt-4 border-t flex-shrink-0">
             <Button
               type="button"
               variant="outline"
@@ -3113,7 +3191,11 @@ function MapPhase({
   onAuthorityChange,
   onConfirm,
   onBack,
+  onNavigateAfterSave,
+  onSyncAfterSave,
   embedded = false,
+  isSaving = false,
+  saveSuccess = false,
 }: {
   rawData: TabRawData
   headerRow: number
@@ -3122,7 +3204,11 @@ function MapPhase({
   onAuthorityChange: (index: number, authority: SourceAuthority) => void
   onConfirm: () => void
   onBack: () => void
+  onNavigateAfterSave?: () => void
+  onSyncAfterSave?: () => void
   embedded?: boolean
+  isSaving?: boolean
+  saveSuccess?: boolean
 }) {
   const sampleRows = rawData.rows.slice(headerRow + 1, headerRow + 4)
 
@@ -3136,9 +3222,8 @@ function MapPhase({
   const renderColumnMapper = (col: ColumnClassification, entityType: EntityType, colorClass: string) => {
     const groupedFields = getGroupedFieldDefs(entityType)
     return (
-      <motion.div
+      <div
         key={col.sourceIndex}
-        layout
         className={`p-3 rounded-lg border transition-colors hover:bg-accent/50 hover:border-accent-foreground/20 ${colorClass}`}
       >
         <div className="flex items-center justify-between mb-2">
@@ -3206,14 +3291,177 @@ function MapPhase({
             </button>
           </div>
         )}
+      </div>
+    )
+  }
+
+  // Build stats for success state
+  const mappedCount = partnerColumns.filter(c => c.targetField).length
+    + staffColumns.filter(c => c.targetField).length
+    + asinColumns.filter(c => c.targetField).length
+
+  // Auto-progress: save complete → brief success → auto-sync
+  const [successPhase, setSuccessPhase] = useState<'complete' | 'syncing'>('complete')
+
+  useEffect(() => {
+    if (saveSuccess && onSyncAfterSave) {
+      // Brief success flash, then auto-transition to sync
+      const t1 = setTimeout(() => setSuccessPhase('syncing'), 1200)
+      const t2 = setTimeout(() => onSyncAfterSave(), 2000)
+      return () => { clearTimeout(t1); clearTimeout(t2) }
+    }
+  }, [saveSuccess, onSyncAfterSave])
+
+  // Saving/Success takeover
+  if (isSaving || saveSuccess) {
+    return (
+      <motion.div {...fadeInUp} className="flex flex-col" style={{ height: 'calc(100vh - 220px)' }}>
+        <Card className={`${embedded ? '' : 'max-w-5xl mx-auto w-full'} flex flex-col flex-1 min-h-0 overflow-hidden`}>
+          <div className="flex-1 flex items-center justify-center">
+            <AnimatePresence mode="wait">
+              {saveSuccess && successPhase === 'syncing' ? (
+                /* Phase 3: Transitioning to sync */
+                <motion.div
+                  key="syncing"
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.3, ease: easeOut }}
+                  className="flex flex-col items-center gap-5 text-center"
+                >
+                  <motion.div
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+                    className="w-16 h-16 rounded-full bg-primary/5 border border-primary/20 flex items-center justify-center"
+                  >
+                    <RefreshCw className="h-8 w-8 text-primary" />
+                  </motion.div>
+                  <div className="space-y-1">
+                    <h2 className="text-xl font-semibold">Starting sync...</h2>
+                    <p className="text-sm text-muted-foreground">
+                      Preparing to push data to partner records
+                    </p>
+                  </div>
+                </motion.div>
+              ) : saveSuccess ? (
+                /* Phase 2: Mapping saved — brief success flash */
+                <motion.div
+                  key="success"
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  transition={{ type: 'spring', bounce: 0.35, duration: 0.6 }}
+                  className="flex flex-col items-center gap-6 text-center px-8"
+                >
+                  {/* Animated checkmark circle */}
+                  <motion.div
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    transition={{ type: 'spring', bounce: 0.5, duration: 0.5 }}
+                    className="w-20 h-20 rounded-full bg-green-500/10 border-2 border-green-500/30 flex items-center justify-center"
+                  >
+                    <motion.div
+                      initial={{ scale: 0, rotate: -45 }}
+                      animate={{ scale: 1, rotate: 0 }}
+                      transition={{ type: 'spring', bounce: 0.4, duration: 0.5, delay: 0.15 }}
+                    >
+                      <Check className="h-10 w-10 text-green-500" strokeWidth={2.5} />
+                    </motion.div>
+                  </motion.div>
+
+                  <div className="space-y-2">
+                    <motion.h2
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.2, duration: 0.3, ease: easeOut }}
+                      className="text-2xl font-semibold"
+                    >
+                      Mapping Saved
+                    </motion.h2>
+                  </div>
+
+                  {/* Stats summary */}
+                  <motion.div
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.3, duration: 0.3, ease: easeOut }}
+                    className="flex flex-wrap items-center justify-center gap-3"
+                  >
+                    {partnerColumns.length > 0 && (
+                      <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-blue-500/10 text-blue-600 text-sm font-medium">
+                        <Building2 className="h-3.5 w-3.5" />
+                        {partnerColumns.length} partner
+                      </div>
+                    )}
+                    {staffColumns.length > 0 && (
+                      <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-green-500/10 text-green-600 text-sm font-medium">
+                        <Users className="h-3.5 w-3.5" />
+                        {staffColumns.length} staff
+                      </div>
+                    )}
+                    {asinColumns.length > 0 && (
+                      <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-orange-500/10 text-orange-600 text-sm font-medium">
+                        <Package className="h-3.5 w-3.5" />
+                        {asinColumns.length} ASIN
+                      </div>
+                    )}
+                    {weeklyColumns.length > 0 && (
+                      <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-purple-500/10 text-purple-600 text-sm font-medium">
+                        <Calendar className="h-3.5 w-3.5" />
+                        {weeklyColumns.length} weekly
+                      </div>
+                    )}
+                  </motion.div>
+
+                  {/* No onSyncAfterSave = manual navigation fallback */}
+                  {!onSyncAfterSave && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.55, duration: 0.3, ease: easeOut }}
+                    >
+                      <Button
+                        onClick={onNavigateAfterSave}
+                        className="gap-2 mt-2"
+                        size="lg"
+                      >
+                        Continue to Overview
+                        <ArrowRight className="h-4 w-4" />
+                      </Button>
+                    </motion.div>
+                  )}
+                </motion.div>
+              ) : (
+                /* Phase 1: Saving mapping */
+                <motion.div
+                  key="saving"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  transition={{ duration: 0.2 }}
+                  className="flex flex-col items-center gap-5 text-center"
+                >
+                  <div className="w-16 h-16 rounded-full bg-primary/5 border border-primary/20 flex items-center justify-center">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  </div>
+                  <div className="space-y-1">
+                    <h2 className="text-xl font-semibold">Saving your mapping...</h2>
+                    <p className="text-sm text-muted-foreground">
+                      {mappedCount} fields + {weeklyColumns.length} weekly columns
+                    </p>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        </Card>
       </motion.div>
     )
   }
 
   return (
-    <motion.div {...fadeInUp} className="space-y-6">
-      <Card className={embedded ? '' : 'max-w-5xl mx-auto'}>
-        <CardHeader className={embedded ? 'pb-3' : ''}>
+    <motion.div {...fadeInUp} className="flex flex-col" style={{ height: 'calc(100vh - 220px)' }}>
+      <Card className={`${embedded ? '' : 'max-w-5xl mx-auto w-full'} flex flex-col flex-1 min-h-0 overflow-hidden`}>
+        <CardHeader className={`${embedded ? 'pb-3' : ''} shrink-0`}>
           <CardTitle className={`flex items-center gap-2 ${embedded ? 'text-base' : ''}`}>
             <Link2 className={`${embedded ? 'h-4 w-4' : 'h-5 w-5'} text-orange-500`} />
             {embedded ? 'Map Fields' : 'Map to database fields'}
@@ -3222,16 +3470,16 @@ function MapPhase({
             {embedded ? 'Connect columns to database fields.' : 'Connect your classified columns to specific fields. Set each as Source of Truth or Reference.'}
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
+        <CardContent className="flex-1 overflow-auto min-h-0 space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {/* Partner columns */}
             {partnerColumns.length > 0 && (
-              <div>
-                <h4 className="text-sm font-medium mb-3 flex items-center gap-2 text-blue-600">
+              <div className="flex flex-col min-h-0">
+                <h4 className="text-sm font-medium mb-3 flex items-center gap-2 text-blue-600 shrink-0">
                   <Building2 className="h-4 w-4" />
                   Partner Fields ({partnerColumns.length})
                 </h4>
-                <ScrollArea className="h-[calc(100vh-400px)] min-h-[300px]">
+                <ScrollArea className="flex-1 min-h-[200px]">
                   <div className="space-y-2 pr-2">
                     {partnerColumns.map(col => renderColumnMapper(col, 'partners', 'bg-blue-500/5 border-blue-500/20'))}
                   </div>
@@ -3241,12 +3489,12 @@ function MapPhase({
 
             {/* Staff columns */}
             {staffColumns.length > 0 && (
-              <div>
-                <h4 className="text-sm font-medium mb-3 flex items-center gap-2 text-green-600">
+              <div className="flex flex-col min-h-0">
+                <h4 className="text-sm font-medium mb-3 flex items-center gap-2 text-green-600 shrink-0">
                   <Users className="h-4 w-4" />
                   Staff Fields ({staffColumns.length})
                 </h4>
-                <ScrollArea className="h-[calc(100vh-400px)] min-h-[300px]">
+                <ScrollArea className="flex-1 min-h-[200px]">
                   <div className="space-y-2 pr-2">
                     {staffColumns.map(col => renderColumnMapper(col, 'staff', 'bg-green-500/5 border-green-500/20'))}
                   </div>
@@ -3256,12 +3504,12 @@ function MapPhase({
 
             {/* ASIN columns */}
             {asinColumns.length > 0 && (
-              <div>
-                <h4 className="text-sm font-medium mb-3 flex items-center gap-2 text-orange-600">
+              <div className="flex flex-col min-h-0">
+                <h4 className="text-sm font-medium mb-3 flex items-center gap-2 text-orange-600 shrink-0">
                   <Package className="h-4 w-4" />
                   ASIN Fields ({asinColumns.length})
                 </h4>
-                <ScrollArea className="h-[calc(100vh-400px)] min-h-[300px]">
+                <ScrollArea className="flex-1 min-h-[200px]">
                   <div className="space-y-2 pr-2">
                     {asinColumns.map(col => renderColumnMapper(col, 'asins', 'bg-orange-500/5 border-orange-500/20'))}
                   </div>
@@ -3299,9 +3547,11 @@ function MapPhase({
               </div>
             )}
           </div>
+        </CardContent>
 
-          {/* Legend */}
-          <div className="flex items-center justify-center gap-6 text-xs text-muted-foreground pt-4 border-t">
+        {/* Always-visible footer */}
+        <div className="shrink-0 border-t px-6 py-4 space-y-3 bg-card">
+          <div className="flex items-center justify-center gap-6 text-xs text-muted-foreground">
             <span className="flex items-center gap-1">
               <Star className="h-3 w-3 text-amber-500 fill-amber-500" />
               Source of Truth = This sheet is authoritative
@@ -3311,18 +3561,17 @@ function MapPhase({
               Reference = Read-only, don&apos;t update master
             </span>
           </div>
-
-          <div className="flex items-center justify-between pt-4 border-t">
+          <div className="flex items-center justify-between">
             <Button variant="outline" onClick={onBack} className="gap-2">
               <ArrowLeft className="h-4 w-4" />
               Back to Classify
             </Button>
-            <Button onClick={onConfirm} className="gap-2">
+            <Button onClick={onConfirm} className="gap-2 min-w-[180px]">
               <CheckCircle2 className="h-4 w-4" />
               Complete Mapping
             </Button>
           </div>
-        </CardContent>
+        </div>
       </Card>
     </motion.div>
   )

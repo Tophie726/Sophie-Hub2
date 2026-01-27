@@ -58,6 +58,25 @@ Design for touch first, then add hover enhancements:
 - Only allow tabbing through visible elements
 - Ensure keyboard navigation scrolls elements into view
 
+**Input Mode Switching**: When a component supports both keyboard navigation and mouse hover, they must be mutually exclusive. Use a `usingKeyboard` state:
+- `onKeyDown` sets `usingKeyboard = true` → shows focus indicator, hides hover
+- `onMouseMove` on container sets `usingKeyboard = false` → hides focus indicator, enables hover
+- Never show both focus ring and hover highlight simultaneously
+
+```tsx
+const [usingKeyboard, setUsingKeyboard] = useState(false)
+
+// In keyboard handler:
+if (!usingKeyboard) setUsingKeyboard(true)
+
+// On container:
+onMouseMove={() => { if (usingKeyboard) setUsingKeyboard(false) }}
+
+// In row className:
+const isFocused = usingKeyboard && focusedIndex === idx
+className={`${isFocused ? 'border-l-primary' : ''} ${!usingKeyboard ? 'hover:bg-muted/30' : ''}`}
+```
+
 ### Accessibility by Default
 
 - Every animation needs `prefers-reduced-motion` support
@@ -729,6 +748,27 @@ const modKey = isMac ? '⌘' : 'Ctrl';
   <div className="flex gap-2 min-w-max">
 ```
 
+### Viewport-Aware Panels
+
+When a panel contains a scrollable list plus fixed header/footer, use flex-col with viewport height to keep buttons visible:
+
+```tsx
+// Container fills viewport minus chrome (header, tabs, padding)
+<div className="flex flex-col h-[calc(100vh-180px)]">
+  <div className="flex-shrink-0">Header / Controls</div>
+  <ScrollArea className="flex-1 min-h-[200px]">
+    {/* Scrollable content */}
+  </ScrollArea>
+  <div className="flex-shrink-0">Footer / Action Buttons</div>
+</div>
+```
+
+Key rules:
+- **Never use fixed heights** like `h-[380px]` on scroll areas inside panels — buttons get pushed off-screen
+- **`flex-shrink-0`** on all non-scrollable elements (header, footer, filter bars)
+- **`flex-1 min-h-0`** on intermediate flex containers to allow shrinking below content size
+- **`min-h-[200px]`** on scroll area as safety floor
+
 ---
 
 ## 8. Error Handling
@@ -762,6 +802,30 @@ Automatically handles auth errors:
 ### Lists & Virtualization
 
 Virtualize large lists with `@tanstack/react-virtual`.
+
+**Never use Framer Motion `layout` prop on large lists** (100+ items). The `layout` prop triggers layout recalculation on every state change across all items. Use plain `<div>` with CSS `transition-colors` instead:
+
+```tsx
+// BAD — 200 items with layout prop = severe lag
+<motion.div layout className="..." />
+
+// GOOD — plain div with CSS transitions
+<div className="transition-colors duration-100 active:scale-[0.997]" />
+```
+
+### Keyboard Navigation Scroll
+
+Use `behavior: 'instant'` for keyboard-driven `scrollIntoView` (ArrowUp/ArrowDown). Smooth scrolling causes visible lag when holding keys because each animation must complete before the next starts:
+
+```tsx
+// BAD — smooth + rapid keystrokes = queued animations, visible lag
+row.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+
+// GOOD — instant scroll on keyboard, smooth only for infrequent user clicks
+row.scrollIntoView({ block: 'nearest', behavior: 'instant' })
+```
+
+Reserve `behavior: 'smooth'` for user-initiated one-off actions (clicking a row, jumping to a section).
 
 ### React Performance
 

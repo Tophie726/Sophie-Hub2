@@ -77,11 +77,21 @@ export async function getSheetPreview(
 
   const sheets = google.sheets({ version: 'v4', auth })
 
-  // Get spreadsheet metadata
-  const metadata = await sheets.spreadsheets.get({
-    spreadsheetId,
-    fields: 'spreadsheetId,properties.title,sheets.properties',
-  })
+  // Fetch metadata and first-tab preview data in parallel
+  // Range without sheet name defaults to the first visible sheet
+  const [metadata, previewData] = await Promise.all([
+    sheets.spreadsheets.get({
+      spreadsheetId,
+      fields: 'spreadsheetId,properties.title,sheets.properties',
+    }),
+    sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: 'A1:Z6',
+    }).catch((error) => {
+      console.error('Error fetching preview data:', error)
+      return null
+    }),
+  ])
 
   const tabs: SheetTab[] = (metadata.data.sheets || []).map((sheet) => ({
     sheetId: sheet.properties?.sheetId || 0,
@@ -90,25 +100,15 @@ export async function getSheetPreview(
     columnCount: sheet.properties?.gridProperties?.columnCount || 0,
   }))
 
-  // Get preview data from first tab (first 6 rows)
   const firstTab = tabs[0]
   let headers: string[] = []
   let rows: string[][] = []
 
-  if (firstTab) {
-    try {
-      const previewData = await sheets.spreadsheets.values.get({
-        spreadsheetId,
-        range: `'${firstTab.title}'!A1:Z6`,
-      })
-
-      const values = previewData.data.values || []
-      if (values.length > 0) {
-        headers = values[0].map((v) => String(v || ''))
-        rows = values.slice(1).map((row) => row.map((v) => String(v || '')))
-      }
-    } catch (error) {
-      console.error('Error fetching preview data:', error)
+  if (previewData) {
+    const values = previewData.data.values || []
+    if (values.length > 0) {
+      headers = values[0].map((v) => String(v || ''))
+      rows = values.slice(1).map((row) => row.map((v) => String(v || '')))
     }
   }
 

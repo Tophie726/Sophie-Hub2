@@ -14,6 +14,7 @@ import {
   Clock,
   CheckCircle2,
   AlertCircle,
+  Sparkles,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -29,6 +30,11 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
 import { TabCard } from './tab-card'
 import { TabListRow } from './tab-list-row'
 import { SyncHistoryPanel } from '../sync-history-panel'
@@ -72,6 +78,8 @@ interface TabOverviewDashboardProps {
   onSync?: () => Promise<void>
   isSyncing?: boolean
   syncStatus?: SyncStatus
+  // Preview loading state — suppresses progress flash while tabs are still being discovered
+  isLoadingPreview?: boolean
 }
 
 const easeOut: [number, number, number, number] = [0.22, 1, 0.36, 1]
@@ -123,6 +131,7 @@ export function TabOverviewDashboard({
   onSync,
   isSyncing = false,
   syncStatus,
+  isLoadingPreview = false,
 }: TabOverviewDashboardProps) {
   const [showHidden, setShowHidden] = useState(false)
   const [showFlagged, setShowFlagged] = useState(true)
@@ -152,11 +161,80 @@ export function TabOverviewDashboard({
         <div className="min-w-0 flex-1">
           <h2 className="text-base md:text-lg font-semibold truncate">{sourceName} Overview</h2>
           <p className="text-xs md:text-sm text-muted-foreground">
-            {tabs.length} tab{tabs.length !== 1 ? 's' : ''} · {totalColumns} cols · {overallProgress}%
+            {tabs.length} tab{tabs.length !== 1 ? 's' : ''} · {isLoadingPreview ? (
+              <span className="inline-flex items-center gap-1">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                discovering tabs...
+              </span>
+            ) : (
+              <>{totalColumns} cols · {overallProgress}%</>
+            )}
           </p>
         </div>
 
         <div className="flex items-center gap-2 flex-shrink-0">
+          {/* AI Source Analysis button */}
+          {spreadsheetId && (
+            <Popover>
+              <TooltipProvider>
+                <Tooltip>
+                  <PopoverTrigger asChild>
+                    <TooltipTrigger asChild>
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                        <Sparkles className="h-4 w-4 text-purple-500" />
+                      </Button>
+                    </TooltipTrigger>
+                  </PopoverTrigger>
+                  <TooltipContent side="bottom">
+                    <span className="text-xs">AI Source Analysis</span>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              <PopoverContent side="bottom" align="end" className="w-[400px] p-0">
+                <AISourceAnalysis
+                  sourceName={sourceName}
+                  sourceId={sourceId || ''}
+                  spreadsheetId={spreadsheetId}
+                  tabs={tabs.map(t => ({ id: t.id, tab_name: t.tab_name }))}
+                  compact
+                />
+              </PopoverContent>
+            </Popover>
+          )}
+
+          {/* Sync History button */}
+          {sourceId && onSync && (
+            <Popover>
+              <TooltipProvider>
+                <Tooltip>
+                  <PopoverTrigger asChild>
+                    <TooltipTrigger asChild>
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                        <Clock className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                  </PopoverTrigger>
+                  <TooltipContent side="bottom">
+                    <span className="text-xs">Sync History</span>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              <PopoverContent side="bottom" align="end" className="w-[360px] p-0">
+                <div className="p-3 border-b">
+                  <h4 className="text-sm font-medium">Sync History</h4>
+                </div>
+                <div className="p-3 max-h-[300px] overflow-auto">
+                  <SyncHistoryPanel
+                    key={syncHistoryKey}
+                    dataSourceId={sourceId}
+                    limit={5}
+                    onRefresh={() => setSyncHistoryKey(k => k + 1)}
+                  />
+                </div>
+              </PopoverContent>
+            </Popover>
+          )}
+
           {/* Sync button */}
           {onSync && (
             <TooltipProvider>
@@ -237,52 +315,24 @@ export function TabOverviewDashboard({
       <div className="space-y-2">
         <div className="flex items-center justify-between text-sm">
           <span className="text-muted-foreground">Overall mapping progress</span>
-          <span className="font-medium">{overallProgress}%</span>
+          {isLoadingPreview ? (
+            <span className="text-muted-foreground text-xs">Loading...</span>
+          ) : (
+            <span className="font-medium">{overallProgress}%</span>
+          )}
         </div>
-        <Progress value={overallProgress} className="h-2" />
-      </div>
-
-      {/* AI Source Analysis */}
-      {spreadsheetId && (
-        <AISourceAnalysis
-          sourceName={sourceName}
-          sourceId={sourceId || ''}
-          spreadsheetId={spreadsheetId}
-          tabs={tabs.map(t => ({ id: t.id, tab_name: t.tab_name }))}
-        />
-      )}
-
-      {/* Sync history collapsible */}
-      {sourceId && onSync && (
-        <Collapsible open={showSyncHistory} onOpenChange={setShowSyncHistory}>
-          <div className="rounded-lg border bg-muted/30 overflow-hidden">
-            <CollapsibleTrigger asChild>
-              <button className="w-full flex items-center justify-between px-4 py-2.5 text-sm hover:bg-muted/50 transition-colors">
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Clock className="h-3.5 w-3.5" />
-                  <span className="text-xs font-medium">Sync History</span>
-                </div>
-                <motion.div
-                  animate={{ rotate: showSyncHistory ? 180 : 0 }}
-                  transition={{ duration: 0.2, ease: easeOut }}
-                >
-                  <ChevronDown className="h-3.5 w-3.5 text-muted-foreground/50" />
-                </motion.div>
-              </button>
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-              <div className="px-4 pb-4">
-                <SyncHistoryPanel
-                  key={syncHistoryKey}
-                  dataSourceId={sourceId}
-                  limit={5}
-                  onRefresh={() => setSyncHistoryKey(k => k + 1)}
-                />
-              </div>
-            </CollapsibleContent>
+        {isLoadingPreview ? (
+          <div className="h-2 rounded-full bg-muted overflow-hidden">
+            <motion.div
+              className="h-full w-1/3 rounded-full bg-primary/30"
+              animate={{ x: ['-100%', '400%'] }}
+              transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
+            />
           </div>
-        </Collapsible>
-      )}
+        ) : (
+          <Progress value={overallProgress} className="h-2" />
+        )}
+      </div>
 
       {/* Main tabs section */}
       <AnimatePresence mode="wait">

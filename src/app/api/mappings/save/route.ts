@@ -131,6 +131,7 @@ export async function POST(request: NextRequest) {
         .update({
           header_row: tabMapping.header_row,
           primary_entity: tabMapping.primary_entity,
+          ...(tabMapping.total_columns != null && { total_columns: tabMapping.total_columns }),
           updated_at: new Date().toISOString(),
         })
         .eq('id', existingTab.id)
@@ -159,6 +160,7 @@ export async function POST(request: NextRequest) {
           tab_name: tabMapping.tab_name,
           header_row: tabMapping.header_row,
           primary_entity: tabMapping.primary_entity,
+          ...(tabMapping.total_columns != null && { total_columns: tabMapping.total_columns }),
         })
         .select('id')
         .single()
@@ -167,9 +169,10 @@ export async function POST(request: NextRequest) {
       tabMappingId = data.id
     }
 
-    // 3. Save column_mappings (for non-weekly and non-computed columns only)
+    // 3. Save column_mappings (all classified columns, including weekly for accurate stats)
+    // Weekly and computed columns are also saved separately (pattern/computed_fields) for sync processing
     const regularMappings = columnMappings.filter(cm =>
-      cm.category !== 'weekly' && cm.category !== 'computed'
+      cm.category !== 'computed'
     )
 
     if (regularMappings.length > 0) {

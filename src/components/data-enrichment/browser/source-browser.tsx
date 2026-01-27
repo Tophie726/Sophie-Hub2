@@ -111,6 +111,9 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
   // Draft stats from SmartMapper for live Overview progress
   const [draftStats, setDraftStats] = useState<Record<string, CategoryStats>>({})
 
+  // Auto-trigger sync preview after mapping save
+  const [pendingSyncAfterSave, setPendingSyncAfterSave] = useState(false)
+
   // Load preview for a source that has no tabs yet
   const loadPreviewForSource = useCallback(async (sourceId: string, spreadsheetId: string) => {
     setIsLoadingPreview(true)
@@ -232,14 +235,14 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
       mappingProgress: 0,
     }))
 
-    // If no preview tabs, just return db tabs
-    if (previewTabs.length === 0) return dbTabs
+    // If no preview tabs, just return db tabs (already alpha from API, but sort for safety)
+    if (previewTabs.length === 0) return dbTabs.sort((a, b) => a.name.localeCompare(b.name))
 
     // Merge: use db tab if it exists for that name, otherwise use preview tab
     // Always prefer preview's columnCount (actual sheet columns) over db's columnCount (mapped columns)
     const dbTabsByName = new Map(dbTabs.map(t => [t.name, t]))
 
-    return previewTabs.map(previewTab => {
+    const merged = previewTabs.map(previewTab => {
       const dbTab = dbTabsByName.get(previewTab.name)
       if (dbTab) {
         // Merge: keep DB data but use preview's actual column count
@@ -250,6 +253,9 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
       }
       return previewTab
     })
+
+    // Sort alphabetically so tab order is stable (DB returns alpha, preview returns sheet order)
+    return merged.sort((a, b) => a.name.localeCompare(b.name))
   })()
 
   const activeTab = sheetTabs.find(t => t.id === activeTabId)
@@ -276,6 +282,7 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
 
   // Handle tab status change
   const handleTabStatusChange = async (tabId: string, status: string, notes?: string) => {
+    const statusLabel = status === 'hidden' ? 'Hidden' : status === 'flagged' ? 'Flagged' : status.charAt(0).toUpperCase() + status.slice(1)
     try {
       // Check if this is a UUID (mapped tab) or a Google Sheet ID (unmapped tab)
       const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(tabId)
@@ -286,7 +293,7 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
         // This is an unmapped tab - need to create a tab_mapping first
         const tab = sheetTabs.find(t => t.id === tabId)
         if (!tab) {
-          console.error('Tab not found:', tabId)
+          toast.error('Tab not found')
           return
         }
 
@@ -313,6 +320,8 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
             setSources(sourcesData.sources || [])
           }
 
+          toast.success(`Tab set to ${statusLabel}`)
+
           // If hiding the currently selected tab, select another visible one
           if (status === 'hidden' && activeTabId === tabId) {
             const visibleTabs = sheetTabs.filter(t => t.id !== tabId && t.status !== 'hidden')
@@ -324,8 +333,7 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
           }
           return
         } else {
-          const error = await createResponse.json()
-          console.error('Failed to create tab mapping:', error)
+          toast.error('Failed to update tab status')
           return
         }
       }
@@ -346,6 +354,8 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
           ),
         })))
 
+        toast.success(`Tab set to ${statusLabel}`)
+
         // If hiding the currently selected tab, select another visible one
         if (status === 'hidden' && activeTabId === actualTabId) {
           const visibleTabs = sheetTabs.filter(t => t.id !== actualTabId && t.status !== 'hidden')
@@ -355,9 +365,12 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
             setActiveTabId(null)
           }
         }
+      } else {
+        toast.error('Failed to update tab status')
       }
     } catch (error) {
       console.error('Error updating tab status:', error)
+      toast.error('Failed to update tab status')
     }
   }
 
@@ -425,6 +438,14 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
     setPreviewResults(results)
     setIsLoadingSyncPreview(false)
   }, [activeSource, isSyncing, isLoadingSyncPreview])
+
+  // Auto-trigger sync preview after mapping save completes and sources refresh
+  useEffect(() => {
+    if (pendingSyncAfterSave && activeSource?.tabs?.length) {
+      setPendingSyncAfterSave(false)
+      handleSync()
+    }
+  }, [pendingSyncAfterSave, activeSource, handleSync])
 
   // Confirm sync: apply changes for real
   const handleConfirmSync = useCallback(async () => {
@@ -672,13 +693,14 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
           tab_name: activeTab.name,
           header_row: mappings.headerRow,
           primary_entity: mappings.primaryEntity,
+          total_columns: mappings.columns.length,
         },
         columnMappings: mappings.columns
-          .filter(col => col.category !== null && col.category !== 'weekly' && col.category !== 'computed')
+          .filter(col => col.category !== null && col.category !== 'computed')
           .map(col => ({
             source_column: col.sourceColumn,
             source_column_index: col.sourceIndex,
-            category: col.category as 'partner' | 'staff' | 'asin' | 'skip',
+            category: col.category as 'partner' | 'staff' | 'asin' | 'weekly' | 'skip',
             target_field: col.targetField,
             authority: col.authority,
             is_key: col.isKey,
@@ -734,12 +756,21 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
             setActiveTabId(tabMappingId)
           }
         }
+
+        // Navigation is now handled by MapPhase's "Continue to Overview" button
+        // via the onNavigateAfterSave callback (SmartMapper's onBack prop)
       } else {
         const error = await response.json()
         console.error('Failed to save mappings:', error)
+        toast.error('Failed to save mappings')
+        throw new Error('Save failed')
       }
     } catch (error) {
       console.error('Error saving mappings:', error)
+      if (!(error instanceof Error && error.message === 'Save failed')) {
+        toast.error('Error saving mappings')
+      }
+      throw error // Re-throw so SmartMapper can reset its saving state
     }
   }
 
@@ -1038,6 +1069,7 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
               onSync={handleSync}
               isSyncing={isSyncing}
               syncStatus={syncStatus}
+              isLoadingPreview={isLoadingPreview}
             />
           </motion.div>
         ) : activeSourceId && activeTabId && activeTab && (activeSource?.spreadsheet_id || activePreview) ? (
@@ -1056,6 +1088,9 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
               dataSourceId={activeSource?.id}
               onComplete={handleMappingComplete}
               onBack={() => setActiveTabId(OVERVIEW_TAB_ID)}
+              onSyncAfterSave={() => {
+                handleSync()
+              }}
               onHeaderConfirmed={handleHeaderConfirmed}
               headerAlreadyConfirmed={activeTab.headerConfirmed}
               confirmedHeaderRow={activeTab.headerRow}

@@ -165,7 +165,7 @@ export async function GET() {
     // Query 2: Fetch ALL tab mappings for all sources in one query
     const { data: allTabs, error: tabsError } = await supabase
       .from('tab_mappings')
-      .select('id, data_source_id, tab_name, primary_entity, header_row, header_confirmed, status, notes, updated_at')
+      .select('id, data_source_id, tab_name, primary_entity, header_row, header_confirmed, status, notes, updated_at, total_columns')
       .in('data_source_id', sourceIds)
       .order('tab_name')
 
@@ -214,7 +214,9 @@ export async function GET() {
           partner: 0, staff: 0, asin: 0, weekly: 0, computed: 0, skip: 0, unmapped: 0,
         }
 
-        const columnCount = columns.length
+        const savedCount = columns.length
+        // Use total_columns from tab_mappings if available, otherwise fall back to saved count
+        const columnCount = tab.total_columns || savedCount
         totalColumns += columnCount
 
         for (const col of columns) {
@@ -230,6 +232,11 @@ export async function GET() {
             sourceCategoryStats.unmapped++
           }
         }
+
+        // Columns not yet saved to column_mappings are unmapped
+        const unsavedCount = Math.max(0, columnCount - savedCount)
+        tabCategoryStats.unmapped += unsavedCount
+        sourceCategoryStats.unmapped += unsavedCount
 
         return {
           id: tab.id,

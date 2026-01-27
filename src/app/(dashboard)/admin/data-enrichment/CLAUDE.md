@@ -246,6 +246,10 @@ Following CLAUDE.md animation guidelines:
 35. **Domain tag auto-classify** - Clicking a tag in the Partner submenu auto-sets category to Partner; same for Staff ✓
 36. **AI model: Opus 4.5** - All AI suggestions use `claude-opus-4-5-20251101` (mapping SDK, analyze-tab, analyze-source) ✓
 37. **Field alias auto-matching** - Field registry supports `aliases` array per field. Auto-matcher checks name, label, AND aliases. E.g. "Email Address" → `client_email`, "Phone Number" → `client_phone`, "Commission Structure" → `commission_rate`. Covers partners (20 fields), staff (17), ASINs (10). ✓
+38. **Classify phase: actionable workload counter** - Counter shows "X left to classify" (only columns needing user action). Weekly columns (auto-mapped to weekly_statuses) and empty columns (auto-skipped) shown in collapsed sections below main list. Stats badges exclude weekly. Layout uses flex-col with viewport height so footer buttons ("Change Header Row" / "Continue to Field Mapping") never scroll off-screen. ✓
+39. **Accurate progress calculation** - `total_columns` on `tab_mappings` stores actual sheet column count. API uses it as denominator instead of `column_mappings.length` (which only counted saved columns → 11/11 = 100% bug). Weekly columns now also saved to `column_mappings` for accurate stats. ✓
+40. **Confirm mapping UX** - "Complete Mapping" button shows inline states: default → Saving (spinner) → Saved (green checkmark). 1.2s pause lets user see success before Overview transition. No auto-sync — user triggers sync manually. ✓
+41. **Entity versioning (time machine)** - PostgreSQL triggers on `partners`, `staff`, `asins` capture every INSERT/UPDATE/DELETE into `entity_versions` table. Stores old/new row JSONB + changed_fields array. Three-layer protection: entity_versions (row snapshots) + field_lineage (source provenance) + source_data (raw import capture). ✓
 
 ### What's TODO 🚧
 

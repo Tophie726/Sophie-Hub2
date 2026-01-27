@@ -242,6 +242,7 @@ The heart of this rebuild. A visual interface that:
    - **Reference** (📋): Read-only lookup, doesn't update master record
 5. Stages changes for review before committing
 6. Tracks lineage (where did this value come from?)
+7. Syncs data to entity tables with dry-run preview, batch processing, and `source_data` JSONB capture for zero data loss
 
 **Two-Layer Data System**: Sheets feed database initially, but individual fields can be migrated to "app-native" over time as adoption grows. See `/src/app/(dashboard)/admin/data-enrichment/CLAUDE.md` for full details.
 
@@ -442,6 +443,55 @@ const deps = getReferencedEntities('partners') // → ['staff']
 ```
 
 Reference fields encode which entity they point to, the match field, and storage mechanism (direct FK vs junction table). This powers the MapPhase grouped dropdown, AI mapping suggestions, and the analyze-source route.
+
+**Field Alias Auto-Matching**: Each field definition supports an optional `aliases` array for fuzzy column name matching during the Map phase. When source columns are auto-matched to entity fields, the matcher checks `name`, `label`, and all `aliases` (case-insensitive). Example: a source column "Email Address" auto-matches to `client_email` via its alias.
+
+### Zero-Data-Loss Source Capture
+
+All entity tables (`partners`, `staff`, `asins`) have a `source_data` JSONB column that captures **every raw value** from every synced source row — including unmapped and skipped columns. This ensures no data is ever lost during import.
+
+```typescript
+// Structure: { connector: { tab_name: { original_header: raw_value } } }
+source_data: {
+  gsheets: {
+    "Master Client Sheet": {
+      "Brand Name": "Acme Corp",
+      "Seller Central Name": "acme-us",  // unmapped column — still captured
+      "Email Address": "hello@acme.com"
+    }
+  }
+}
+```
+
+Re-syncing the same tab replaces that tab's data; other tabs are preserved (additive merge at connector+tab level).
+
+### Entity Versioning (Time Machine)
+
+Every INSERT, UPDATE, and DELETE on core entity tables (`partners`, `staff`, `asins`) is automatically captured by PostgreSQL triggers into the `entity_versions` table. This provides full point-in-time reconstruction of any entity.
+
+```sql
+-- What did this partner look like before the last sync?
+SELECT old_data, changed_fields, changed_at
+FROM entity_versions
+WHERE entity_id = '<partner-uuid>' AND entity_type = 'partners'
+ORDER BY changed_at DESC;
+```
+
+**What's stored per change:**
+- `operation`: INSERT / UPDATE / DELETE
+- `old_data`: Full row JSONB before the change (NULL on INSERT)
+- `new_data`: Full row JSONB after the change (NULL on DELETE)
+- `changed_fields`: Array of field names that actually changed (UPDATE only)
+- `changed_at`: Timestamp
+
+**Storage cost**: ~1KB per change. At 700 partners updated weekly = ~180MB/year. Negligible.
+
+**Three layers of data protection:**
+1. `entity_versions` — full row snapshots on every change (time machine)
+2. `field_lineage` — field-level provenance: which source, which sync, old/new values
+3. `source_data` JSONB — raw source capture: every column from every import, even unmapped
+
+**RLS**: Only admins can read version history. Triggers run as SECURITY DEFINER (bypass RLS for writes).
 
 ---
 
