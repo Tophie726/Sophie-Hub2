@@ -205,7 +205,7 @@ Following CLAUDE.md animation guidelines:
 
 ## CURRENT IMPLEMENTATION STATUS
 
-> **Last Updated: January 26, 2026**
+> **Last Updated: January 27, 2026**
 
 ### What's Working ✅
 
@@ -215,7 +215,7 @@ Following CLAUDE.md animation guidelines:
 4. **Tab Status System** - Change status, hide tabs, flag with notes
 5. **SmartMapper UI** - Column classification with unified dropdown
 6. **Save column mappings** - SmartMapper persists to `column_mappings` table
-7. **Draft persistence** - In-progress work saved to DB + localStorage fallback ✓ *Migration verified*
+7. **Draft persistence** - In-progress work saved to DB + localStorage; timestamp comparison picks freshest; flush-on-unmount prevents data loss on tab switch ✓
 8. **Delightful animations** - Key badge lock, row highlight, count animations
 9. **Auto-select first workable tab** - Skips flagged/hidden, selects active/reference tabs
 10. **Flagged/hidden tabs on Overview only** - Keeps tab bar clean, access via Overview dashboard
@@ -446,16 +446,19 @@ Mapping progress is automatically saved so users (and other admins) can resume w
    - DB saves debounced at 500ms to avoid hammering server
    - localStorage saves immediately for responsiveness
 
-**Restoring (3-step cascade):**
+**Restoring (timestamp comparison + saved mappings fallback):**
 
-On mount, `restoreDraft()` tries three sources in order:
+On mount, `restoreDraft()` fetches both draft sources, compares timestamps, and uses the freshest:
 
-1. **DB draft** (`GET /api/tab-mappings/draft`) → found & <7 days old? Restore. Done.
-2. **localStorage draft** → found & <7 days old? Restore. Done.
-3. **Saved column_mappings** (`GET /api/mappings/load?data_source_id=X`) → find matching `tab_mapping` by `tab_name` → convert `ColumnMapping[]` to `ColumnClassification[]` → set phase to `classify` → show toast "Restored saved mappings". Done.
-4. **If all fail** → initialize fresh columns.
+1. **Fetch DB draft** (`GET /api/tab-mappings/draft`) → if found & <7 days old, keep as candidate
+2. **Check localStorage draft** → if found & <7 days old, keep as candidate
+3. **Compare timestamps** → use whichever is newer (handles stale DB when debounce was cancelled on tab switch)
+4. **If no draft found** → load from **saved column_mappings** (`GET /api/mappings/load?data_source_id=X`) → find matching `tab_mapping` by `tab_name` → convert `ColumnMapping[]` to `ColumnClassification[]` → set phase to `classify` → show toast "Restored saved mappings"
+5. **If all fail** → initialize fresh columns.
 
-Step 3 is critical: when the user saves mappings (Classify → Map → Save), the draft is cleared. On return, Steps 1-2 find nothing. Without Step 3, SmartMapper would start fresh, losing the saved work. Step 3 reads from the permanent `column_mappings` table to restore the saved state.
+Step 4 is critical: when the user saves mappings (Classify → Map → Save), the draft is cleared. On return, Steps 1-3 find nothing. Without Step 4, SmartMapper would start fresh, losing the saved work. Step 4 reads from the permanent `column_mappings` table to restore the saved state.
+
+**Flush-on-unmount:** A separate empty-deps `useEffect` fires a POST with `pendingDraftRef.current` when SmartMapper unmounts. This prevents the race condition where the 500ms debounce is cancelled on tab switch, leaving the DB draft stale.
 
 ### Database Schema
 

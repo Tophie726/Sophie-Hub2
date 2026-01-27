@@ -10,6 +10,7 @@ import { SmartMapper } from '../smart-mapper'
 import { TabOverviewDashboard } from './tab-overview-dashboard'
 import { SyncPreviewDialog, type TabPreviewResult } from '../sync-preview-dialog'
 import { Button } from '@/components/ui/button'
+import { ShimmerGrid } from '@/components/ui/shimmer-grid'
 import { SheetSearchModal } from '../sheet-search-modal'
 import type { CategoryStats } from '@/types/entities'
 
@@ -66,6 +67,13 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
   // Track if user has manually selected a tab - prevents race condition with fetch
   const userHasSelectedTab = useRef(!!initialTabId)
 
+  // Stable refs for initial values — prevents fetchSources from being recreated
+  const initialSourceIdRef = useRef(initialSourceId)
+  const onTabChangeRef = useRef(onTabChange)
+  const onSourceChangeRef = useRef(onSourceChange)
+  onTabChangeRef.current = onTabChange
+  onSourceChangeRef.current = onSourceChange
+
   // Wrapper to propagate source changes up
   const setActiveSourceId = (sourceId: string | null) => {
     setActiveSourceIdInternal(sourceId)
@@ -117,7 +125,7 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
         // Only auto-select if user hasn't already selected a tab
         if (!userHasSelectedTab.current && preview.tabs.length > 0) {
           setActiveTabIdInternal(String(preview.tabs[0].sheetId))
-          onTabChange?.(String(preview.tabs[0].sheetId))
+          onTabChangeRef.current?.(String(preview.tabs[0].sheetId))
         }
       }
     } catch (error) {
@@ -125,9 +133,9 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
     } finally {
       setIsLoadingPreview(false)
     }
-  }, [onTabChange])
+  }, []) // Stable — uses refs for callbacks
 
-  // Fetch existing sources
+  // Fetch existing sources — stable function, safe to call from effects and retry button
   const fetchSources = useCallback(async () => {
     setIsLoading(true)
     setAuthError(false)
@@ -139,30 +147,29 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
       }
       if (response.ok) {
         const json = await response.json()
-        // Handle both old format (data.sources) and new standardized format (data.data.sources)
         const fetchedSources = json.data?.sources || json.sources || []
         setSources(fetchedSources)
 
         // Use initialSourceId if provided, otherwise auto-select first
-        const sourceToSelect = initialSourceId
-          ? fetchedSources.find((s: DataSource) => s.id === initialSourceId)
+        const initSrcId = initialSourceIdRef.current
+        const sourceToSelect = initSrcId
+          ? fetchedSources.find((s: DataSource) => s.id === initSrcId)
           : fetchedSources[0]
 
         if (sourceToSelect) {
-          setActiveSourceId(sourceToSelect.id)
+          setActiveSourceIdInternal(sourceToSelect.id)
+          onSourceChangeRef.current?.(sourceToSelect.id)
 
           // Always fetch Google Sheets preview for full tab discovery.
-          // DB tabs show immediately (non-blocking), preview merges in background.
           if (sourceToSelect.spreadsheet_id) {
             loadPreviewForSource(sourceToSelect.id, sourceToSelect.spreadsheet_id)
           }
 
           // Only default to Overview if user hasn't already selected a tab
-          // This prevents race condition where user clicks tab before fetch completes
           if (!userHasSelectedTab.current) {
-            userHasSelectedTab.current = true // Prevent preview callback from overriding
+            userHasSelectedTab.current = true
             setActiveTabIdInternal(OVERVIEW_TAB_ID)
-            onTabChange?.(OVERVIEW_TAB_ID)
+            onTabChangeRef.current?.(OVERVIEW_TAB_ID)
           }
         }
       }
@@ -171,8 +178,9 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
     } finally {
       setIsLoading(false)
     }
-  }, [initialSourceId, loadPreviewForSource, onTabChange])
+  }, [loadPreviewForSource]) // Stable — loadPreviewForSource is stable
 
+  // Run once on mount
   useEffect(() => {
     fetchSources()
   }, [fetchSources])
@@ -243,14 +251,25 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
 
   const activeTab = sheetTabs.find(t => t.id === activeTabId)
 
-  // Auto-select Overview when tabs are available but none selected
-  // (Keep Overview as default, don't auto-jump to a specific tab)
+  // Auto-select Overview when tabs are available but none selected,
+  // or when activeTabId is set but not found in sheetTabs (e.g. stale URL deep link)
   useEffect(() => {
     if (sheetTabs.length > 0 && !activeTabId) {
-      // Default to Overview tab instead of auto-selecting first workable tab
       setActiveTabId(OVERVIEW_TAB_ID)
     }
-  }, [sheetTabs, activeTabId])
+    // Fallback: if activeTabId is set but doesn't match any tab (and isn't Overview),
+    // fall back to Overview so the user doesn't see a blank page
+    if (
+      sheetTabs.length > 0 &&
+      activeTabId &&
+      activeTabId !== OVERVIEW_TAB_ID &&
+      !activeTab &&
+      !isLoading &&
+      !isLoadingPreview
+    ) {
+      setActiveTabId(OVERVIEW_TAB_ID)
+    }
+  }, [sheetTabs, activeTabId, activeTab, isLoading, isLoadingPreview])
 
   // Handle tab status change
   const handleTabStatusChange = async (tabId: string, status: string, notes?: string) => {
@@ -775,28 +794,21 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
           </div>
         </div>
 
-        {/* Skeleton source tabs */}
-        <div className="flex items-center gap-2 px-4 py-3 border-b bg-muted/30">
-          {[120, 100, 90].map((w, i) => (
-            <div
-              key={i}
-              className="h-10 rounded-lg bg-gradient-to-r from-muted/60 via-muted/30 to-muted/60 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite]"
-              style={{ width: w, animationDelay: `${i * 100}ms` }}
-            />
-          ))}
+        {/* Skeleton source tabs — shimmer wave */}
+        <div className="px-4 py-3 border-b bg-muted/30">
+          <ShimmerGrid rows={1} columns={3} cellHeight={40} gap={8} stagger={100} />
         </div>
 
-        {/* Skeleton content */}
+        {/* Skeleton content — shimmer grid */}
         <div className="p-6">
-          <div className="rounded-xl border bg-card p-6 space-y-4">
-            <div className="h-5 w-48 bg-gradient-to-r from-muted/50 via-muted/25 to-muted/50 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite] rounded" />
-            <div className="space-y-3 pt-2">
-              {[0, 1, 2, 3].map((i) => (
-                <div key={i} className="flex gap-4">
-                  <div className="h-10 flex-1 bg-gradient-to-r from-muted/40 via-muted/20 to-muted/40 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite] rounded" style={{ animationDelay: `${i * 75}ms` }} />
-                </div>
-              ))}
-            </div>
+          <div className="rounded-xl border bg-card p-5 flex flex-col min-h-[50vh]">
+            <ShimmerGrid
+              variant="table"
+              rows={8}
+              columns={5}
+              showRowNumbers
+              stagger={40}
+            />
           </div>
         </div>
       </motion.div>
@@ -918,7 +930,7 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
       {/* Content Area */}
       <AnimatePresence mode="wait">
         {(isLoadingPreview || isLoading) && sheetTabs.length === 0 ? (
-          /* Elegant skeleton loader - only show when we have NO tabs yet */
+          /* Shimmer grid loader - only show when we have NO tabs yet */
           <motion.div
             key="loading"
             initial={{ opacity: 0 }}
@@ -926,26 +938,14 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
             exit={{ opacity: 0 }}
             className="p-6 space-y-4"
           >
-            {/* Skeleton tab bar with animated shimmer */}
-            <div className="flex gap-2 pb-2">
-              {[80, 100, 90, 85, 75].map((width, i) => (
-                <motion.div
-                  key={i}
-                  className="h-9 rounded-lg bg-gradient-to-r from-primary/10 via-primary/5 to-primary/10 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite]"
-                  style={{ width: `${width}px`, animationDelay: `${i * 100}ms` }}
-                  initial={{ opacity: 0, y: 5 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.05 }}
-                />
-              ))}
-            </div>
+            {/* Skeleton tab bar — shimmer wave */}
+            <ShimmerGrid rows={1} columns={5} cellHeight={36} gap={8} stagger={100} />
 
-            {/* Main content card with loading context */}
+            {/* Main content card */}
             <div className="rounded-xl border bg-card overflow-hidden">
               {/* Header with context */}
               <div className="p-5 border-b bg-gradient-to-r from-muted/10 to-transparent">
                 <div className="flex items-center gap-4">
-                  {/* Animated icon */}
                   <div className="relative">
                     <div className="h-10 w-10 rounded-lg bg-green-500/10 flex items-center justify-center">
                       <Table className="h-5 w-5 text-green-600/70" />
@@ -965,22 +965,15 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
                 </div>
               </div>
 
-              {/* Table skeleton with staggered rows */}
-              <div className="p-5 space-y-2">
-                {[0, 1, 2, 3, 4, 5].map((i) => (
-                  <motion.div
-                    key={i}
-                    className="flex items-center gap-4"
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: i * 0.05, duration: 0.3 }}
-                  >
-                    <div className="h-9 w-8 bg-muted/20 rounded flex items-center justify-center text-xs text-muted-foreground/40">{i + 1}</div>
-                    <div className="h-9 flex-[2] bg-gradient-to-r from-muted/30 via-muted/15 to-muted/30 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite] rounded" style={{ animationDelay: `${i * 75 + 50}ms` }} />
-                    <div className="h-9 flex-[3] bg-gradient-to-r from-muted/25 via-muted/10 to-muted/25 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite] rounded" style={{ animationDelay: `${i * 75 + 100}ms` }} />
-                    <div className="h-9 w-24 bg-gradient-to-r from-muted/20 via-muted/10 to-muted/20 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite] rounded" style={{ animationDelay: `${i * 75 + 150}ms` }} />
-                  </motion.div>
-                ))}
+              {/* Shimmer grid table skeleton */}
+              <div className="p-5">
+                <ShimmerGrid
+                  variant="table"
+                  rows={8}
+                  columns={5}
+                  showRowNumbers
+                  stagger={40}
+                />
               </div>
 
               {/* Progress bar at bottom */}

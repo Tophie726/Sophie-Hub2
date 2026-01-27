@@ -162,6 +162,42 @@ export const themeTransition = {
   borderColor: `border-color ${durationMs.micro}ms ease-out`,
 }
 
+// ============ SHIMMER (Loading Placeholders) ============
+
+/**
+ * Shimmer — A diagonal-sweep loading animation for skeleton states.
+ *
+ * Technique: An oversized gradient (`200% width`) whose `background-position`
+ * slides back and forth via the `shimmer` @keyframes in globals.css.
+ * Staggering the `animation-delay` per cell creates a diagonal wave.
+ *
+ * Follows Emil's guidelines:
+ * - ease-in-out: element is already on screen, morphing continuously
+ * - background-position only: lightweight, no layout/paint triggers
+ * - Hardcoded dimensions: prevents layout shift when real content loads
+ *
+ * Usage: Prefer the `<ShimmerGrid>` component from `@/components/ui/shimmer-grid`
+ * for tabular/grid loading states, or `<ShimmerBar>` for inline placeholders.
+ */
+
+/** Default shimmer cycle duration in seconds */
+export const shimmerDuration = 1.5
+
+/** Default per-cell stagger in milliseconds (lower = faster wave) */
+export const shimmerStagger = 40
+
+/** Shimmer CSS class — apply to any element with a gradient background */
+export const shimmerClass =
+  'bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite]'
+
+/** Shimmer gradient for data cells (muted) */
+export const shimmerGradient =
+  'bg-gradient-to-r from-muted/40 via-muted/15 to-muted/40'
+
+/** Shimmer gradient for header cells (primary accent) */
+export const shimmerGradientHeader =
+  'bg-gradient-to-r from-primary/15 via-primary/5 to-primary/15'
+
 // ============ HELPER FUNCTIONS ============
 
 /**

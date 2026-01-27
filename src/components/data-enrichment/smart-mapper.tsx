@@ -64,6 +64,7 @@ import { MobileColumnCard } from './mobile-column-card'
 import { AISuggestionButton, type AISuggestion } from './ai-suggestion-button'
 import { AISuggestAllDialog, type BulkSuggestion } from './ai-suggest-all-dialog'
 import { AITabAnalysis, type TabSummary } from './ai-tab-analysis'
+import { ShimmerGrid } from '@/components/ui/shimmer-grid'
 import { getGroupedFieldDefs } from '@/lib/entity-fields'
 
 // ============ ANIMATED LOCK ICON ============
@@ -242,6 +243,12 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
   const [tabSummary, setTabSummary] = useState<TabSummary | null>(null)
   const draftKey = getDraftKey(spreadsheetId, tabName)
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const pendingDraftRef = useRef<DraftState | null>(null)
+  // Refs for flush-on-unmount (so cleanup closure has current values)
+  const dataSourceIdRef = useRef(dataSourceId)
+  const tabNameRef = useRef(tabName)
+  dataSourceIdRef.current = dataSourceId
+  tabNameRef.current = tabName
 
   // Fetch available field tags (deferred: only when entering classify phase)
   useEffect(() => {
@@ -275,6 +282,9 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
       timestamp: Date.now(),
     }
 
+    // Track as pending (for flush-on-unmount)
+    pendingDraftRef.current = draft
+
     // Always save to localStorage immediately (offline resilience)
     localStorage.setItem(draftKey, JSON.stringify(draft))
 
@@ -295,6 +305,7 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
               draft_state: draft,
             }),
           })
+          pendingDraftRef.current = null // Successfully saved — no longer pending
         } catch (e) {
           console.warn('Failed to save draft to DB:', e)
         } finally {
@@ -310,12 +321,36 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
     }
   }, [phase, headerRow, columns, draftKey, isLoading, dataSourceId, tabName])
 
-  // Restore draft: try DB first, then localStorage fallback
+  // Flush pending draft to DB on unmount (fire-and-forget)
+  // Prevents data loss when user switches tabs before the 500ms debounce completes
+  useEffect(() => {
+    return () => {
+      if (pendingDraftRef.current && dataSourceIdRef.current) {
+        fetch('/api/tab-mappings/draft', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            data_source_id: dataSourceIdRef.current,
+            tab_name: tabNameRef.current,
+            draft_state: pendingDraftRef.current,
+          }),
+        }).catch(() => {})
+        pendingDraftRef.current = null
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // Empty deps — only runs on unmount
+
+  // Restore draft: compare DB and localStorage timestamps, use the freshest
   useEffect(() => {
     if (!rawData || draftRestored) return
 
     async function restoreDraft() {
-      // Try DB first if we have a dataSourceId
+      const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
+      let dbDraft: DraftState | null = null
+      let localDraft: DraftState | null = null
+
+      // Fetch DB draft
       if (dataSourceId) {
         try {
           const response = await fetch(
@@ -323,43 +358,39 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
             { cache: 'no-store' }
           )
           const data = await response.json()
-          if (data.draft && data.draft.columns?.length > 0) {
-            // Only restore if draft is less than 7 days old
-            const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
-            if (data.draft.timestamp > sevenDaysAgo) {
-              // If header already confirmed, go to classify; otherwise preview
-              setPhase(headerAlreadyConfirmed ? 'classify' : 'preview')
-              setHeaderRow(data.draft.headerRow)
-              setInitialHeaderRow(data.draft.headerRow) // Track for unsaved changes
-              setColumns(data.draft.columns)
-              setDraftRestored(true)
-              return
-            }
+          if (data.draft?.columns?.length > 0 && data.draft.timestamp > sevenDaysAgo) {
+            dbDraft = data.draft
           }
         } catch (e) {
           console.warn('Failed to load draft from DB:', e)
         }
       }
 
-      // Fallback to localStorage
+      // Check localStorage
       try {
         const savedDraft = localStorage.getItem(draftKey)
         if (savedDraft) {
           const draft: DraftState = JSON.parse(savedDraft)
-          // Only restore if draft is less than 7 days old
-          const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
           if (draft.timestamp > sevenDaysAgo && draft.columns.length > 0) {
-            // If header already confirmed, go to classify; otherwise preview
-            setPhase(headerAlreadyConfirmed ? 'classify' : 'preview')
-            setHeaderRow(draft.headerRow)
-            setInitialHeaderRow(draft.headerRow) // Track for unsaved changes
-            setColumns(draft.columns)
-            setDraftRestored(true)
-            return
+            localDraft = draft
           }
         }
       } catch (e) {
         console.warn('Failed to restore draft from localStorage:', e)
+      }
+
+      // Use whichever draft is newer (handles stale DB when debounce was cancelled on unmount)
+      const bestDraft = dbDraft && localDraft
+        ? (localDraft.timestamp > dbDraft.timestamp ? localDraft : dbDraft)
+        : dbDraft || localDraft
+
+      if (bestDraft) {
+        setPhase(headerAlreadyConfirmed ? 'classify' : 'preview')
+        setHeaderRow(bestDraft.headerRow)
+        setInitialHeaderRow(bestDraft.headerRow) // Track for unsaved changes
+        setColumns(bestDraft.columns)
+        setDraftRestored(true)
+        return
       }
 
       // Step 3: Try loading persisted column_mappings (saved data, not drafts)
@@ -561,8 +592,10 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
 
   // Initialize columns when header row changes - with auto-detection
   // When restoring a draft, preserve classifications but refresh header names from rawData
+  // IMPORTANT: Wait for draftRestored before initializing — otherwise the column init
+  // races with the async restoreDraft() and overwrites restored classifications with fresh ones.
   useEffect(() => {
-    if (!rawData || headerRow >= rawData.rows.length) return
+    if (!rawData || !draftRestored || headerRow >= rawData.rows.length) return
 
     const headers = rawData.rows[headerRow]
 
@@ -740,40 +773,15 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
             </div>
           </div>
 
-          {/* Skeleton table with staggered animation */}
+          {/* Skeleton table — reusable shimmer wave */}
           <div className="p-4 flex-1">
-            {/* Header row skeleton */}
-            <div className="flex gap-3 pb-3 border-b mb-3">
-              <div className="h-8 w-8 bg-muted/30 rounded flex items-center justify-center">
-                <span className="text-[10px] text-muted-foreground/50">#</span>
-              </div>
-              {[1, 2, 3, 4, 5].map((i) => (
-                <motion.div
-                  key={i}
-                  className="h-8 flex-1 bg-gradient-to-r from-primary/10 via-primary/5 to-primary/10 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite] rounded"
-                  style={{ animationDelay: `${i * 100}ms` }}
-                />
-              ))}
-            </div>
-            {/* Data rows skeleton — enough rows to fill available space */}
-            {Array.from({ length: 12 }, (_, i) => (
-              <motion.div
-                key={i}
-                className="flex gap-3 py-1.5"
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: Math.min(i * 0.04, 0.3), duration: 0.3, ease: easeOut }}
-              >
-                <div className="h-8 w-8 bg-muted/15 rounded flex items-center justify-center text-xs text-muted-foreground/40">{i + 1}</div>
-                {[1, 2, 3, 4, 5].map((j) => (
-                  <div
-                    key={j}
-                    className="h-8 flex-1 bg-gradient-to-r from-muted/25 via-muted/10 to-muted/25 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite] rounded"
-                    style={{ animationDelay: `${(i * 5 + j) * 40}ms` }}
-                  />
-                ))}
-              </motion.div>
-            ))}
+            <ShimmerGrid
+              variant="table"
+              rows={12}
+              columns={5}
+              showRowNumbers
+              stagger={40}
+            />
           </div>
 
           {/* Progress bar at bottom */}
@@ -1498,7 +1506,28 @@ function ClassifyPhase({
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setShowAISuggestAll(true)}
+                onClick={() => {
+                  // Auto-skip empty columns before opening AI dialog
+                  const dataRows = rawData.rows.slice(headerRow + 1, headerRow + 11) // Check 10 rows
+                  const emptyIndices: number[] = []
+                  allValidColumns
+                    .filter(col => col.category === null)
+                    .forEach(col => {
+                      const hasAnyValue = dataRows.some(row => {
+                        const val = row[col.sourceIndex]
+                        return val !== undefined && val !== null && String(val).trim() !== ''
+                      })
+                      if (!hasAnyValue) {
+                        emptyIndices.push(col.sourceIndex)
+                      }
+                    })
+
+                  if (emptyIndices.length > 0) {
+                    onBulkCategoryChange(emptyIndices, 'skip')
+                    toast.info(`Auto-skipped ${emptyIndices.length} empty column${emptyIndices.length !== 1 ? 's' : ''}`)
+                  }
+                  setShowAISuggestAll(true)
+                }}
                 className="h-8 text-xs bg-purple-500/5 border-purple-500/30 text-purple-600 hover:bg-purple-500/10"
               >
                 <Sparkles className="h-3.5 w-3.5 mr-1.5" />
@@ -1761,16 +1790,14 @@ function ClassifyPhase({
                       scale: { duration: 0.1 },
                       layout: { duration: 0.2, ease: easeOut }
                     }}
-                    className={`flex items-center gap-3 p-3 rounded-lg border relative ${
+                    className={`flex items-center gap-3 p-3 rounded-lg border relative hover:bg-accent/50 transition-colors ${
                       col.isKey
                         ? 'border-amber-500/30'
                         : isSelected
                         ? 'border-primary/50'
                         : isFocused
                         ? 'border-primary/60 bg-accent/30'
-                        : col.category
-                        ? 'border-border'
-                        : 'border-border hover:bg-accent/50'
+                        : 'border-border'
                     }`}
                   >
                     {/* Checkbox */}

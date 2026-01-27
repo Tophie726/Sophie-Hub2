@@ -291,9 +291,11 @@ These invariants MUST hold true at all times. If a change breaks any of these, i
 
 ### INV-3: Saved mappings must persist across visits
 **If a user saves column mappings and returns, they must see their saved work.** This requires:
-- `restoreDraft()` 3-step cascade: DB draft → localStorage → saved `column_mappings`
-- Step 3 (saved mappings) is critical for post-save visits where drafts are cleared
+- `restoreDraft()` compares DB draft and localStorage timestamps, uses the **newer** one
+- If neither draft exists, Step 3 loads from saved `column_mappings` (critical for post-save visits where drafts are cleared)
+- Flush-on-unmount: `pendingDraftRef` fires a POST on component unmount so the DB draft stays current even when the user switches tabs within the 500ms debounce window
 - **Violation example**: Removing Step 3 from `restoreDraft()` → fresh state on return
+- **Violation example**: Sequential DB→localStorage cascade without timestamp comparison → stale DB draft (debounce cancelled on tab switch) shadows newer localStorage draft, losing the last change (e.g., key designation)
 
 ### INV-4: Status indicators must be consistent everywhere
 **The same data must look the same in SheetTabBar, TabCard, and TabListRow.** This requires:

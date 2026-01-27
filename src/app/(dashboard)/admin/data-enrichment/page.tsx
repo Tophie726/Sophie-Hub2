@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { Suspense, useState, useEffect, useCallback } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { PageHeader } from '@/components/layout/page-header'
@@ -13,7 +13,16 @@ type DataBrowserView = 'hub' | 'sheets-overview' | 'sheets-browser' | 'forms' | 
 
 const easeOut: [number, number, number, number] = [0.22, 1, 0.36, 1]
 
+// Wrap in Suspense so useSearchParams() works on direct URL navigation
 export default function DataEnrichmentPage() {
+  return (
+    <Suspense>
+      <DataEnrichmentContent />
+    </Suspense>
+  )
+}
+
+function DataEnrichmentContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
 

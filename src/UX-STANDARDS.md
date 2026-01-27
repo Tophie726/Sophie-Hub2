@@ -202,6 +202,76 @@ Use `initial={false}` on motion components:
 .button { transition: background-color 200ms ease, transform 200ms ease; }
 ```
 
+### Shimmer / Skeleton Loading
+
+Skeleton loaders with a diagonal shimmer wave. Follows Emil's principles:
+- **ease-in-out**: Element is already on screen, morphing continuously
+- **background-position only**: Lightweight — no layout or paint triggers
+- **Hardcoded dimensions**: Prevents layout shift when real content loads
+
+#### Technique
+
+An oversized gradient (`200% width`) whose `background-position` slides back and forth via the `shimmer` `@keyframes` in `globals.css`. Staggering the `animation-delay` per cell creates a diagonal wave.
+
+#### Constants (from `@/lib/animations`)
+
+```typescript
+import {
+  shimmerDuration,        // 1.5s cycle
+  shimmerStagger,         // 40ms per-cell delay
+  shimmerClass,           // Tailwind class: bg-size + animate
+  shimmerGradient,        // Data cell gradient (muted)
+  shimmerGradientHeader,  // Header cell gradient (primary accent)
+} from '@/lib/animations'
+```
+
+#### Components
+
+**`<ShimmerGrid>`** — Tabular/grid loading states:
+
+```tsx
+import { ShimmerGrid } from '@/components/ui/shimmer-grid'
+
+<ShimmerGrid />                          // Default 8×4 grid
+<ShimmerGrid variant="table" rows={8} columns={5} showRowNumbers />  // Table with header
+<ShimmerGrid variant="list" rows={6} />  // Single-column list
+```
+
+| Prop | Default | Description |
+|------|---------|-------------|
+| `rows` | 8 | Number of data rows |
+| `columns` | 4 | Number of columns |
+| `variant` | `'grid'` | `'table'` (header row), `'grid'` (uniform), `'list'` (single column) |
+| `cellHeight` | 32 | Cell height in px |
+| `gap` | 12 | Gap between cells in px |
+| `stagger` | 40 | Delay between cells in ms (lower = faster wave) |
+| `showRowNumbers` | false | Show row numbers on left |
+
+**`<ShimmerBar>`** — Inline loading placeholders:
+
+```tsx
+import { ShimmerBar } from '@/components/ui/shimmer-grid'
+
+<ShimmerBar width={120} height={16} />   // Fixed width
+<ShimmerBar width="100%" height={20} />  // Full width
+```
+
+#### When to Use
+
+| Scenario | Component |
+|----------|-----------|
+| Table/grid data loading | `<ShimmerGrid variant="table">` |
+| Card grid placeholder | `<ShimmerGrid>` |
+| List loading | `<ShimmerGrid variant="list">` |
+| Inline text placeholder | `<ShimmerBar>` |
+| Single stat/badge | `<ShimmerBar>` with fixed width |
+
+#### When NOT to Use
+
+- **Instant data** — If data loads in <100ms, skip the skeleton (flash of loading is worse)
+- **Spinners already present** — Don't combine shimmer with spinner; pick one
+- **Frequently re-fetched content** — Use opacity transition instead of full skeleton swap
+
 ### Accessibility
 
 Every animation needs `prefers-reduced-motion`:
