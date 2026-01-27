@@ -23,55 +23,60 @@ import type {
 
 const PARTNER_FIELDS: FieldDefinition[] = [
   // Core Info
-  { name: 'brand_name', label: 'Brand Name', description: 'The brand/company name (unique identifier)', type: 'text', group: 'Core Info', isKey: true },
-  { name: 'status', label: 'Status', description: 'Active, Churned, Onboarding, etc.', type: 'text', group: 'Core Info' },
-  { name: 'tier', label: 'Tier', description: 'Service tier level', type: 'text', group: 'Core Info' },
+  { name: 'brand_name', label: 'Brand Name', description: 'The brand/company name (unique identifier)', type: 'text', group: 'Core Info', isKey: true, aliases: ['brand', 'company name', 'partner name', 'account name'] },
+  { name: 'status', label: 'Status', description: 'Active, Churned, Onboarding, etc.', type: 'text', group: 'Core Info', aliases: ['partner status', 'account status', 'subscription status'] },
+  { name: 'tier', label: 'Tier', description: 'Service tier level', type: 'text', group: 'Core Info', aliases: ['service tier', 'tier level', 'package'] },
   { name: 'notes', label: 'Notes', description: 'General notes about the partner', type: 'text', group: 'Core Info' },
 
   // Contact
-  { name: 'client_name', label: 'Client Name', description: 'Primary contact person name', type: 'text', group: 'Contact' },
-  { name: 'client_email', label: 'Client Email', description: 'Primary contact email address', type: 'text', group: 'Contact' },
-  { name: 'client_phone', label: 'Client Phone', description: 'Primary contact phone number', type: 'text', group: 'Contact' },
+  { name: 'client_name', label: 'Client Name', description: 'Primary contact person name', type: 'text', group: 'Contact', aliases: ['contact name', 'client contact', 'primary contact'] },
+  { name: 'client_email', label: 'Client Email', description: 'Primary contact email address', type: 'text', group: 'Contact', aliases: ['email', 'email address', 'contact email'] },
+  { name: 'client_phone', label: 'Client Phone', description: 'Primary contact phone number', type: 'text', group: 'Contact', aliases: ['phone', 'phone number', 'contact phone', 'telephone', 'mobile'] },
 
   // Financial
-  { name: 'base_fee', label: 'Base Fee', description: 'Monthly base fee amount', type: 'number', group: 'Financial' },
-  { name: 'commission_rate', label: 'Commission Rate', description: 'Commission percentage', type: 'number', group: 'Financial' },
+  { name: 'base_fee', label: 'Base Fee', description: 'Monthly base fee amount', type: 'number', group: 'Financial', aliases: ['fee', 'monthly fee', 'retainer'] },
+  { name: 'commission_rate', label: 'Commission Rate', description: 'Commission percentage', type: 'number', group: 'Financial', aliases: ['commission', 'commission structure', 'commission %'] },
   { name: 'billing_day', label: 'Billing Day', description: 'Day of month for billing', type: 'number', group: 'Financial' },
 
   // Dates
-  { name: 'onboarding_date', label: 'Onboarding Date', description: 'When onboarding started', type: 'date', group: 'Dates' },
-  { name: 'contract_start_date', label: 'Contract Start', description: 'Contract start date', type: 'date', group: 'Dates' },
-  { name: 'contract_end_date', label: 'Contract End', description: 'Contract end date', type: 'date', group: 'Dates' },
-  { name: 'churned_date', label: 'Churned Date', description: 'Date partner churned (if applicable)', type: 'date', group: 'Dates' },
+  { name: 'onboarding_date', label: 'Onboarding Date', description: 'When onboarding started', type: 'date', group: 'Dates', aliases: ['onboarded', 'onboard date', 'start date'] },
+  { name: 'contract_start_date', label: 'Contract Start', description: 'Contract start date', type: 'date', group: 'Dates', aliases: ['contract start date'] },
+  { name: 'contract_end_date', label: 'Contract End', description: 'Contract end date', type: 'date', group: 'Dates', aliases: ['contract end date'] },
+  { name: 'churned_date', label: 'Churned Date', description: 'Date partner churned (if applicable)', type: 'date', group: 'Dates', aliases: ['churn date', 'churned'] },
 
   // Metrics
-  { name: 'parent_asin_count', label: 'Parent ASIN Count', description: 'Number of parent ASINs', type: 'number', group: 'Metrics' },
-  { name: 'child_asin_count', label: 'Child ASIN Count', description: 'Number of child ASINs', type: 'number', group: 'Metrics' },
+  { name: 'parent_asin_count', label: 'Parent ASIN Count', description: 'Number of parent ASINs', type: 'number', group: 'Metrics', aliases: ['parent asins', 'parent count'] },
+  { name: 'child_asin_count', label: 'Child ASIN Count', description: 'Number of child ASINs', type: 'number', group: 'Metrics', aliases: ['child asins', 'child count'] },
 
   // Staff Assignments (all reference staff via junction table)
   {
     name: 'pod_leader_id', label: 'POD Leader', description: 'Assigned POD Leader',
     type: 'reference', group: 'Staff Assignments',
+    aliases: ['pod leader', 'pl', 'pod lead'],
     reference: { entity: 'staff', matchField: 'full_name', storage: 'junction', junctionTable: 'partner_assignments', junctionRole: 'pod_leader' },
   },
   {
     name: 'account_manager_id', label: 'Account Manager', description: 'Assigned Account Manager',
     type: 'reference', group: 'Staff Assignments',
+    aliases: ['account manager', 'am'],
     reference: { entity: 'staff', matchField: 'full_name', storage: 'junction', junctionTable: 'partner_assignments', junctionRole: 'account_manager' },
   },
   {
     name: 'brand_manager_id', label: 'Brand Manager', description: 'Assigned Brand Manager',
     type: 'reference', group: 'Staff Assignments',
+    aliases: ['brand manager', 'bm'],
     reference: { entity: 'staff', matchField: 'full_name', storage: 'junction', junctionTable: 'partner_assignments', junctionRole: 'brand_manager' },
   },
   {
     name: 'sales_rep_id', label: 'Sales Rep', description: 'Assigned Sales Representative',
     type: 'reference', group: 'Staff Assignments',
+    aliases: ['sales rep', 'salesperson', 'sales person', 'sales representative'],
     reference: { entity: 'staff', matchField: 'full_name', storage: 'junction', junctionTable: 'partner_assignments', junctionRole: 'sales_rep' },
   },
   {
     name: 'ppc_specialist_id', label: 'PPC Specialist', description: 'Assigned PPC Specialist',
     type: 'reference', group: 'Staff Assignments',
+    aliases: ['ppc specialist', 'ppc', 'ppc manager'],
     reference: { entity: 'staff', matchField: 'full_name', storage: 'junction', junctionTable: 'partner_assignments', junctionRole: 'ppc_specialist' },
   },
 ]
@@ -82,32 +87,32 @@ const PARTNER_FIELDS: FieldDefinition[] = [
 
 const STAFF_FIELDS: FieldDefinition[] = [
   // Core Info
-  { name: 'full_name', label: 'Full Name', description: 'Staff member full name (unique identifier)', type: 'text', group: 'Core Info', isKey: true },
+  { name: 'full_name', label: 'Full Name', description: 'Staff member full name (unique identifier)', type: 'text', group: 'Core Info', isKey: true, aliases: ['name', 'staff name', 'employee name'] },
 
   // Contact
-  { name: 'email', label: 'Email', description: 'Work email address', type: 'text', group: 'Contact' },
-  { name: 'phone', label: 'Phone', description: 'Phone number', type: 'text', group: 'Contact' },
-  { name: 'slack_id', label: 'Slack ID', description: 'Slack username or ID', type: 'text', group: 'Contact' },
+  { name: 'email', label: 'Email', description: 'Work email address', type: 'text', group: 'Contact', aliases: ['email address', 'work email', 'contact email'] },
+  { name: 'phone', label: 'Phone', description: 'Phone number', type: 'text', group: 'Contact', aliases: ['phone number', 'mobile', 'telephone', 'contact phone'] },
+  { name: 'slack_id', label: 'Slack ID', description: 'Slack username or ID', type: 'text', group: 'Contact', aliases: ['slack', 'slack handle'] },
 
   // Status & Role
-  { name: 'role', label: 'Role', description: 'Job role (e.g. pod_leader, account_manager)', type: 'text', group: 'Status & Role' },
-  { name: 'department', label: 'Department', description: 'Team or department', type: 'text', group: 'Status & Role' },
-  { name: 'title', label: 'Title', description: 'Job title', type: 'text', group: 'Status & Role' },
-  { name: 'status', label: 'Status', description: 'Active, On Leave, Departed, etc.', type: 'text', group: 'Status & Role' },
+  { name: 'role', label: 'Role', description: 'Job role (e.g. pod_leader, account_manager)', type: 'text', group: 'Status & Role', aliases: ['job role', 'position'] },
+  { name: 'department', label: 'Department', description: 'Team or department', type: 'text', group: 'Status & Role', aliases: ['dept', 'team'] },
+  { name: 'title', label: 'Title', description: 'Job title', type: 'text', group: 'Status & Role', aliases: ['job title'] },
+  { name: 'status', label: 'Status', description: 'Active, On Leave, Departed, etc.', type: 'text', group: 'Status & Role', aliases: ['staff status', 'employment status'] },
 
   // Metrics
-  { name: 'max_clients', label: 'Max Clients', description: 'Maximum client capacity', type: 'number', group: 'Metrics' },
-  { name: 'current_client_count', label: 'Current Client Count', description: 'Number of currently assigned clients', type: 'number', group: 'Metrics' },
+  { name: 'max_clients', label: 'Max Clients', description: 'Maximum client capacity', type: 'number', group: 'Metrics', aliases: ['client capacity', 'capacity'] },
+  { name: 'current_client_count', label: 'Current Client Count', description: 'Number of currently assigned clients', type: 'number', group: 'Metrics', aliases: ['client count', 'active clients'] },
   { name: 'services', label: 'Services', description: 'Services offered (comma-separated or array)', type: 'array', group: 'Metrics' },
 
   // Dates
-  { name: 'hire_date', label: 'Hire Date', description: 'Employment start date', type: 'date', group: 'Dates' },
+  { name: 'hire_date', label: 'Hire Date', description: 'Employment start date', type: 'date', group: 'Dates', aliases: ['hired', 'start date', 'date hired'] },
   { name: 'probation_end_date', label: 'Probation End', description: 'End of probation period', type: 'date', group: 'Dates' },
-  { name: 'departure_date', label: 'Departure Date', description: 'Employment end date (if departed)', type: 'date', group: 'Dates' },
+  { name: 'departure_date', label: 'Departure Date', description: 'Employment end date (if departed)', type: 'date', group: 'Dates', aliases: ['left date', 'end date'] },
 
   // Links
-  { name: 'dashboard_url', label: 'Dashboard URL', description: 'Link to staff dashboard', type: 'text', group: 'Links' },
-  { name: 'calendly_url', label: 'Calendly URL', description: 'Calendly scheduling link', type: 'text', group: 'Links' },
+  { name: 'dashboard_url', label: 'Dashboard URL', description: 'Link to staff dashboard', type: 'text', group: 'Links', aliases: ['dashboard', 'dashboard link'] },
+  { name: 'calendly_url', label: 'Calendly URL', description: 'Calendly scheduling link', type: 'text', group: 'Links', aliases: ['calendly', 'calendly link', 'booking link'] },
 
   // Staff Assignments (self-reference)
   {
@@ -123,11 +128,11 @@ const STAFF_FIELDS: FieldDefinition[] = [
 
 const ASIN_FIELDS: FieldDefinition[] = [
   // Core Info
-  { name: 'asin_code', label: 'ASIN Code', description: 'Amazon Standard Identification Number', type: 'text', group: 'Core Info', isKey: true },
-  { name: 'title', label: 'Title', description: 'Product title', type: 'text', group: 'Core Info' },
-  { name: 'sku', label: 'SKU', description: 'Stock Keeping Unit', type: 'text', group: 'Core Info' },
-  { name: 'category', label: 'Category', description: 'Product category', type: 'text', group: 'Core Info' },
-  { name: 'status', label: 'Status', description: 'Active, Suppressed, etc.', type: 'text', group: 'Core Info' },
+  { name: 'asin_code', label: 'ASIN Code', description: 'Amazon Standard Identification Number', type: 'text', group: 'Core Info', isKey: true, aliases: ['asin', 'amazon asin'] },
+  { name: 'title', label: 'Title', description: 'Product title', type: 'text', group: 'Core Info', aliases: ['product title', 'product name'] },
+  { name: 'sku', label: 'SKU', description: 'Stock Keeping Unit', type: 'text', group: 'Core Info', aliases: ['sku code', 'stock code'] },
+  { name: 'category', label: 'Category', description: 'Product category', type: 'text', group: 'Core Info', aliases: ['product category'] },
+  { name: 'status', label: 'Status', description: 'Active, Suppressed, etc.', type: 'text', group: 'Core Info', aliases: ['asin status', 'product status'] },
   {
     name: 'brand_name', label: 'Brand Name', description: 'Partner brand this ASIN belongs to',
     type: 'reference', group: 'Core Info',

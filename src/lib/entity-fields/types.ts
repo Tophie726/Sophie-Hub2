@@ -66,6 +66,8 @@ export interface FieldDefinition {
   reference?: ReferenceConfig
   /** Hint for the sync engine on how to transform incoming data */
   suggestedTransform?: string
+  /** Alternative column names that should auto-match to this field (e.g. "Email Address" → client_email) */
+  aliases?: string[]
 }
 
 // =============================================================================

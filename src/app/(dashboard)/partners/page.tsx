@@ -200,21 +200,15 @@ export default function PartnersPage() {
               <p className="text-muted-foreground text-center max-w-md mb-6">
                 {debouncedSearch || statusFilter.length > 0
                   ? 'Try adjusting your search or filters to find what you\'re looking for.'
-                  : 'Partners will appear here once you\'ve imported them via the Data Enrichment wizard or added them manually.'}
+                  : 'Partners will appear here as you map fields through Data Enrichment. Connect a Google Sheet, map your columns, and sync — data flows in automatically.'}
               </p>
               {!debouncedSearch && statusFilter.length === 0 && (
-                <div className="flex gap-3">
-                  <Button variant="outline" className="gap-2">
-                    <Plus className="h-4 w-4" />
-                    Add Manually
+                <Link href="/admin/data-enrichment">
+                  <Button className="gap-2">
+                    <Database className="h-4 w-4" />
+                    Set Up Data Enrichment
                   </Button>
-                  <Link href="/admin/data-enrichment">
-                    <Button className="gap-2">
-                      <Database className="h-4 w-4" />
-                      Import from Sheets
-                    </Button>
-                  </Link>
-                </div>
+                </Link>
               )}
             </CardContent>
           </Card>

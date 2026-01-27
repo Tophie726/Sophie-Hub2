@@ -48,6 +48,7 @@ CREATE TABLE partners (
 
   -- Metadata
   notes TEXT,
+  source_data JSONB DEFAULT '{}'::jsonb, -- Raw values from all external sources (zero-data-loss capture)
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
 );
@@ -101,6 +102,7 @@ CREATE TABLE staff (
   calendly_url TEXT,
 
   -- Metadata
+  source_data JSONB DEFAULT '{}'::jsonb, -- Raw values from all external sources (zero-data-loss capture)
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
 );
@@ -216,6 +218,7 @@ CREATE TABLE asins (
   campaign_structure_verified_at TIMESTAMPTZ,
 
   -- Metadata
+  source_data JSONB DEFAULT '{}'::jsonb, -- Raw values from all external sources (zero-data-loss capture)
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now(),
 

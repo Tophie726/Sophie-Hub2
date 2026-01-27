@@ -121,6 +121,8 @@ export interface EntityChange {
   existing?: Record<string, unknown>
   /** Reason for skip (if type is 'skip') */
   skipReason?: string
+  /** Raw source data capture for zero-data-loss storage */
+  sourceData?: Record<string, unknown>
 }
 
 // =============================================================================

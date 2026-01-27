@@ -1,7 +1,7 @@
 # Data Enrichment Progress Tracker
 
 > Tracking the implementation of Sophie Hub's data enrichment system.
-> Last updated: 2026-01-27 (Entity pages, sync hardening, weekly pivot, AI badges, Product Centre)
+> Last updated: 2026-01-27 (classify row UX, input mode switching, AI Opus 4.5, tag auto-classify)
 
 ---
 
@@ -69,6 +69,12 @@
 | **Failed batch tracking** | **Done** | **HIGH** | Failed insert batches mark changes as `skip` with error message instead of silent failure |
 | **Weekly status pivot** | **Done** | **HIGH** | `processWeeklyColumns()` matches column patterns, parses week dates, upserts into `weekly_statuses` |
 | **`parseWeekDate()` helper** | **Done** | **MEDIUM** | Handles M/D, MM/DD/YYYY, ISO date formats; normalizes to Monday of week |
+| **Zero-data-loss `source_data` JSONB** | **Done** | **HIGH** | `source_data` column on partners/staff/asins captures ALL raw source values. `buildSourceData()` + `deepMergeSourceData()` in engine.ts |
+| **Case-insensitive key lookup** | **Done** | **HIGH** | `.ilike()` instead of `.eq()` in `findExisting()`, update path, weekly status lookup |
+| **Auto-matching fields on Map phase** | **Done** | **MEDIUM** | `autoMatchFields()` normalizes column names and matches to field registry labels on Classify → Map transition |
+| **"Source data only" label** | **Done** | **MEDIUM** | Map phase dropdown shows `source_data."Column Header"` JSONB path instead of misleading "Don't map" |
+| **Tab bar flash fix** | **Done** | **MEDIUM** | Hidden/flagged tabs filtered at SourceBrowser before passing to SheetTabBar; Overview cards use `initial={false}` |
+| **Classify phase search** | **Done** | **MEDIUM** | Column mode (header search) + Data mode (cell value search) in ClassifyPhase |
 | End-to-end sync verification | Pending | HIGH | Full pipeline test: map columns → sync → verify entity tables |
 | Error recovery UX | Pending | MEDIUM | Better error handling for partial sync failures |
 | Lineage visualization | Pending | MEDIUM | "Where did this value come from?" |
@@ -185,6 +191,16 @@
 | Auto-hide empty columns | Done | 2026-01-27 | `isEmpty` detection → auto-skip + collapsible section |
 | Collapsible empty column section | Done | 2026-01-27 | "Empty columns (N) — auto-skipped" with expand/collapse |
 | Letter keyboard shortcuts | Done | 2026-01-27 | P=Partner, S=Staff, A=ASIN, W=Weekly, C=Computed, X=Skip (was 1-5 numbers) |
+| Classify row input mode switching | Done | 2026-01-27 | Keyboard focus and mouse hover mutually exclusive via `usingKeyboard` state |
+| Classify row perf: plain divs | Done | 2026-01-27 | Replaced `motion.div layout` with plain `<div>` — eliminates Framer Motion recalc for 241 rows |
+| Scroll-into-view on keyboard nav | Done | 2026-01-27 | `classifyRowRefs` + useEffect scrolls focused row into view (`block: 'nearest'`) |
+| Domain tag auto-classify | Done | 2026-01-27 | Clicking a tag in Partner/Staff submenu auto-sets entity category |
+| AI model upgrade to Opus 4.5 | Done | 2026-01-27 | All 3 AI routes use `claude-opus-4-5-20251101` |
+| Classify phase search | Done | 2026-01-27 | Column mode (headers) and Data mode (cell values) with toggle |
+| Map phase viewport height | Done | 2026-01-27 | `h-[calc(100vh-400px)]` instead of fixed 300px |
+| Excel-style column letters | Done | 2026-01-27 | Empty columns show "Column N" letter ref instead of number |
+| Live overview progress | Done | 2026-01-27 | `onStatsChange` callback reports draft classification stats to Overview |
+| Field alias auto-matching | Done | 2026-01-27 | `aliases` on FieldDefinition. "Email Address" → client_email, "Phone Number" → client_phone, etc. |
 
 ---
 

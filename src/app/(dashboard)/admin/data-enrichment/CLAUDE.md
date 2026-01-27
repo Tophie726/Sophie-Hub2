@@ -236,6 +236,16 @@ Following CLAUDE.md animation guidelines:
 25. **Performance: Non-blocking preview** - DB tabs show immediately, Google Sheets preview merges in background ✓
 26. **Performance: Deferred field tags** - Only fetches on Classify phase entry, not on mount ✓
 27. **Quality: Critical invariants + pre-change checklist** - `browser/CLAUDE.md` documents 6 invariants and verification steps ✓
+28. **Zero-data-loss `source_data` JSONB** - All raw source values captured on every entity, even unmapped/skipped columns ✓
+29. **Auto-matching fields on Map phase** - Source column names auto-matched to field registry labels (case-insensitive) ✓
+30. **"Source data only" label** - Map phase dropdown shows `source_data."Column Header"` path instead of misleading "Don't map" ✓
+31. **Case-insensitive key lookup** - Sync engine uses `.ilike()` for key matching to prevent duplicate records ✓
+32. **Tab bar flash fix** - Hidden/flagged tabs filtered at source-browser level before passing to SheetTabBar; Overview cards use `initial={false}` to prevent re-animation on preview merge ✓
+33. **Classify phase search** - Search bar with Column mode (search headers) and Data mode (search cell values to find which column contains a value) ✓
+34. **Classify row UX: input mode switching** - Keyboard nav and mouse hover are mutually exclusive. Arrow keys show left accent focus indicator (hides hover). Mouse movement hides focus indicator (enables hover). Rows use plain divs (not Framer Motion) for performance with 200+ columns. Scroll-into-view on keyboard navigation. ✓
+35. **Domain tag auto-classify** - Clicking a tag in the Partner submenu auto-sets category to Partner; same for Staff ✓
+36. **AI model: Opus 4.5** - All AI suggestions use `claude-opus-4-5-20251101` (mapping SDK, analyze-tab, analyze-source) ✓
+37. **Field alias auto-matching** - Field registry supports `aliases` array per field. Auto-matcher checks name, label, AND aliases. E.g. "Email Address" → `client_email`, "Phone Number" → `client_phone`, "Commission Structure" → `commission_rate`. Covers partners (20 fields), staff (17), ASINs (10). ✓
 
 ### What's TODO 🚧
 
@@ -1074,9 +1084,78 @@ Staff (separate entity, team members)
 | Staff | 👥 Users | Green | Maps to `staff` table fields | ✓ Key designation |
 | Weekly | 📅 Calendar | Purple | Pivoted to `weekly_statuses` table | — |
 | Computed | 🔢 Calculator | Cyan | Stored in computed_fields registry | — |
-| Skip | ⏭️ SkipForward | Gray | Not imported | — |
+| Skip | ⏭️ SkipForward | Gray | Not mapped to a field, but raw value still captured in `source_data` JSONB | — |
 
 **Note:** ASIN is nested under Partner in the UI to communicate the entity hierarchy. Parent/child ASIN relationships (variations) will be added later.
+
+### Cross-Entity References (Staff in Partner Sheets)
+
+When a column like "POD Leader" or "Account Manager" appears in a partner sheet, classify it as **Partner** (not Staff). These are partner fields that *reference* staff members. The partner field registry includes a "Staff Assignments" group with reference fields:
+- `POD Leader → Staff` (junction via `partner_assignments`, role `pod_leader`)
+- `Account Manager → Staff` (junction, role `account_manager`)
+- `Brand Manager → Staff` (junction, role `brand_manager`)
+- etc.
+
+The sync engine resolves these by looking up the staff member by `full_name` and creating/updating the assignment in `partner_assignments`.
+
+**Common mistake:** Classifying "POD Leader" as "Staff" shows staff entity fields (full_name, email, etc.) which is incorrect. It's a partner field that points to staff, not a staff field itself.
+
+### Weekly Status Columns
+
+Weekly columns (e.g., `1/1/24 Week 1`, `1/8/24 Week 2`) are automatically handled by the sync engine's `processWeeklyColumns()`:
+1. Classify them as "Weekly" in the Classify phase
+2. They appear in the Map phase as "115 weekly columns detected" (no per-column mapping needed)
+3. On sync, each column's value is pivoted into the `weekly_statuses` table (one row per partner per week)
+4. New weekly columns appearing in the sheet are automatically handled on next sync
+
+### Zero-Data-Loss: `source_data` JSONB
+
+**Every column from every synced source row is preserved — no data loss, ever.**
+
+All entity tables (`partners`, `staff`, `asins`) have a `source_data JSONB` column that captures ALL raw values from the source, including:
+- Mapped columns (raw pre-transform values as backup)
+- Unmapped/skipped columns (preserved even without a target field)
+
+**Structure:**
+```json
+{
+  "gsheets": {
+    "Master Client Sheet": {
+      "Brand Name": "ACME Corp",
+      "Client Count": "42",
+      "Status": "Active"
+    }
+  }
+}
+```
+
+- Original column headers used as-is (not snake_cased) to preserve fidelity
+- Merge strategy: additive at connector+tab level, replace at column level on re-sync
+- Multiple tabs syncing to the same entity merge cleanly (Tab A + Tab B both preserved)
+
+**UI:** In the Map phase, columns without a target field show `source_data."Column Header"` in the dropdown to communicate exactly where the value is stored. This replaces the old "Don't map" label.
+
+### Auto-Matching Fields
+
+When entering the Map phase from Classify, the SmartMapper automatically matches source column names to entity field registry labels. For example:
+- Source column "Brand Name" → auto-maps to `brand_name`
+- Source column "Client Email" → auto-maps to `client_email`
+- Source column "Status" → auto-maps to `status`
+
+Matching is case-insensitive and strips non-alphanumeric characters. Already-assigned fields are not duplicated. Users can override any auto-match via the dropdown.
+
+**Implementation:** `autoMatchFields()` in `smart-mapper.tsx`, called by `enterMapPhase()` on Classify → Map transition.
+
+### Classify Phase Search
+
+The Classify phase includes a search bar between the filter tabs and column list with two modes:
+
+- **Column** (default): Filters columns by header name. Type "brand" to see all columns containing "brand" in their header.
+- **Data**: Searches through the first 50 data rows. Shows only columns that contain the search term in their cell values. Useful for finding "which column has this value?"
+
+**UI:** Search input with Column/Data mode toggle buttons, clear (X) button, and result count badge showing "N results". Applied after category filter (search within filtered subset).
+
+**Implementation:** `searchQuery` and `searchMode` state in `smart-mapper.tsx`, `validColumns` filter applied after `filteredByCategory`.
 
 ---
 
@@ -1323,6 +1402,14 @@ const handleKeyDown = (e: React.KeyboardEvent, items: any[], selectedIndex: numb
 - Use `tabIndex={0}` on container for keyboard focus
 - Use `useRef` + `scrollIntoView` to keep focused item visible
 - Visual focus indicator: `focus:ring-2 focus:ring-primary focus:ring-offset-2`
+
+**Input Mode Switching (Classify Phase Pattern):**
+Keyboard focus and mouse hover are mutually exclusive to avoid competing highlights:
+- `usingKeyboard` state tracks which input mode is active
+- `handleKeyDown` sets `usingKeyboard = true` — shows left accent bar on focused row, disables hover
+- `onMouseMove` on container sets `usingKeyboard = false` — hides focus indicator, enables CSS hover
+- Rows use plain `<div>` (not `motion.div`) for performance with 200+ items — no Framer Motion layout recalculation
+- `classifyRowRefs` + `useEffect` on `focusedIndex` scrolls focused row into view (`block: 'nearest'`)
 
 ---
 

@@ -47,7 +47,8 @@ The header status dot is shown consistently everywhere:
 ### SheetTabBar
 Renders tabs for navigating between sheet tabs within a source. Features:
 - **Overview tab** (`OVERVIEW_TAB_ID = '__overview__'`): Always first, shows dashboard
-- Only shows **active** and **reference** tabs - keeps the bar clean
+- Only receives **active** and **reference** tabs (pre-filtered in SourceBrowser before passing as props)
+- Internal `visibleTabs` filter as defense-in-depth
 - Flagged and hidden tabs are only accessible from Overview dashboard
 - Status dropdown (Active, Reference, Flagged, Hidden) for changing tab status
 - **Header status dot** with progress ring for confirmed tabs

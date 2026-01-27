@@ -65,7 +65,7 @@ import { AISuggestionButton, type AISuggestion } from './ai-suggestion-button'
 import { AISuggestAllDialog, type BulkSuggestion } from './ai-suggest-all-dialog'
 import { AITabAnalysis, type TabSummary } from './ai-tab-analysis'
 import { ShimmerGrid } from '@/components/ui/shimmer-grid'
-import { getGroupedFieldDefs } from '@/lib/entity-fields'
+import { getGroupedFieldDefs, getFieldsForEntity } from '@/lib/entity-fields'
 
 // ============ ANIMATED LOCK ICON ============
 // Custom animated lock that shows shackle closing
@@ -112,6 +112,19 @@ function AnimatedLockIcon({ className }: { className?: string }) {
       />
     </svg>
   )
+}
+
+// ============ HELPERS ============
+
+/** Convert 0-based column index to Excel-style letter (0→A, 1→B, ..., 25→Z, 26→AA, etc.) */
+function columnIndexToLetter(index: number): string {
+  let result = ''
+  let n = index
+  while (n >= 0) {
+    result = String.fromCharCode(65 + (n % 26)) + result
+    n = Math.floor(n / 26) - 1
+  }
+  return result
 }
 
 // ============ TYPES ============
@@ -189,6 +202,8 @@ interface SmartMapperProps {
   headerAlreadyConfirmed?: boolean
   /** The confirmed header row from database (used when headerAlreadyConfirmed is true) */
   confirmedHeaderRow?: number
+  /** Called whenever classification stats change (for live progress in Overview) */
+  onStatsChange?: (stats: { partner: number; staff: number; asin: number; weekly: number; computed: number; skip: number; unmapped: number }) => void
 }
 
 // Field definitions are now in @/lib/entity-fields (single source of truth)
@@ -228,7 +243,7 @@ interface DraftState {
   timestamp: number
 }
 
-export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, onComplete, onBack, onHeaderConfirmed, embedded = false, headerAlreadyConfirmed = false, confirmedHeaderRow }: SmartMapperProps) {
+export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, onComplete, onBack, onHeaderConfirmed, embedded = false, headerAlreadyConfirmed = false, confirmedHeaderRow, onStatsChange }: SmartMapperProps) {
   // Simplified: just preview → classify → map
   // If header already confirmed, skip preview phase
   const [phase, setPhase] = useState<'preview' | 'classify' | 'map'>(headerAlreadyConfirmed ? 'classify' : 'preview')
@@ -251,6 +266,20 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
   const tabNameRef = useRef(tabName)
   dataSourceIdRef.current = dataSourceId
   tabNameRef.current = tabName
+
+  // Report classification stats to parent for live Overview progress
+  useEffect(() => {
+    if (!onStatsChange || columns.length === 0) return
+    const stats = { partner: 0, staff: 0, asin: 0, weekly: 0, computed: 0, skip: 0, unmapped: 0 }
+    columns.forEach(col => {
+      if (col.category && col.category in stats) {
+        stats[col.category as keyof typeof stats]++
+      } else {
+        stats.unmapped++
+      }
+    })
+    onStatsChange(stats)
+  }, [columns, onStatsChange])
 
   // Fetch available field tags (deferred: only when entering classify phase)
   useEffect(() => {
@@ -422,7 +451,7 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
 
               // Merge: saved mappings applied on top of full column list
               const merged: ColumnClassification[] = headers.map((header: string, idx: number) => {
-                const saved = savedByColumn.get(header || `Column ${idx + 1}`)
+                const saved = savedByColumn.get(header || `Column ${columnIndexToLetter(idx)}`)
                 if (saved) {
                   return {
                     sourceIndex: saved.source_column_index ?? idx,
@@ -444,7 +473,7 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
                   name.match(/^\d{4}-\d{2}-\d{2}/)
                 return {
                   sourceIndex: idx,
-                  sourceColumn: header || `Column ${idx + 1}`,
+                  sourceColumn: header || `Column ${columnIndexToLetter(idx)}`,
                   category: isWeekly ? 'weekly' as const : null,
                   targetField: null,
                   authority: 'source_of_truth' as const,
@@ -628,7 +657,7 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
 
         return {
           sourceIndex: idx,
-          sourceColumn: header || `Column ${idx + 1}`,
+          sourceColumn: header || `Column ${columnIndexToLetter(idx)}`,
           category: isWeekly ? 'weekly' : isEmpty ? 'skip' : null,
           targetField: null,
           authority: 'source_of_truth',
@@ -646,7 +675,7 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
       // Update sourceColumn names from actual headers to ensure they're current
       setColumns(prev => prev.map((col, idx) => ({
         ...col,
-        sourceColumn: headers[idx] || `Column ${idx + 1}`,
+        sourceColumn: headers[idx] || `Column ${columnIndexToLetter(idx)}`,
       })))
       return
     }
@@ -666,7 +695,7 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
 
         return {
           sourceIndex: idx,
-          sourceColumn: header || `Column ${idx + 1}`,
+          sourceColumn: header || `Column ${columnIndexToLetter(idx)}`,
           category: isWeekly ? 'weekly' : isEmpty ? 'skip' : null,
           targetField: null,
           authority: 'source_of_truth',
@@ -772,6 +801,61 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
     setColumns(prev => prev.map((col, idx) =>
       idx === columnIndex ? { ...col, authority } : col
     ))
+  }
+
+  // Auto-match source columns to target fields by comparing names + aliases
+  const autoMatchFields = () => {
+    const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '')
+
+    const categoryToEntity = (cat: ColumnCategory): EntityType | null => {
+      if (cat === 'partner') return 'partners'
+      if (cat === 'staff') return 'staff'
+      if (cat === 'asin') return 'asins'
+      return null
+    }
+
+    setColumns(prev => {
+      // Track which fields have already been assigned (either pre-existing or newly matched)
+      const assignedFields = new Set<string>()
+      prev.forEach(col => {
+        if (col.targetField) assignedFields.add(`${col.category}:${col.targetField}`)
+      })
+
+      return prev.map(col => {
+        // Skip columns that already have a target field
+        if (col.targetField) return col
+
+        const entity = categoryToEntity(col.category as ColumnCategory)
+        if (!entity) return col
+
+        const fields = getFieldsForEntity(entity)
+        const normalizedSource = normalize(col.sourceColumn)
+
+        // Try to find a matching field by name, label, or aliases
+        const match = fields.find(f => {
+          const key = `${col.category}:${f.name}`
+          if (assignedFields.has(key)) return false
+          // Check exact name/label match
+          if (normalize(f.label) === normalizedSource || normalize(f.name) === normalizedSource) return true
+          // Check aliases
+          if (f.aliases?.some(alias => normalize(alias) === normalizedSource)) return true
+          return false
+        })
+
+        if (match) {
+          assignedFields.add(`${col.category}:${match.name}`)
+          return { ...col, targetField: match.name }
+        }
+
+        return col
+      })
+    })
+  }
+
+  // Transition to map phase with auto-matching
+  const enterMapPhase = () => {
+    autoMatchFields()
+    setPhase('map')
   }
 
   // Determine primary entity (whichever has a key marked, or most columns)
@@ -915,7 +999,7 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
           onComputedConfigChange={handleComputedConfigChange}
           availableTags={availableTags}
           onTagsChange={handleTagsChange}
-          onConfirm={() => setPhase('map')}
+          onConfirm={enterMapPhase}
           onBack={() => setPhase('preview')}
           embedded={embedded}
           tabSummary={tabSummary}
@@ -1304,6 +1388,8 @@ function ClassifyPhase({
   const [configureComputedIndex, setConfigureComputedIndex] = useState<number | null>(null)
   const [selectedIndices, setSelectedIndices] = useState<number[]>([])
   const [activeFilter, setActiveFilter] = useState<ColumnCategory | 'all' | 'unclassified'>('all')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchMode, setSearchMode] = useState<'column' | 'data'>('column')
   const containerRef = useRef<HTMLDivElement>(null)
   const hasInteracted = useRef(false)
 
@@ -1313,6 +1399,17 @@ function ClassifyPhase({
   // Check if any columns have been classified
   const hasClassifiedColumns = columns.some(col => col.category !== null)
   const [focusedIndex, setFocusedIndex] = useState(0)
+  const [usingKeyboard, setUsingKeyboard] = useState(false)
+  const classifyRowRefs = useRef<(HTMLDivElement | null)[]>([])
+
+  // Scroll focused row into view on keyboard navigation
+  useEffect(() => {
+    if (!hasInteracted.current) return
+    const row = classifyRowRefs.current[focusedIndex]
+    if (row) {
+      row.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    }
+  }, [focusedIndex])
 
   // State for key confirmation dialog
   const [keyConfirmation, setKeyConfirmation] = useState<{
@@ -1335,12 +1432,27 @@ function ClassifyPhase({
   const nonEmptyColumns = allValidColumns.filter(c => !(c.isEmpty && c.category === 'skip'))
   const [showEmptyColumns, setShowEmptyColumns] = useState(false)
 
+  // Data rows for search (first 50 data rows after header)
+  const dataRows = rawData.rows.slice(headerRow + 1, headerRow + 51)
+
   // Apply filter — only to non-empty columns
-  const validColumns = activeFilter === 'all'
+  const filteredByCategory = activeFilter === 'all'
     ? nonEmptyColumns
     : activeFilter === 'unclassified'
     ? nonEmptyColumns.filter(c => c.category === null)
     : nonEmptyColumns.filter(c => c.category === activeFilter)
+
+  // Apply search filter
+  const validColumns = searchQuery.trim()
+    ? filteredByCategory.filter(col => {
+        const q = searchQuery.toLowerCase()
+        if (searchMode === 'column') {
+          return col.sourceColumn.toLowerCase().includes(q)
+        }
+        // Data mode: search through cell values for this column
+        return dataRows.some(row => (row[col.sourceIndex] || '').toLowerCase().includes(q))
+      })
+    : filteredByCategory
 
   const lastClickedIndex = useRef<number | null>(null)
 
@@ -1460,6 +1572,14 @@ function ClassifyPhase({
 
   // Keyboard navigation
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    // Don't intercept keys when typing in search or other inputs
+    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+      return
+    }
+
+    // Switch to keyboard mode (hides hover, shows focus indicator)
+    if (!usingKeyboard) setUsingKeyboard(true)
+
     const col = validColumns[focusedIndex]
 
     // Number keys 1-6 or letter shortcuts for quick classification
@@ -1794,6 +1914,55 @@ function ClassifyPhase({
             )}
           </div>
 
+          {/* Search bar */}
+          <div className="flex items-center gap-2 py-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/50" />
+              <input
+                type="text"
+                placeholder={searchMode === 'column' ? 'Search columns...' : 'Search data values...'}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full h-8 pl-8 pr-8 rounded-md border border-border/60 bg-background text-xs placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground/50 hover:text-muted-foreground"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+            <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5 flex-shrink-0">
+              <button
+                onClick={() => setSearchMode('column')}
+                className={`px-2 py-1 rounded text-[11px] transition-all ${
+                  searchMode === 'column'
+                    ? 'bg-background text-foreground shadow-sm font-medium'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Column
+              </button>
+              <button
+                onClick={() => setSearchMode('data')}
+                className={`px-2 py-1 rounded text-[11px] transition-all ${
+                  searchMode === 'data'
+                    ? 'bg-background text-foreground shadow-sm font-medium'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Data
+              </button>
+            </div>
+            {searchQuery && (
+              <span className="text-[11px] text-muted-foreground tabular-nums flex-shrink-0">
+                {validColumns.length} result{validColumns.length !== 1 ? 's' : ''}
+              </span>
+            )}
+          </div>
+
           {/* Mobile Card View */}
           <div className="md:hidden space-y-3 max-h-[400px] overflow-y-auto pb-2">
             {validColumns.map((col, visualIdx) => {
@@ -1822,49 +1991,33 @@ function ClassifyPhase({
 
           {/* Desktop Table View */}
           <ScrollArea className="h-[380px] hidden md:block">
-            <div className="space-y-1 pr-3">
+            <div
+              className="space-y-1 pr-3"
+              onMouseMove={() => { if (usingKeyboard) setUsingKeyboard(false) }}
+            >
               {validColumns.map((col, visualIdx) => {
                 const idx = col.sourceIndex
                 const sample = getSample(idx)
                 const isSelected = selectedIndices.includes(idx)
-                const isFocused = focusedIndex === visualIdx
+                const isFocused = usingKeyboard && focusedIndex === visualIdx
 
                 // Get the actual sample values for each key (for showing linked relationship)
                 const partnerKeyValue = partnerKey ? getSample(partnerKey.sourceIndex) : null
                 const staffKeyValue = staffKey ? getSample(staffKey.sourceIndex) : null
 
                 return (
-                  <motion.div
+                  <div
                     key={idx}
-                    layout
-                    initial={false}
-                    animate={{
-                      backgroundColor: col.isKey
-                        ? 'rgba(245, 158, 11, 0.05)'
-                        : isSelected
-                        ? 'hsl(var(--accent))'
-                        : isFocused
-                        ? 'hsl(var(--accent) / 0.5)'
-                        : col.category
-                        ? 'hsl(var(--muted) / 0.3)'
-                        : 'transparent',
-                      scale: 1,
-                    }}
-                    whileTap={{ scale: 0.995 }}
-                    transition={{
-                      backgroundColor: { duration: 0.2, ease: easeOut },
-                      scale: { duration: 0.1 },
-                      layout: { duration: 0.2, ease: easeOut }
-                    }}
-                    className={`flex items-center gap-3 p-3 rounded-lg border relative hover:bg-accent/50 transition-colors ${
+                    ref={(el) => { classifyRowRefs.current[visualIdx] = el }}
+                    className={`flex items-center gap-3 p-3 rounded-lg border relative transition-colors duration-100 active:scale-[0.997] ${
                       col.isKey
-                        ? 'border-amber-500/30'
-                        : isSelected
-                        ? 'border-primary/50'
+                        ? 'border-l-2 border-l-amber-500 bg-amber-500/5'
                         : isFocused
-                        ? 'border-primary/60 bg-accent/30'
+                        ? 'border-l-2 border-l-primary bg-primary/[0.03]'
+                        : isSelected
+                        ? 'bg-primary/5 border-border'
                         : 'border-border'
-                    }`}
+                    } ${!usingKeyboard && !col.isKey ? 'hover:bg-muted/30' : ''}`}
                   >
                     {/* Checkbox */}
                     <button
@@ -2119,6 +2272,10 @@ function ClassifyPhase({
                                       key={tag.id}
                                       onClick={(e) => {
                                         e.preventDefault()
+                                        // Auto-classify as Partner since this tag is in the Partner submenu
+                                        if (col.category !== 'partner') {
+                                          onCategoryChange(idx, 'partner')
+                                        }
                                         const currentTags = col.tagIds || []
                                         const newTags = isSelected
                                           ? currentTags.filter(id => id !== tag.id)
@@ -2226,6 +2383,10 @@ function ClassifyPhase({
                                       key={tag.id}
                                       onClick={(e) => {
                                         e.preventDefault()
+                                        // Auto-classify as Staff since this tag is in the Staff submenu
+                                        if (col.category !== 'staff') {
+                                          onCategoryChange(idx, 'staff')
+                                        }
                                         const currentTags = col.tagIds || []
                                         const newTags = isSelected
                                           ? currentTags.filter(id => id !== tag.id)
@@ -2287,7 +2448,7 @@ function ClassifyPhase({
                         {col.computedConfig ? 'Edit' : 'Configure'}
                       </Button>
                     )}
-                  </motion.div>
+                  </div>
                 )
               })}
             </div>
@@ -2978,7 +3139,7 @@ function MapPhase({
       <motion.div
         key={col.sourceIndex}
         layout
-        className={`p-3 rounded-lg border ${colorClass}`}
+        className={`p-3 rounded-lg border transition-colors hover:bg-accent/50 hover:border-accent-foreground/20 ${colorClass}`}
       >
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
@@ -3002,7 +3163,7 @@ function MapPhase({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="__none__">
-              <span className="text-muted-foreground">Don&apos;t map</span>
+              <span className="text-muted-foreground font-mono text-[11px]">source_data.&quot;{col.sourceColumn}&quot;</span>
             </SelectItem>
             {groupedFields.map((group) => (
               <SelectGroup key={group.group}>
@@ -3070,7 +3231,7 @@ function MapPhase({
                   <Building2 className="h-4 w-4" />
                   Partner Fields ({partnerColumns.length})
                 </h4>
-                <ScrollArea className="h-[300px]">
+                <ScrollArea className="h-[calc(100vh-400px)] min-h-[300px]">
                   <div className="space-y-2 pr-2">
                     {partnerColumns.map(col => renderColumnMapper(col, 'partners', 'bg-blue-500/5 border-blue-500/20'))}
                   </div>
@@ -3085,7 +3246,7 @@ function MapPhase({
                   <Users className="h-4 w-4" />
                   Staff Fields ({staffColumns.length})
                 </h4>
-                <ScrollArea className="h-[300px]">
+                <ScrollArea className="h-[calc(100vh-400px)] min-h-[300px]">
                   <div className="space-y-2 pr-2">
                     {staffColumns.map(col => renderColumnMapper(col, 'staff', 'bg-green-500/5 border-green-500/20'))}
                   </div>
@@ -3100,7 +3261,7 @@ function MapPhase({
                   <Package className="h-4 w-4" />
                   ASIN Fields ({asinColumns.length})
                 </h4>
-                <ScrollArea className="h-[300px]">
+                <ScrollArea className="h-[calc(100vh-400px)] min-h-[300px]">
                   <div className="space-y-2 pr-2">
                     {asinColumns.map(col => renderColumnMapper(col, 'asins', 'bg-orange-500/5 border-orange-500/20'))}
                   </div>

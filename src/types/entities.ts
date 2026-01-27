@@ -228,6 +228,7 @@ export interface PartnerDetail {
   parent_asin_count: number | null
   child_asin_count: number | null
   notes: string | null
+  source_data?: Record<string, unknown> | null
   created_at: string
   updated_at: string | null
   assignments: PartnerAssignment[]
@@ -278,6 +279,7 @@ export interface StaffDetail {
   departure_date: string | null
   dashboard_url: string | null
   calendly_url: string | null
+  source_data?: Record<string, unknown> | null
   created_at: string
   updated_at: string | null
   assigned_partners: StaffPartnerAssignment[]

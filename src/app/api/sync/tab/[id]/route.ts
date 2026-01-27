@@ -108,7 +108,8 @@ export async function POST(
         rows_skipped: result.stats.rowsSkipped,
         errors: result.stats.errors,
       },
-      changes: result.changes,
+      // Strip sourceData from changes to keep dry-run payloads small
+      changes: result.changes.map(({ sourceData, ...rest }) => rest),
       duration_ms: result.durationMs,
     })
   } catch (error) {

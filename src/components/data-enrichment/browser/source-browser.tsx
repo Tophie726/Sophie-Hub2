@@ -108,6 +108,9 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
   const [sheetPreviews, setSheetPreviews] = useState<Record<string, SheetPreview>>({})
   const [isLoadingPreview, setIsLoadingPreview] = useState(false)
 
+  // Draft stats from SmartMapper for live Overview progress
+  const [draftStats, setDraftStats] = useState<Record<string, CategoryStats>>({})
+
   // Load preview for a source that has no tabs yet
   const loadPreviewForSource = useCallback(async (sourceId: string, spreadsheetId: string) => {
     setIsLoadingPreview(true)
@@ -211,7 +214,7 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
       headerConfirmed: t.header_confirmed || false,
       headerRow: t.header_row,
       hasHeaders: t.header_row >= 0,
-      mappingProgress: calculateMappingProgress(t.categoryStats),
+      mappingProgress: calculateMappingProgress(draftStats[t.id] || t.categoryStats),
     }))
 
     const previewTabs = (activePreview?.tabs || []).map(t => ({
@@ -740,6 +743,12 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
     }
   }
 
+  // Handle live stats updates from SmartMapper (for Overview progress)
+  const handleStatsChange = useCallback((stats: CategoryStats) => {
+    if (!activeTabId || activeTabId === OVERVIEW_TAB_ID) return
+    setDraftStats(prev => ({ ...prev, [activeTabId]: stats }))
+  }, [activeTabId])
+
   // Auth error state - session not ready or expired
   if (authError) {
     return (
@@ -920,7 +929,7 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
       {/* Sheet Tab Bar */}
       {sheetTabs.length > 0 && (
         <SheetTabBar
-          tabs={sheetTabs}
+          tabs={sheetTabs.filter(t => !t.status || t.status === 'active' || t.status === 'reference')}
           activeTabId={activeTabId}
           onSelectTab={handleSelectTab}
           onStatusChange={handleTabStatusChange}
@@ -1003,6 +1012,12 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
               tabs={sheetTabs.map(t => {
                 // Find matching DB tab for additional data
                 const dbTab = activeSource?.tabs?.find(dt => dt.tab_name === t.name)
+                // Prefer live draft stats from SmartMapper (updates as user classifies)
+                const liveDraft = draftStats[t.id]
+                const defaultStats: CategoryStats = {
+                  partner: 0, staff: 0, asin: 0, weekly: 0, computed: 0, skip: 0,
+                  unmapped: t.columnCount || 0,
+                }
                 return {
                   id: t.id,
                   tab_name: t.name,
@@ -1010,15 +1025,7 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
                   header_row: dbTab?.header_row ?? -1,
                   header_confirmed: dbTab?.header_confirmed || false,
                   columnCount: t.columnCount || 0,
-                  categoryStats: dbTab?.categoryStats || {
-                    partner: 0,
-                    staff: 0,
-                    asin: 0,
-                    weekly: 0,
-                    computed: 0,
-                    skip: 0,
-                    unmapped: t.columnCount || 0,
-                  },
+                  categoryStats: liveDraft || dbTab?.categoryStats || defaultStats,
                   status: t.status || 'active',
                   notes: t.notes || null,
                   updated_at: dbTab?.updated_at || null,
@@ -1052,6 +1059,7 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
               onHeaderConfirmed={handleHeaderConfirmed}
               headerAlreadyConfirmed={activeTab.headerConfirmed}
               confirmedHeaderRow={activeTab.headerRow}
+              onStatsChange={handleStatsChange}
               embedded
             />
           </motion.div>

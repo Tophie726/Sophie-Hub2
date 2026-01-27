@@ -166,7 +166,7 @@ ${tabSummaries}
 Determine the primary entity type and provide a mapping strategy.`
 
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-opus-4-5-20251101',
       max_tokens: 1024,
       system: systemPrompt,
       tools: [ANALYZE_SOURCE_TOOL],

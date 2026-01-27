@@ -174,7 +174,7 @@ export class MappingAssistantSDK {
     await this.loadExistingMappings()
 
     const response = await this.anthropic!.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-opus-4-5-20251101',
       max_tokens: 1024,
       system: this.buildSystemPrompt(context),
       tools: [COLUMN_MAPPING_TOOL],

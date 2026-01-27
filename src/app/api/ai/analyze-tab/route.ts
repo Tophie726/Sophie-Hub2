@@ -204,7 +204,7 @@ ${column_names.length > 50 ? `\n(Showing first 50 of ${column_names.length} colu
 Provide a high-level summary using the summarize_tab tool. Focus on WHAT this tab is for, not individual column mappings.`
 
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-opus-4-5-20251101',
       max_tokens: 1024,
       system: systemPrompt,
       tools: [ANALYZE_TAB_TOOL],

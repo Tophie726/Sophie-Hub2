@@ -452,6 +452,45 @@ Get detailed sync run results.
 
 ---
 
+## Zero-Data-Loss: `source_data` JSONB
+
+Every synced row captures ALL raw column values into the entity's `source_data` JSONB column — even columns not mapped to specific fields.
+
+### Structure
+
+```json
+{
+  "gsheets": {
+    "Master Client Sheet": {
+      "Brand Name": "ACME Corp",
+      "Client Count": "42",
+      "Custom Field": "some value"
+    }
+  }
+}
+```
+
+### Key Behaviors
+
+- **All columns captured**: Mapped columns store raw pre-transform values as backup. Unmapped/skipped columns are preserved too.
+- **Original headers**: Column headers stored as-is (`"Client Count"` not `"client_count"`) for fidelity.
+- **Deep merge on re-sync**: Re-syncing a tab replaces that tab's data; other tabs untouched. Multiple tabs syncing to the same entity merge cleanly.
+- **Not in field registry**: `source_data` is infrastructure, not a user-facing mappable field.
+
+### Implementation
+
+- `buildSourceData()` in `engine.ts` — builds `{ connectorType: { tabName: { header: rawValue } } }` for each row
+- `deepMergeSourceData()` in `engine.ts` — merges incoming source data with existing record's `source_data`
+- Creates: `source_data` included directly in batch inserts
+- Updates: deep-merged with existing `source_data` before writing
+- API response: `sourceData` stripped from dry-run changes to keep payloads small
+
+### Case-Insensitive Key Lookup
+
+The sync engine uses `.ilike()` instead of `.eq()` for key matching (`findExisting()`, update path, weekly status lookup). This prevents duplicate records for "Nike" vs "nike" or "ACME" vs "Acme".
+
+---
+
 ## Error Handling
 
 ### Row-Level Errors

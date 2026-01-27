@@ -298,6 +298,14 @@ export class SyncEngine {
 
       try {
         const keyValue = row[keyColumnIndex]?.trim()
+
+        // Capture ALL raw column values for zero-data-loss storage
+        const rawCapture = this.buildSourceData(
+          row,
+          sourceData.headers,
+          config.tabMapping.tab_name
+        )
+
         if (!keyValue) {
           changes.push({
             entity: config.tabMapping.primary_entity,
@@ -306,6 +314,7 @@ export class SyncEngine {
             type: 'skip',
             fields: {},
             skipReason: 'Empty key value',
+            sourceData: rawCapture,
           })
           continue
         }
@@ -341,6 +350,7 @@ export class SyncEngine {
             fields: {},
             existing: existing ?? undefined,
             skipReason: 'No authorized fields to update',
+            sourceData: rawCapture,
           })
         } else {
           changes.push({
@@ -350,6 +360,7 @@ export class SyncEngine {
             type: existing ? 'update' : 'create',
             fields: authorizedFields,
             existing: existing ?? undefined,
+            sourceData: rawCapture,
           })
         }
       } catch (error) {
@@ -409,6 +420,33 @@ export class SyncEngine {
     return fields
   }
 
+  /**
+   * Build source_data JSONB payload from ALL columns in a row.
+   * Captures every column value with original headers, no transforms.
+   * This is the "no data loss" insurance — everything from the source
+   * is preserved even if it's not mapped to a predefined field.
+   */
+  private buildSourceData(
+    row: string[],
+    headers: string[],
+    tabName: string,
+    connectorType: string = 'gsheets'
+  ): Record<string, Record<string, Record<string, string>>> {
+    const tabData: Record<string, string> = {}
+
+    for (let i = 0; i < headers.length; i++) {
+      const header = headers[i]
+      if (!header) continue
+      tabData[header] = row[i] ?? ''
+    }
+
+    return {
+      [connectorType]: {
+        [tabName]: tabData,
+      },
+    }
+  }
+
   private filterByAuthority(
     fields: Record<string, unknown>,
     mappings: SyncConfig['columnMappings'],
@@ -438,7 +476,7 @@ export class SyncEngine {
     const { data } = await this.supabase
       .from(entity)
       .select('*')
-      .eq(keyField, keyValue)
+      .ilike(keyField, keyValue)
       .single()
 
     return data
@@ -469,6 +507,7 @@ export class SyncEngine {
       const createRecords = creates.map((c) => ({
         [c.keyField]: c.keyValue,
         ...c.fields,
+        ...(c.sourceData ? { source_data: c.sourceData } : {}),
       }))
 
       const keyField = creates[0].keyField
@@ -511,10 +550,17 @@ export class SyncEngine {
 
     // Individual updates (to track lineage per field)
     for (const update of updates) {
+      // Deep-merge source_data with existing record's source_data
+      let updateFields = { ...update.fields }
+      if (update.sourceData) {
+        const existingSourceData = (update.existing?.source_data as Record<string, unknown>) || {}
+        updateFields.source_data = deepMergeSourceData(existingSourceData, update.sourceData)
+      }
+
       const { error } = await this.supabase
         .from(config.tabMapping.primary_entity)
-        .update(update.fields)
-        .eq(update.keyField, update.keyValue)
+        .update(updateFields)
+        .ilike(update.keyField, update.keyValue)
 
       if (error) {
         console.error('Update error:', error)
@@ -646,7 +692,7 @@ export class SyncEngine {
         const { data: entity } = await this.supabase
           .from(config.tabMapping.primary_entity)
           .select('id')
-          .eq(keyMapping.target_field, keyValue)
+          .ilike(keyMapping.target_field, keyValue)
           .maybeSingle()
 
         const resolvedId: string | null = entity?.id ?? null
@@ -791,6 +837,28 @@ export class SyncEngine {
 // =============================================================================
 // Helper Functions
 // =============================================================================
+
+/**
+ * Deep-merge source_data objects.
+ * Merges at two levels: connector type (e.g., "gsheets") and tab name.
+ * Individual tab data is fully replaced on re-sync (fresh snapshot per tab).
+ */
+function deepMergeSourceData(
+  existing: Record<string, unknown>,
+  incoming: Record<string, unknown>
+): Record<string, unknown> {
+  const merged = { ...existing }
+
+  for (const [connectorType, tabs] of Object.entries(incoming)) {
+    const existingTabs = (merged[connectorType] as Record<string, unknown>) || {}
+    merged[connectorType] = {
+      ...existingTabs,
+      ...(tabs as Record<string, unknown>),
+    }
+  }
+
+  return merged
+}
 
 /**
  * Parse a week date from a column header string.
