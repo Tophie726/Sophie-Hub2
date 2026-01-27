@@ -171,6 +171,129 @@ export const entityDisplayConfig: Record<EntityType, EntityConfig> = {
   },
 }
 
+// =============================================================================
+// Partner & Staff Entity Types
+// =============================================================================
+
+/** Partner as returned from list API */
+export interface PartnerListItem {
+  id: string
+  partner_code: string | null
+  brand_name: string
+  client_name: string | null
+  client_email: string | null
+  status: string | null
+  tier: string | null
+  parent_asin_count: number | null
+  child_asin_count: number | null
+  onboarding_date: string | null
+  created_at: string
+  pod_leader?: { id: string; full_name: string } | null
+}
+
+/** Staff as returned from list API */
+export interface StaffListItem {
+  id: string
+  staff_code: string | null
+  full_name: string
+  email: string
+  role: string | null
+  department: string | null
+  title: string | null
+  status: string | null
+  max_clients: number | null
+  current_client_count: number | null
+  services: string[] | null
+  hire_date: string | null
+  created_at: string
+}
+
+/** Full partner with all relationships for detail page */
+export interface PartnerDetail {
+  id: string
+  partner_code: string | null
+  brand_name: string
+  client_name: string | null
+  client_email: string | null
+  client_phone: string | null
+  status: string | null
+  tier: string | null
+  base_fee: number | null
+  commission_rate: number | null
+  billing_day: number | null
+  onboarding_date: string | null
+  contract_start_date: string | null
+  contract_end_date: string | null
+  churned_date: string | null
+  parent_asin_count: number | null
+  child_asin_count: number | null
+  notes: string | null
+  created_at: string
+  updated_at: string | null
+  assignments: PartnerAssignment[]
+  asins: AsinSummary[]
+  recent_statuses: WeeklyStatusSummary[]
+}
+
+export interface PartnerAssignment {
+  id: string
+  assignment_role: string
+  is_primary: boolean | null
+  assigned_at: string | null
+  staff: { id: string; full_name: string; email: string; role: string | null }
+}
+
+export interface AsinSummary {
+  id: string
+  asin_code: string
+  title: string | null
+  status: string | null
+  is_parent: boolean | null
+}
+
+export interface WeeklyStatusSummary {
+  id: string
+  week_start_date: string
+  status: string | null
+  notes: string | null
+}
+
+/** Full staff with relationships for detail page */
+export interface StaffDetail {
+  id: string
+  staff_code: string | null
+  full_name: string
+  email: string
+  phone: string | null
+  slack_id: string | null
+  role: string | null
+  department: string | null
+  title: string | null
+  status: string | null
+  max_clients: number | null
+  current_client_count: number | null
+  services: string[] | null
+  hire_date: string | null
+  probation_end_date: string | null
+  departure_date: string | null
+  dashboard_url: string | null
+  calendly_url: string | null
+  created_at: string
+  updated_at: string | null
+  assigned_partners: StaffPartnerAssignment[]
+}
+
+export interface StaffPartnerAssignment {
+  id: string
+  assignment_role: string
+  is_primary: boolean | null
+  partner: { id: string; brand_name: string; status: string | null }
+}
+
+// =============================================================================
+// Category Display Config
+// =============================================================================
+
 /**
  * Display configuration for column categories
  */
