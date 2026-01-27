@@ -266,6 +266,7 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
   const draftKey = getDraftKey(spreadsheetId, tabName)
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const pendingDraftRef = useRef<DraftState | null>(null)
+  const restoringDraftRef = useRef(false)
   // Refs for flush-on-unmount (so cleanup closure has current values)
   const dataSourceIdRef = useRef(dataSourceId)
   const tabNameRef = useRef(tabName)
@@ -379,7 +380,8 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
 
   // Restore draft: compare DB and localStorage timestamps, use the freshest
   useEffect(() => {
-    if (!rawData || draftRestored) return
+    if (!rawData || draftRestored || restoringDraftRef.current) return
+    restoringDraftRef.current = true
 
     async function restoreDraft() {
       const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
