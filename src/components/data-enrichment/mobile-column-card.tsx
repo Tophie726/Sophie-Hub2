@@ -28,6 +28,7 @@ import {
   Check,
   ChevronDown,
   Tag,
+  Sparkles,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ColumnCategoryOrNull } from '@/types/entities'
@@ -51,6 +52,9 @@ interface ColumnClassification {
   authority: 'source_of_truth' | 'reference'
   isKey: boolean
   tagIds?: string[]
+  aiSuggested?: boolean
+  aiConfidence?: number
+  isEmpty?: boolean
 }
 
 interface MobileColumnCardProps {
@@ -155,6 +159,15 @@ export function MobileColumnCard({
                 </motion.div>
               )}
             </AnimatePresence>
+            {column.aiSuggested && (
+              <span
+                title={`AI suggested (${Math.round((column.aiConfidence || 0) * 100)}% confidence)`}
+                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20"
+              >
+                <Sparkles className="h-2.5 w-2.5" />
+                AI
+              </span>
+            )}
           </div>
           <p className="text-xs text-muted-foreground truncate mt-1">
             {sampleValue || '(empty)'}

@@ -20,6 +20,7 @@ import type {
   TransformType,
 } from './types'
 import type { EntityType } from '@/types/entities'
+import { matchesPattern, type ColumnPatternMatchConfig } from '@/types/enrichment'
 
 // =============================================================================
 // Sync Engine Class
@@ -76,13 +77,35 @@ export class SyncEngine {
         options
       )
 
+      // 4b. Process weekly columns (pivot into weekly_statuses)
+      const weeklyResult = await this.processWeeklyColumns(
+        sourceData,
+        config,
+        options
+      )
+
       // 5. Apply changes (unless dry run)
       if (!options.dryRun) {
         await this.applyChanges(changes, syncRunId, config)
+
+        // Update last_synced_at on tab mapping and data source
+        const now = new Date().toISOString()
+        await this.supabase
+          .from('tab_mappings')
+          .update({ last_synced_at: now })
+          .eq('id', config.tabMapping.id)
+        await this.supabase
+          .from('data_sources')
+          .update({ last_synced_at: now })
+          .eq('id', config.dataSource.id)
       }
 
       // 6. Calculate stats and complete sync run
-      const stats = this.calculateStats(changes, errors)
+      const allErrors = [...errors, ...weeklyResult.errors]
+      const stats = this.calculateStats(changes, allErrors)
+      // Add weekly pivot stats to totals
+      stats.rowsCreated += weeklyResult.created
+      stats.rowsUpdated += weeklyResult.updated
       await this.completeSyncRun(syncRunId, stats)
 
       const durationMs = Date.now() - startTime
@@ -216,6 +239,14 @@ export class SyncEngine {
       throw new Error(`Failed to load column mappings: ${colError.message}`)
     }
 
+    // Load column patterns (for weekly/computed pattern matching)
+    const { data: columnPatterns } = await this.supabase
+      .from('column_patterns')
+      .select('*')
+      .eq('tab_mapping_id', tabMappingId)
+      .eq('is_active', true)
+      .order('priority', { ascending: false })
+
     const dataSource = tabMapping.data_sources as unknown as SyncConfig['dataSource']
 
     return {
@@ -227,6 +258,7 @@ export class SyncEngine {
         primary_entity: tabMapping.primary_entity as EntityType,
       },
       columnMappings: columnMappings || [],
+      columnPatterns: columnPatterns || [],
     }
   }
 
@@ -432,28 +464,49 @@ export class SyncEngine {
       }
     }
 
-    // Batch creates
+    // Batch creates — with ID capture for lineage tracking
     if (creates.length > 0) {
       const createRecords = creates.map((c) => ({
         [c.keyField]: c.keyValue,
         ...c.fields,
       }))
 
-      // Insert in batches of 50
+      const keyField = creates[0].keyField
+
+      // Insert in batches of 50, capturing returned IDs
       for (let i = 0; i < createRecords.length; i += 50) {
         const batch = createRecords.slice(i, i + 50)
-        const { error } = await this.supabase
+        const batchChanges = creates.slice(i, i + 50)
+
+        const { data: inserted, error } = await this.supabase
           .from(config.tabMapping.primary_entity)
           .insert(batch)
+          .select('*')
 
         if (error) {
           console.error('Batch insert error:', error)
-          // Continue with remaining batches
+          // Mark failed batch changes as skipped
+          for (const change of batchChanges) {
+            change.type = 'skip'
+            change.skipReason = `Insert failed: ${error.message}`
+          }
+        } else if (inserted) {
+          // Map returned IDs back to EntityChange objects for lineage
+          for (const record of inserted as Record<string, unknown>[]) {
+            const keyValue = String(record[keyField] || '')
+            const change = batchChanges.find((c) => c.keyValue === keyValue)
+            if (change) {
+              change.existing = { id: record.id as string }
+            }
+          }
         }
       }
 
-      // Record lineage for creates
-      await this.recordLineage(creates, syncRunId, config, 'create')
+      // Record lineage for successful creates (skip failures)
+      const successfulCreates = creates.filter((c) => c.type === 'create')
+      if (successfulCreates.length > 0) {
+        await this.recordLineage(successfulCreates, syncRunId, config, 'create')
+      }
     }
 
     // Individual updates (to track lineage per field)
@@ -529,6 +582,146 @@ export class SyncEngine {
   }
 
   // ===========================================================================
+  // Private: Weekly Status Pivot
+  // ===========================================================================
+
+  /**
+   * Process weekly columns by pivoting them into the weekly_statuses table.
+   * Each weekly column header is a date, and each cell value is a status string.
+   * This creates one row per partner × week in weekly_statuses.
+   */
+  private async processWeeklyColumns(
+    sourceData: { headers: string[]; rows: string[][] },
+    config: SyncConfig,
+    options: SyncOptions
+  ): Promise<{ created: number; updated: number; errors: SyncError[] }> {
+    const errors: SyncError[] = []
+    let created = 0
+    let updated = 0
+
+    // Only process if we have weekly patterns
+    const weeklyPatterns = config.columnPatterns.filter((p) => p.category === 'weekly')
+    if (weeklyPatterns.length === 0) return { created, updated, errors }
+
+    // Find the key column to identify which entity each row belongs to
+    const keyMapping = config.columnMappings.find((m) => m.is_key)
+    if (!keyMapping?.target_field) return { created, updated, errors }
+
+    const keyColIdx = sourceData.headers.findIndex((h) => h === keyMapping.source_column)
+    if (keyColIdx === -1) return { created, updated, errors }
+
+    // Identify weekly columns by matching against patterns
+    const weeklyColInfo: Array<{ colIdx: number; header: string; weekDate: Date }> = []
+
+    for (let i = 0; i < sourceData.headers.length; i++) {
+      const header = sourceData.headers[i]
+      for (const pattern of weeklyPatterns) {
+        const matchConfig = pattern.match_config as ColumnPatternMatchConfig
+        if (matchesPattern(header, i, sourceData.headers, matchConfig)) {
+          const weekDate = parseWeekDate(header)
+          if (weekDate) {
+            weeklyColInfo.push({ colIdx: i, header, weekDate })
+          }
+          break // Only match one pattern per column
+        }
+      }
+    }
+
+    if (weeklyColInfo.length === 0) return { created, updated, errors }
+
+    // Process rows — cache entity lookups to avoid repeated DB queries
+    const entityIdCache = new Map<string, string | null>()
+    const rows = options.rowLimit
+      ? sourceData.rows.slice(0, options.rowLimit)
+      : sourceData.rows
+
+    for (let r = 0; r < rows.length; r++) {
+      const row = rows[r]
+      const keyValue = row[keyColIdx]?.trim()
+      if (!keyValue) continue
+
+      // Look up entity ID (cached)
+      let entityId = entityIdCache.get(keyValue)
+      if (entityId === undefined) {
+        const { data: entity } = await this.supabase
+          .from(config.tabMapping.primary_entity)
+          .select('id')
+          .eq(keyMapping.target_field, keyValue)
+          .maybeSingle()
+
+        const resolvedId: string | null = entity?.id ?? null
+        entityId = resolvedId
+        entityIdCache.set(keyValue, resolvedId)
+      }
+
+      if (!entityId) continue
+
+      // Pivot each weekly column into a weekly_statuses row
+      for (const wc of weeklyColInfo) {
+        const value = row[wc.colIdx]?.trim()
+        if (!value) continue
+
+        const weekStartDate = wc.weekDate.toISOString().split('T')[0]
+        const weekNumber = getISOWeekNumber(wc.weekDate)
+        const year = wc.weekDate.getFullYear()
+
+        if (!options.dryRun) {
+          try {
+            const { data: existing } = await this.supabase
+              .from('weekly_statuses')
+              .select('id')
+              .eq('partner_id', entityId)
+              .eq('week_start_date', weekStartDate)
+              .maybeSingle()
+
+            if (existing) {
+              await this.supabase
+                .from('weekly_statuses')
+                .update({ status: value })
+                .eq('id', existing.id)
+              updated++
+            } else {
+              await this.supabase
+                .from('weekly_statuses')
+                .insert({
+                  partner_id: entityId,
+                  week_start_date: weekStartDate,
+                  week_number: weekNumber,
+                  year,
+                  status: value,
+                })
+              created++
+            }
+          } catch (err) {
+            errors.push({
+              row: r + 2,
+              column: wc.header,
+              message: `Weekly upsert failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
+              severity: 'warning',
+            })
+          }
+        } else {
+          // Dry-run: count what would happen
+          const { data: existing } = await this.supabase
+            .from('weekly_statuses')
+            .select('id')
+            .eq('partner_id', entityId)
+            .eq('week_start_date', weekStartDate)
+            .maybeSingle()
+
+          if (existing) {
+            updated++
+          } else {
+            created++
+          }
+        }
+      }
+    }
+
+    return { created, updated, errors }
+  }
+
+  // ===========================================================================
   // Private: Sync Run Management
   // ===========================================================================
 
@@ -593,6 +786,75 @@ export class SyncEngine {
       errors,
     }
   }
+}
+
+// =============================================================================
+// Helper Functions
+// =============================================================================
+
+/**
+ * Parse a week date from a column header string.
+ * Handles: "1/6", "12/25", "2024-01-06", "01/06/2024"
+ * Normalizes to the Monday of that week.
+ */
+function parseWeekDate(header: string): Date | null {
+  const trimmed = header.trim()
+
+  // Try ISO format: 2024-01-06
+  const isoMatch = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/)
+  if (isoMatch) {
+    const date = new Date(
+      parseInt(isoMatch[1]),
+      parseInt(isoMatch[2]) - 1,
+      parseInt(isoMatch[3])
+    )
+    if (!isNaN(date.getTime())) return normalizeToMonday(date)
+  }
+
+  // Try MM/DD/YYYY format: 01/06/2024
+  const mdyMatch = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
+  if (mdyMatch) {
+    const date = new Date(
+      parseInt(mdyMatch[3]),
+      parseInt(mdyMatch[1]) - 1,
+      parseInt(mdyMatch[2])
+    )
+    if (!isNaN(date.getTime())) return normalizeToMonday(date)
+  }
+
+  // Try M/D format: 1/6, 12/25 (assume current year)
+  const mdMatch = trimmed.match(/^(\d{1,2})\/(\d{1,2})$/)
+  if (mdMatch) {
+    const year = new Date().getFullYear()
+    const date = new Date(year, parseInt(mdMatch[1]) - 1, parseInt(mdMatch[2]))
+    if (!isNaN(date.getTime())) return normalizeToMonday(date)
+  }
+
+  return null
+}
+
+/**
+ * Normalize a date to the Monday of its week.
+ */
+function normalizeToMonday(date: Date): Date {
+  const day = date.getDay()
+  // Sunday = 0 → offset 6, Monday = 1 → offset 0, etc.
+  const offset = day === 0 ? 6 : day - 1
+  const monday = new Date(date)
+  monday.setDate(date.getDate() - offset)
+  monday.setHours(0, 0, 0, 0)
+  return monday
+}
+
+/**
+ * Get ISO week number for a date.
+ */
+function getISOWeekNumber(date: Date): number {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()))
+  // Set to nearest Thursday: current date + 4 - current day number (Monday = 1)
+  d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7))
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1))
+  return Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7)
 }
 
 // =============================================================================

@@ -51,6 +51,16 @@ export interface SyncConfig {
     transform_type: string | null
     transform_config: Record<string, unknown> | null
   }>
+  columnPatterns: Array<{
+    id: string
+    pattern_name: string
+    category: string
+    match_config: Record<string, unknown>
+    target_table: string | null
+    target_field: string | null
+    priority: number
+    is_active: boolean
+  }>
 }
 
 // =============================================================================

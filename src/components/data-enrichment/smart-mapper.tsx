@@ -156,6 +156,9 @@ interface ColumnClassification {
   isKey: boolean // This column is the identifier/key for its entity type
   tagIds?: string[] // Field tag IDs for cross-cutting domain classification
   computedConfig?: ComputedFieldConfig // For computed fields
+  aiSuggested?: boolean // Whether this classification came from AI
+  aiConfidence?: number // AI confidence score (0-1)
+  isEmpty?: boolean // Whether this column is entirely empty across all data rows
 }
 
 // Field tag type for UI
@@ -597,6 +600,14 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
     if (!rawData || !draftRestored || headerRow >= rawData.rows.length) return
 
     const headers = rawData.rows[headerRow]
+    const dataRows = rawData.rows.slice(headerRow + 1)
+
+    // Helper: detect if a column is entirely empty across all data rows
+    const isColumnEmpty = (colIdx: number) =>
+      dataRows.every(row => {
+        const val = row[colIdx]
+        return !val || val.trim() === ''
+      })
 
     // Case 1: User changed headerRow in Preview phase - reinitialize columns
     // This happens when lastInitializedHeaderRow differs from current headerRow
@@ -613,14 +624,16 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
           name.match(/^w\d+\s/) ||
           name.match(/^\d{1,2}\/\d{1,2}/) ||
           name.match(/^\d{4}-\d{2}-\d{2}/)
+        const isEmpty = isColumnEmpty(idx)
 
         return {
           sourceIndex: idx,
           sourceColumn: header || `Column ${idx + 1}`,
-          category: isWeekly ? 'weekly' : null,
+          category: isWeekly ? 'weekly' : isEmpty ? 'skip' : null,
           targetField: null,
           authority: 'source_of_truth',
           isKey: false,
+          isEmpty,
         }
       })
       setColumns(initialColumns)
@@ -649,14 +662,16 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
           name.match(/^w\d+\s/) ||
           name.match(/^\d{1,2}\/\d{1,2}/) ||
           name.match(/^\d{4}-\d{2}-\d{2}/)
+        const isEmpty = isColumnEmpty(idx)
 
         return {
           sourceIndex: idx,
           sourceColumn: header || `Column ${idx + 1}`,
-          category: isWeekly ? 'weekly' : null,
+          category: isWeekly ? 'weekly' : isEmpty ? 'skip' : null,
           targetField: null,
           authority: 'source_of_truth',
           isKey: false,
+          isEmpty,
         }
       })
       setColumns(initialColumns)
@@ -668,8 +683,8 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
     setColumnsHistory(prev => [...prev.slice(-19), columns]) // Keep last 20 states
     setColumns(prev => prev.map((col, idx) => {
       if (idx !== columnIndex) return col
-      // If changing category, reset isKey and computed config
-      return { ...col, category, isKey: false, targetField: null, computedConfig: undefined }
+      // If changing category, reset isKey, computed config, and AI flags (manual override)
+      return { ...col, category, isKey: false, targetField: null, computedConfig: undefined, aiSuggested: undefined, aiConfidence: undefined }
     }))
   }
 
@@ -677,7 +692,7 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
     setColumnsHistory(prev => [...prev.slice(-19), columns]) // Keep last 20 states
     setColumns(prev => prev.map((col, idx) => {
       if (!indices.includes(idx)) return col
-      return { ...col, category, isKey: false, targetField: null, computedConfig: undefined }
+      return { ...col, category, isKey: false, targetField: null, computedConfig: undefined, aiSuggested: undefined, aiConfidence: undefined }
     }))
   }
 
@@ -691,6 +706,43 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
     setColumns(prev => prev.map((col, idx) =>
       idx === columnIndex ? { ...col, tagIds } : col
     ))
+  }
+
+  const handleAISuggestionApply = (columnIndex: number, suggestion: AISuggestion) => {
+    setColumnsHistory(prev => [...prev.slice(-19), columns])
+    setColumns(prev => prev.map((col, idx) => {
+      if (idx !== columnIndex) return col
+      return {
+        ...col,
+        category: suggestion.category,
+        targetField: suggestion.target_field,
+        authority: suggestion.authority,
+        isKey: false,
+        aiSuggested: true,
+        aiConfidence: suggestion.confidence,
+      }
+    }))
+  }
+
+  const handleBulkAISuggestionApply = (suggestions: BulkSuggestion[]) => {
+    setColumnsHistory(prev => [...prev.slice(-19), columns])
+    setColumns(prev => {
+      const updated = [...prev]
+      suggestions.forEach((suggestion) => {
+        if (updated[suggestion.position]) {
+          updated[suggestion.position] = {
+            ...updated[suggestion.position],
+            category: suggestion.category,
+            targetField: suggestion.target_field,
+            authority: suggestion.authority,
+            isKey: false,
+            aiSuggested: true,
+            aiConfidence: suggestion.confidence,
+          }
+        }
+      })
+      return updated
+    })
   }
 
   const handleKeyToggle = (columnIndex: number) => {
@@ -857,6 +909,8 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
           columns={columns}
           onCategoryChange={handleCategoryChange}
           onBulkCategoryChange={handleBulkCategoryChange}
+          onAISuggestionApply={handleAISuggestionApply}
+          onBulkAISuggestionApply={handleBulkAISuggestionApply}
           onKeyToggle={handleKeyToggle}
           onComputedConfigChange={handleComputedConfigChange}
           availableTags={availableTags}
@@ -1211,6 +1265,8 @@ function ClassifyPhase({
   columns,
   onCategoryChange,
   onBulkCategoryChange,
+  onAISuggestionApply,
+  onBulkAISuggestionApply,
   onKeyToggle,
   onComputedConfigChange,
   availableTags,
@@ -1230,6 +1286,8 @@ function ClassifyPhase({
   columns: ColumnClassification[]
   onCategoryChange: (index: number, category: ColumnCategory) => void
   onBulkCategoryChange: (indices: number[], category: ColumnCategory) => void
+  onAISuggestionApply: (index: number, suggestion: AISuggestion) => void
+  onBulkAISuggestionApply: (suggestions: BulkSuggestion[]) => void
   onKeyToggle: (index: number) => void
   onComputedConfigChange: (index: number, config: ComputedFieldConfig) => void
   availableTags: FieldTag[]
@@ -1272,12 +1330,17 @@ function ClassifyPhase({
   const sampleRows = rawData.rows.slice(headerRow + 1, headerRow + 2)
   const allValidColumns = columns.filter(c => c.sourceColumn.trim())
 
-  // Apply filter
+  // Separate empty columns (auto-skipped) from normal columns
+  const emptyColumns = allValidColumns.filter(c => c.isEmpty && c.category === 'skip')
+  const nonEmptyColumns = allValidColumns.filter(c => !(c.isEmpty && c.category === 'skip'))
+  const [showEmptyColumns, setShowEmptyColumns] = useState(false)
+
+  // Apply filter — only to non-empty columns
   const validColumns = activeFilter === 'all'
-    ? allValidColumns
+    ? nonEmptyColumns
     : activeFilter === 'unclassified'
-    ? allValidColumns.filter(c => c.category === null)
-    : allValidColumns.filter(c => c.category === activeFilter)
+    ? nonEmptyColumns.filter(c => c.category === null)
+    : nonEmptyColumns.filter(c => c.category === activeFilter)
 
   const lastClickedIndex = useRef<number | null>(null)
 
@@ -1325,15 +1388,15 @@ function ClassifyPhase({
     }
   }
 
-  // Stats (always based on all columns, not filtered)
+  // Stats (based on non-empty columns — empty auto-skipped columns are in their own section)
   const stats = {
-    partner: allValidColumns.filter(c => c.category === 'partner').length,
-    staff: allValidColumns.filter(c => c.category === 'staff').length,
-    asin: allValidColumns.filter(c => c.category === 'asin').length,
-    weekly: allValidColumns.filter(c => c.category === 'weekly').length,
-    computed: allValidColumns.filter(c => c.category === 'computed').length,
-    skip: allValidColumns.filter(c => c.category === 'skip').length,
-    unclassified: allValidColumns.filter(c => c.category === null).length,
+    partner: nonEmptyColumns.filter(c => c.category === 'partner').length,
+    staff: nonEmptyColumns.filter(c => c.category === 'staff').length,
+    asin: nonEmptyColumns.filter(c => c.category === 'asin').length,
+    weekly: nonEmptyColumns.filter(c => c.category === 'weekly').length,
+    computed: nonEmptyColumns.filter(c => c.category === 'computed').length,
+    skip: nonEmptyColumns.filter(c => c.category === 'skip').length,
+    unclassified: nonEmptyColumns.filter(c => c.category === null).length,
   }
 
   const partnerKey = allValidColumns.find(c => c.category === 'partner' && c.isKey)
@@ -1368,7 +1431,7 @@ function ClassifyPhase({
   }
 
   const totalClassified = stats.partner + stats.staff + stats.asin + stats.weekly + stats.computed + stats.skip
-  const totalColumns = allValidColumns.length
+  const totalColumns = nonEmptyColumns.length
 
 
   // Category shortcuts mapping (ASIN is sub-option under Partner, no direct shortcut)
@@ -1897,14 +1960,25 @@ function ClassifyPhase({
                       sourceName={sheetName}
                       primaryEntity={tabSummary?.primary_entity === 'partner' || tabSummary?.primary_entity === 'staff' || tabSummary?.primary_entity === 'asin' ? tabSummary.primary_entity : null}
                       onApply={(suggestion: AISuggestion) => {
-                        // Apply the category
-                        onCategoryChange(idx, suggestion.category)
+                        // Apply the category with AI tracking
+                        onAISuggestionApply(idx, suggestion)
                         // If it's a key field and we have Partner/Staff category, request key confirmation
                         if (suggestion.is_key && (suggestion.category === 'partner' || suggestion.category === 'staff')) {
                           requestKeyConfirmation(idx, col.sourceColumn, suggestion.category, false)
                         }
                       }}
                     />
+
+                    {/* AI suggestion badge */}
+                    {col.aiSuggested && (
+                      <span
+                        title={`AI suggested (${Math.round((col.aiConfidence || 0) * 100)}% confidence)`}
+                        className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 shrink-0"
+                      >
+                        <Sparkles className="h-2.5 w-2.5" />
+                        AI
+                      </span>
+                    )}
 
                     {/* Category selector with integrated key management */}
                     <DropdownMenu>
@@ -2223,6 +2297,41 @@ function ClassifyPhase({
             </div>
           </ScrollArea>
 
+          {/* Empty columns — auto-skipped, collapsed by default */}
+          {emptyColumns.length > 0 && (
+            <div className="border-t border-border">
+              <button
+                type="button"
+                onClick={() => setShowEmptyColumns(!showEmptyColumns)}
+                className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-muted-foreground hover:bg-muted/50 transition-colors"
+              >
+                <ChevronRight className={`h-4 w-4 transition-transform duration-200 ${showEmptyColumns ? 'rotate-90' : ''}`} />
+                <span>Empty columns ({emptyColumns.length})</span>
+                <span className="text-xs opacity-60">auto-skipped</span>
+              </button>
+              {showEmptyColumns && (
+                <div className="px-4 pb-3 space-y-1">
+                  {emptyColumns.map((col) => {
+                    const idx = col.sourceIndex
+                    return (
+                      <div
+                        key={idx}
+                        className="flex items-center gap-3 px-3 py-2 rounded-lg bg-muted/20 text-sm text-muted-foreground"
+                      >
+                        <span className="text-xs tabular-nums text-muted-foreground/50 w-6 text-right">{idx + 1}</span>
+                        <span className="font-medium">{col.sourceColumn}</span>
+                        <span className="ml-auto flex items-center gap-1.5 text-xs">
+                          <SkipForward className="h-3 w-3" />
+                          Skip
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Keyboard shortcuts legend - hidden on mobile */}
           <div className="hidden md:block p-3 rounded-lg bg-muted/30 border border-border">
             <div className="text-xs text-muted-foreground mb-2">Shortcuts</div>
@@ -2409,9 +2518,9 @@ function ClassifyPhase({
           }))}
         tabName={tabName}
         onApplyAll={(suggestions: BulkSuggestion[]) => {
+          onBulkAISuggestionApply(suggestions)
+          // Request key confirmations for key fields
           suggestions.forEach((suggestion) => {
-            onCategoryChange(suggestion.position, suggestion.category)
-            // Request key confirmation for key fields
             if (suggestion.is_key && (suggestion.category === 'partner' || suggestion.category === 'staff')) {
               const col = allValidColumns.find(c => c.sourceIndex === suggestion.position)
               if (col) {
@@ -2421,9 +2530,9 @@ function ClassifyPhase({
           })
         }}
         onApplySelected={(suggestions: BulkSuggestion[]) => {
+          onBulkAISuggestionApply(suggestions)
+          // Request key confirmations for key fields
           suggestions.forEach((suggestion) => {
-            onCategoryChange(suggestion.position, suggestion.category)
-            // Request key confirmation for key fields
             if (suggestion.is_key && (suggestion.category === 'partner' || suggestion.category === 'staff')) {
               const col = allValidColumns.find(c => c.sourceIndex === suggestion.position)
               if (col) {
