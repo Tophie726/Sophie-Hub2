@@ -154,14 +154,11 @@ When user clicks "Sync" button or auto-triggered after mapping save:
 - `sync-preview-dialog.tsx` — Dialog with stats, entity sections, change detail
 - `source-browser.tsx` — `handleSync` (dry run) + `handleConfirmSync` (actual write)
 
-### Tab Ordering Stability
+### Tab Ordering
 
-Tabs are sorted **alphabetically** in the `sheetTabs` computed value to prevent visual reordering when preview data arrives. Without this:
-- DB returns tabs alphabetically (`.order('tab_name')`)
-- Google Sheets preview returns tabs in sheet order
-- Merging would cause tabs to jump positions when preview loads
+Tabs use **Google Sheets native order** (the order they appear in the actual spreadsheet). The merge logic maps over `previewTabs` (which preserves sheet order) and enriches with DB data where available.
 
-Both the DB-only path and the merged path apply `.sort((a, b) => a.name.localeCompare(b.name))`.
+Before preview loads, DB tabs show in API order (alphabetical from `.order('tab_name')`). When preview arrives, tabs reorder to match the real sheet — this is expected and brief since preview loads in the background.
 
 ### Performance Optimizations
 
@@ -398,11 +395,12 @@ These invariants MUST hold true at all times. If a change breaks any of these, i
 - Do NOT use `||` — it short-circuits when DB tabs exist (e.g., 11 is truthy), hiding the preview count (e.g., 20+)
 - **Violation example**: `s.tabs.length || previewCount` → shows 11 instead of 20+ when 11 DB tabs exist
 
-### INV-8: Tab order must be stable across data loads
-**Tabs must not visually reorder when preview data arrives.** This requires:
-- Both DB-only and merged tab lists sorted alphabetically: `.sort((a, b) => a.name.localeCompare(b.name))`
-- DB returns alphabetically (`.order('tab_name')`), Google Sheets returns sheet order — without sorting, tabs jump positions when preview loads
-- **Violation example**: Removing alphabetical sort → tabs shuffle when preview merges in
+### INV-8: Tab order must match Google Sheets native order
+**Tabs must display in the same order as the actual Google Spreadsheet.** This requires:
+- Merged tab list maps over `previewTabs` (which preserves sheet order) then enriches with DB data
+- Do NOT sort tabs alphabetically — the real sheet order is the source of truth
+- Before preview loads, DB tabs show in API order (brief, acceptable)
+- **Violation example**: Adding `.sort((a, b) => a.name.localeCompare(b.name))` → tabs appear alphabetically instead of sheet order
 
 ---
 

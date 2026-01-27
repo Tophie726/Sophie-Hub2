@@ -235,8 +235,8 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
       mappingProgress: 0,
     }))
 
-    // If no preview tabs, just return db tabs (already alpha from API, but sort for safety)
-    if (previewTabs.length === 0) return dbTabs.sort((a, b) => a.name.localeCompare(b.name))
+    // If no preview tabs yet, return db tabs in DB order (preview will replace with sheet order)
+    if (previewTabs.length === 0) return dbTabs
 
     // Merge: use db tab if it exists for that name, otherwise use preview tab
     // Always prefer preview's columnCount (actual sheet columns) over db's columnCount (mapped columns)
@@ -254,8 +254,8 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
       return previewTab
     })
 
-    // Sort alphabetically so tab order is stable (DB returns alpha, preview returns sheet order)
-    return merged.sort((a, b) => a.name.localeCompare(b.name))
+    // Preserve Google Sheets native tab order (previewTabs already in sheet order)
+    return merged
   })()
 
   const activeTab = sheetTabs.find(t => t.id === activeTabId)
