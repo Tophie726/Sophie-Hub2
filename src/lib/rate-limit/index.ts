@@ -49,9 +49,9 @@ export const RATE_LIMITS = {
     windowMs: 100 * 1000, // 100 seconds
   },
 
-  /** Sync operations: 10 syncs per minute */
+  /** Sync operations: 60 per minute (batch dry runs hit once per tab) */
   SYNC: {
-    maxRequests: 10,
+    maxRequests: 60,
     windowMs: 60 * 1000, // 1 minute
   },
 
