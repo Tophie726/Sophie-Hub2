@@ -23,6 +23,7 @@ import {
   LogOut,
   Settings,
   X,
+  Package,
 } from 'lucide-react'
 import { useMobileMenu } from './mobile-menu-context'
 
@@ -67,6 +68,7 @@ const navigation: NavSection[] = [
     title: 'Admin',
     items: [
       { name: 'Data Enrichment', href: '/admin/data-enrichment', icon: Database, highlight: true },
+      { name: 'Products', href: '/admin/products', icon: Package },
     ],
   },
 ]

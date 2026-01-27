@@ -1434,15 +1434,11 @@ function ClassifyPhase({
   const totalColumns = nonEmptyColumns.length
 
 
-  // Category shortcuts mapping (ASIN is sub-option under Partner, no direct shortcut)
+  // Category shortcuts mapping — letter keys for quick classification
   const categoryShortcuts: Record<string, ColumnCategory> = {
-    '1': 'partner',
-    '2': 'staff',
-    '3': 'weekly',
-    '4': 'computed',
-    '5': 'skip',
     'p': 'partner',
     's': 'staff',
+    'a': 'asin',
     'w': 'weekly',
     'c': 'computed',
     'x': 'skip',
@@ -2335,12 +2331,32 @@ function ClassifyPhase({
           {/* Keyboard shortcuts legend - hidden on mobile */}
           <div className="hidden md:block p-3 rounded-lg bg-muted/30 border border-border">
             <div className="text-xs text-muted-foreground mb-2">Shortcuts</div>
-            <div className="flex flex-wrap gap-x-6 gap-y-1.5 text-xs text-muted-foreground">
+            <div className="flex flex-wrap gap-x-5 gap-y-1.5 text-xs text-muted-foreground">
               <div className="flex items-center gap-1.5">
-                <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono">1-5</kbd>
-                <span>Classify</span>
+                <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono">P</kbd>
+                <span>Partner</span>
               </div>
               <div className="flex items-center gap-1.5">
+                <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono">S</kbd>
+                <span>Staff</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono">A</kbd>
+                <span>ASIN</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono">W</kbd>
+                <span>Weekly</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono">C</kbd>
+                <span>Computed</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono">X</kbd>
+                <span>Skip</span>
+              </div>
+              <div className="flex items-center gap-1.5 border-l border-border pl-5">
                 <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono">↑↓</kbd>
                 <span>Navigate</span>
               </div>
