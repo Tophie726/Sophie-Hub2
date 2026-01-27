@@ -257,14 +257,16 @@ The heart of this rebuild. A visual interface that:
 
 ## Current Phase
 
-**Phase 3: Sync Hardening & Entity Pages** (In Progress)
+**Phase 4: Sync Verification & Polish** (In Progress)
 - Phase 1 (Foundation) complete: app shell, auth, database schema, RBAC
 - Phase 2 (Data Mapping) complete: SmartMapper, AI suggestions, draft persistence, data flow map, sync engine
-- Sync engine hardened: entity ID capture, failed batch tracking, `last_synced_at` timestamps
-- Weekly status pivot: `processWeeklyColumns()` matches patterns and upserts into `weekly_statuses`
-- SmartMapper UX: AI suggestion badges, auto-hide empty columns, letter keyboard shortcuts (P/S/A/W/C/X)
-- Product Centre: `/admin/products` with Cards, Rows, and Composition (SVG mind map) views
-- Next: end-to-end sync verification with real data, partner/staff entity pages, lineage visualization
+- Phase 3 (Hardening) complete: entity ID capture, failed batch tracking, weekly pivot, AI badges, Product Centre
+- Entity pages complete: `/partners` and `/staff` with list (search, filter, sort, pagination) + detail pages
+  - Shared components: StatusBadge, TierBadge, EntityListToolbar, FieldGroupSection, assignment cards
+  - API routes: GET /api/partners, /api/partners/[id], /api/staff, /api/staff/[id]
+  - Partner detail: field groups, staff assignments, ASINs, weekly status history
+  - Staff detail: field groups, assigned partners
+- Next: end-to-end sync verification with real data, lineage visualization
 
 ## Important Context
 

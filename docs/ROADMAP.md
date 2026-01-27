@@ -15,9 +15,9 @@ Replace fragmented Google Sheets with a **beautiful, unified internal platform**
 
 ---
 
-## Current Phase: Sync Verification & Entity Pages
+## Current Phase: Sync Verification & Polish
 
-The data enrichment pipeline is functionally complete — sources connect, columns classify, fields map, and sync writes to entity tables. The next focus is **verifying the full pipeline end-to-end with real data** and building the entity pages (Partners, Staff) that display the synced data.
+The data enrichment pipeline and entity pages are functionally complete. Partners and Staff have list pages (search, filter, sort, pagination) and detail pages (grouped fields, assignments, ASINs, weekly statuses). The next focus is **verifying the full pipeline end-to-end with real data** and adding lineage visualization.
 
 ---
 
@@ -67,6 +67,19 @@ The data enrichment pipeline is functionally complete — sources connect, colum
 | Letter keyboard shortcuts | P/S/A/W/C/X mnemonic keys for classification |
 | Product Centre | Cards, Rows, and Composition (SVG mind map) views |
 
+### Phase 4: Entity Pages (Done - 2026-01-27)
+
+| Item | Notes |
+|------|-------|
+| Partner list page | Search, status/tier filter, sort, 50/page pagination, pod leader join |
+| Partner detail page | Grouped fields (Core, Contact, Financial, Dates, Metrics), assignments, ASINs, weekly statuses |
+| Staff list page | Search, status/role/dept filter, sort, 50/page pagination |
+| Staff detail page | Grouped fields (Core, Contact, Status & Role, Metrics, Dates, Links), assigned partners |
+| Entity API routes | GET /api/partners, /api/partners/[id], /api/staff, /api/staff/[id] |
+| Shared components | StatusBadge, TierBadge, EntityListToolbar, FieldGroupSection, assignment cards |
+| Entity types | PartnerListItem, StaffListItem, PartnerDetail, StaffDetail in entities.ts |
+| useDebounce hook | 300ms debounce for search input |
+
 ---
 
 ## Up Next
@@ -78,17 +91,6 @@ The data enrichment pipeline is functionally complete — sources connect, colum
    - Validate field_lineage records have real entity IDs
    - Test weekly status pivot with real weekly columns
    - WHY: Everything is built but unverified with real data
-
-2. **Partner Entity Page**
-   - List view with search, filter, sort
-   - Partner detail page with assignments, ASINs, weekly status history
-   - Data sourced from synced entity tables
-   - WHY: The whole point of the pipeline — users need to see the data
-
-3. **Staff Entity Page**
-   - Team directory with roles, squads, capacity
-   - Staff detail page with assignments, training
-   - WHY: Second core entity, needed for daily operations
 
 ### P1: Essential Features (Next)
 
@@ -165,9 +167,11 @@ Before any feature ships, verify:
 - [x] Auth with role-based access
 - [x] AI assists with column classification
 
-### Phase 4 Success (Next Target)
-- [ ] Partners list shows real synced data
-- [ ] Staff directory shows real synced data
+### Phase 4 Success (Achieved - UI ready, pending real data)
+- [x] Partners list page with search, filter, sort
+- [x] Staff directory with search, filter, sort
+- [x] Partner detail with assignments, ASINs, weekly statuses
+- [x] Staff detail with assigned partners
 - [ ] Full sync pipeline verified end-to-end
 - [ ] Weekly statuses populate from sheet columns
 - [ ] Users actively using the tool daily

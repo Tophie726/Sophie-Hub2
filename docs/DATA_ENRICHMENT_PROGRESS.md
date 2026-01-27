@@ -1,7 +1,7 @@
 # Data Enrichment Progress Tracker
 
 > Tracking the implementation of Sophie Hub's data enrichment system.
-> Last updated: 2026-01-27 (Sync engine hardening, weekly pivot, AI badges, empty column detection, Product Centre)
+> Last updated: 2026-01-27 (Entity pages, sync hardening, weekly pivot, AI badges, Product Centre)
 
 ---
 
@@ -345,8 +345,29 @@ In-app AI co-pilot for column mapping at multiple granularity levels.
 - `src/lib/entity-fields/registry.ts` - 20 partner + 17 staff + 10 ASIN fields with reference relationships, helper functions
 
 ### Types (Single Source of Truth)
-- `src/types/entities.ts` - CategoryStats, ColumnCategory, EntityType
+- `src/types/entities.ts` - CategoryStats, ColumnCategory, EntityType, PartnerListItem, StaffListItem, PartnerDetail, StaffDetail
 - `src/types/enrichment.ts` - Enrichment-specific types
+
+### Entity Pages
+- `src/app/(dashboard)/partners/page.tsx` - Partner list with search, filter, sort, pagination
+- `src/app/(dashboard)/partners/[id]/page.tsx` - Partner detail with field groups, assignments, ASINs, weekly status
+- `src/app/(dashboard)/staff/page.tsx` - Staff list with search, filter, sort, pagination
+- `src/app/(dashboard)/staff/[id]/page.tsx` - Staff detail with field groups, assigned partners
+- `src/app/api/partners/route.ts` - GET /api/partners (list with search/filter/sort/pagination)
+- `src/app/api/partners/[id]/route.ts` - GET /api/partners/[id] (detail with 4 parallel queries)
+- `src/app/api/staff/route.ts` - GET /api/staff (list with search/filter/sort/pagination)
+- `src/app/api/staff/[id]/route.ts` - GET /api/staff/[id] (detail with parallel queries)
+
+### Entity Shared Components
+- `src/components/entities/status-badge.tsx` - Entity-aware status badge with color mapping
+- `src/components/entities/tier-badge.tsx` - Tier level badge with color mapping
+- `src/components/entities/entity-list-toolbar.tsx` - Search + filter chips + sort dropdown (reusable)
+- `src/components/entities/field-group-section.tsx` - Card with label/value grid (date/currency/url formatting)
+- `src/components/entities/staff-assignment-card.tsx` - Staff assigned to partner (partner detail)
+- `src/components/entities/partner-assignment-card.tsx` - Partner assigned to staff (staff detail)
+
+### Hooks
+- `src/lib/hooks/use-debounce.ts` - Debounced value hook for search input
 
 ### API Routes
 - `src/app/api/data-sources/route.ts` - Source CRUD
@@ -464,6 +485,11 @@ In-app AI co-pilot for column mapping at multiple granularity levels.
 | 2026-01-27 | SVG exact pixel dimensions for composition | `width="100%"` with preserveAspectRatio caused coordinate mismatch — exact pixels match CSS positions |
 | 2026-01-27 | Recursive descendant highlighting | `getDescendants()` with cache for O(1) lookups on hover — highlights full product hierarchy |
 | 2026-01-27 | Product Centre three-view layout | Cards (default, premium feel), Rows (compact), Composition (SVG hierarchy) — sliding tab switcher |
+| 2026-01-27 | Rows-only for entity list pages | 700+ partners scan better as rows than cards. No view toggle needed. |
+| 2026-01-27 | 50/page with Load More button | Simpler than page numbers, cursor-based pagination |
+| 2026-01-27 | Separate detail routes over slide-in | `/partners/[id]` and `/staff/[id]` — content too rich for panel, shareable URLs |
+| 2026-01-27 | 2-query list, 4-query detail pattern | List: entity + batch pod_leader join. Detail: entity + assignments + ASINs + weekly_statuses in parallel |
+| 2026-01-27 | Shared entity components | StatusBadge, TierBadge, EntityListToolbar, FieldGroupSection reused across partners + staff |
 
 ---
 
@@ -486,16 +512,18 @@ In-app AI co-pilot for column mapping at multiple granularity levels.
 14. [x] SmartMapper UX: AI badges, empty column detection, letter shortcuts - DONE (2026-01-27)
 15. [x] Product Centre: Cards/Rows/Composition views - DONE (2026-01-27)
 
+16. [x] Partner entity page: list + detail with search/filter/sort/pagination - DONE (2026-01-27)
+17. [x] Staff entity page: list + detail with search/filter/sort/pagination - DONE (2026-01-27)
+18. [x] Shared entity components: StatusBadge, TierBadge, EntityListToolbar, FieldGroupSection - DONE (2026-01-27)
+
 ### Up Next
 1. [ ] **End-to-end sync verification** — Full pipeline test with real data (HIGH)
-2. [ ] **Partner entity page** — List view with search/filter, detail page with assignments + ASINs (HIGH)
-3. [ ] **Staff entity page** — Team directory with roles, squads, capacity (HIGH)
-4. [ ] **Lineage visualization** — "Where did this value come from?" on entity detail pages (MEDIUM)
-5. [~] Phase 5.2 remaining — Field detail panel, pin/lock, filter controls (MEDIUM)
-6. [ ] **Playwright E2E tests** — Critical path regression tests (tab discovery, mapping persistence, sync) (MEDIUM)
-7. [ ] Nested sheet extraction UX design (LOW)
-8. [ ] Phase 4: Additional connectors — Close.io, Typeform, etc. (LOW)
-9. [ ] Product Centre analytics sub-tab — Partner counts per product over time (LOW)
+2. [ ] **Lineage visualization** — "Where did this value come from?" on entity detail pages (MEDIUM)
+3. [~] Phase 5.2 remaining — Field detail panel, pin/lock, filter controls (MEDIUM)
+4. [ ] **Playwright E2E tests** — Critical path regression tests (tab discovery, mapping persistence, sync) (MEDIUM)
+5. [ ] Nested sheet extraction UX design (LOW)
+6. [ ] Phase 4: Additional connectors — Close.io, Typeform, etc. (LOW)
+7. [ ] Product Centre analytics sub-tab — Partner counts per product over time (LOW)
 
 ---
 
