@@ -216,7 +216,7 @@ export default function PartnersPage() {
           <>
             <div className="rounded-xl border bg-card divide-y divide-border/60">
               {/* Header row — desktop only */}
-              <div className="hidden md:flex items-center px-5 py-2.5 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+              <div className="hidden md:flex items-center gap-4 px-5 py-2.5 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
                 <div className="flex-1 min-w-0">Brand</div>
                 <div className="w-24">Status</div>
                 <div className="w-20">Tier</div>

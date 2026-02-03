@@ -39,6 +39,36 @@ export class SyncEngine {
   ): Promise<SyncResult> {
     const startTime = Date.now()
 
+    // 0. Check for existing running sync (prevent duplicates)
+    const { data: runningSync } = await this.supabase
+      .from('sync_runs')
+      .select('id, started_at')
+      .eq('tab_mapping_id', tabMappingId)
+      .eq('status', 'running')
+      .maybeSingle()
+
+    if (runningSync) {
+      const startedAt = new Date(runningSync.started_at).toLocaleTimeString()
+      console.log(`[SyncEngine] Sync already running for tab ${tabMappingId} (started ${startedAt})`)
+      return {
+        success: false,
+        syncRunId: runningSync.id,
+        stats: {
+          rowsProcessed: 0,
+          rowsCreated: 0,
+          rowsUpdated: 0,
+          rowsSkipped: 0,
+          errors: [{
+            row: 0,
+            message: `A sync is already running for this tab (started at ${startedAt}). Please wait for it to complete.`,
+            severity: 'error',
+          }],
+        },
+        changes: [],
+        durationMs: 0,
+      }
+    }
+
     // 1. Load configuration
     const config = await this.loadConfig(tabMappingId)
 
@@ -295,12 +325,26 @@ export class SyncEngine {
 
     console.log(`[SyncEngine] Processing ${rowsToProcess.length} rows...`)
 
+    // OPTIMIZATION: Batch lookup - fetch all existing records in one query
+    // instead of querying per-row (N queries → 1 query)
+    const allKeyValues = rowsToProcess
+      .map(row => row[keyColumnIndex]?.trim())
+      .filter(Boolean)
+
+    console.log(`[SyncEngine] Batch lookup: fetching ${allKeyValues.length} existing records...`)
+    const existingMap = await this.batchFindExisting(
+      config.tabMapping.primary_entity,
+      keyMapping.target_field,
+      allKeyValues
+    )
+    console.log(`[SyncEngine] Found ${existingMap.size} existing records`)
+
     for (let i = 0; i < rowsToProcess.length; i++) {
       const row = rowsToProcess[i]
       const rowNumber = i + 2 // 1-indexed + header row
 
-      // Progress logging every 100 rows
-      if (i > 0 && i % 100 === 0) {
+      // Progress logging every 500 rows (faster now, so less frequent)
+      if (i > 0 && i % 500 === 0) {
         console.log(`[SyncEngine] Processed ${i}/${rowsToProcess.length} rows...`)
       }
 
@@ -336,12 +380,8 @@ export class SyncEngine {
           rowNumber
         )
 
-        // Check for existing record
-        const existing = await this.findExisting(
-          config.tabMapping.primary_entity,
-          keyMapping.target_field,
-          keyValue
-        )
+        // O(1) lookup from pre-fetched map instead of per-row DB query
+        const existing = existingMap.get(keyValue.toLowerCase()) || null
 
         // Apply authority rules
         const authorizedFields = options.forceOverwrite
@@ -474,6 +514,52 @@ export class SyncEngine {
     }
 
     return authorized
+  }
+
+  /**
+   * Batch fetch existing records by key field values.
+   * Returns a Map for O(1) lookups. Keys are lowercased for case-insensitive matching.
+   */
+  private async batchFindExisting(
+    entity: EntityType,
+    keyField: string,
+    keyValues: string[]
+  ): Promise<Map<string, Record<string, unknown>>> {
+    const resultMap = new Map<string, Record<string, unknown>>()
+
+    if (keyValues.length === 0) return resultMap
+
+    try {
+      // Supabase has a limit on query size, so batch in chunks of 500
+      const chunkSize = 500
+      for (let i = 0; i < keyValues.length; i += chunkSize) {
+        const chunk = keyValues.slice(i, i + chunkSize)
+
+        // Use 'in' filter for batch lookup
+        const { data, error } = await this.supabase
+          .from(entity)
+          .select('*')
+          .in(keyField, chunk)
+
+        if (error) {
+          console.error(`[SyncEngine] batchFindExisting error:`, error.message)
+          continue
+        }
+
+        if (data) {
+          for (const record of data) {
+            const key = String(record[keyField] || '').toLowerCase()
+            if (key) {
+              resultMap.set(key, record)
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.error(`[SyncEngine] batchFindExisting exception:`, err)
+    }
+
+    return resultMap
   }
 
   private async findExisting(
