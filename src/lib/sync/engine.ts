@@ -615,18 +615,15 @@ export class SyncEngine {
       }))
 
       const keyField = creates[0].keyField
+      const totalBatches = Math.ceil(createRecords.length / 50)
 
-      console.log(`[SyncEngine] Attempting to create ${creates.length} records in ${config.tabMapping.primary_entity}`)
-      console.log(`[SyncEngine] Using Supabase URL: ${process.env.NEXT_PUBLIC_SUPABASE_URL}`)
-      console.log(`[SyncEngine] Service role key set: ${!!process.env.SUPABASE_SERVICE_ROLE_KEY}`)
-      console.log(`[SyncEngine] First record payload:`, JSON.stringify(createRecords[0], null, 2))
+      console.log(`[SyncEngine] Creating ${creates.length} records in ${totalBatches} batches`)
 
       // Insert in batches of 50, capturing returned IDs
       for (let i = 0; i < createRecords.length; i += 50) {
         const batch = createRecords.slice(i, i + 50)
         const batchChanges = creates.slice(i, i + 50)
-
-        console.log(`[SyncEngine] Inserting batch ${Math.floor(i/50) + 1} with ${batch.length} records`)
+        const batchNum = Math.floor(i/50) + 1
 
         const { data: inserted, error } = await this.supabase
           .from(config.tabMapping.primary_entity)
