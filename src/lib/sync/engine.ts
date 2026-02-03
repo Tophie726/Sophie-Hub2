@@ -307,11 +307,6 @@ export class SyncEngine {
       try {
         const keyValue = row[keyColumnIndex]?.trim()
 
-        // Debug: log which row we're starting
-        if (i < 5) {
-          console.log(`[SyncEngine] Starting row ${i}: key="${keyValue}"`)
-        }
-
         // Capture ALL raw column values for zero-data-loss storage
         const rawCapture = this.buildSourceData(
           row,
@@ -341,35 +336,17 @@ export class SyncEngine {
           rowNumber
         )
 
-        // Debug: Log first row's fields to see what's being built
-        if (i === 0) {
-          console.log(`[SyncEngine] First row - keyField: "${keyMapping.target_field}" = "${keyValue}"`)
-          console.log(`[SyncEngine] First row fields:`, JSON.stringify(fields, null, 2))
-        }
-
         // Check for existing record
-        if (i < 5) console.log(`[SyncEngine] Row ${i}: checking existing...`)
         const existing = await this.findExisting(
           config.tabMapping.primary_entity,
           keyMapping.target_field,
           keyValue
         )
-        if (i < 5) console.log(`[SyncEngine] Row ${i}: existing check done`)
-
-        // Debug: Log existing check result for first row
-        if (i === 0) {
-          console.log(`[SyncEngine] First row - existing:`, existing ? 'FOUND' : 'NOT FOUND')
-        }
 
         // Apply authority rules
         const authorizedFields = options.forceOverwrite
           ? fields
           : this.filterByAuthority(fields, config.columnMappings, !!existing)
-
-        // Debug: Log authorized fields for first row
-        if (i === 0) {
-          console.log(`[SyncEngine] First row - authorizedFields (${Object.keys(authorizedFields).length}):`, JSON.stringify(authorizedFields, null, 2))
-        }
 
         // Determine change type
         if (Object.keys(authorizedFields).length === 0) {
