@@ -625,12 +625,18 @@ export class SyncEngine {
         const batchChanges = creates.slice(i, i + 50)
         const batchNum = Math.floor(i/50) + 1
 
+        // Use upsert to handle duplicates gracefully (update if exists, insert if not)
         const { data: inserted, error } = await this.supabase
           .from(config.tabMapping.primary_entity)
-          .insert(batch)
+          .upsert(batch, {
+            onConflict: keyField,
+            ignoreDuplicates: false // Update on conflict, don't skip
+          })
           .select('*')
 
-        console.log(`[SyncEngine] Insert result - data: ${inserted?.length ?? 'null'}, error: ${error ? JSON.stringify(error) : 'null'}`)
+        if (batchNum === 1 || error) {
+          console.log(`[SyncEngine] Batch ${batchNum} result - data: ${inserted?.length ?? 'null'}, error: ${error ? error.message : 'null'}`)
+        }
 
         if (error) {
           console.error('[SyncEngine] Batch insert error:', error)
