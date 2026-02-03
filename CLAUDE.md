@@ -729,6 +729,74 @@ See `src/UX-STANDARDS.md` §2 for full shimmer documentation.
 
 ---
 
+## Navigation Caching Pattern
+
+For snappy in-session navigation between pages, use **module-level caching** that survives component unmounts but not page refreshes.
+
+### When to Use
+
+- Pages with expensive API calls that don't change frequently
+- Data that should persist when users navigate away and back
+- Complex component state that's expensive to restore
+
+### Implementation
+
+```typescript
+// src/lib/your-feature/cache.ts
+const cache = new Map<string, { data: unknown; timestamp: number }>()
+const TTL = 5 * 60 * 1000 // 5 minutes
+
+export function getCached<T>(key: string): T | null {
+  const entry = cache.get(key)
+  if (!entry) return null
+  if (Date.now() - entry.timestamp > TTL) {
+    cache.delete(key)
+    return null
+  }
+  return entry.data as T
+}
+
+export function setCache<T>(key: string, data: T): void {
+  cache.set(key, { data, timestamp: Date.now() })
+}
+```
+
+### Usage Pattern
+
+```typescript
+// In your component
+useEffect(() => {
+  // Check cache first
+  const cached = getCached<MyData>('my-key')
+  if (cached) {
+    setData(cached)
+    setIsLoading(false)
+    return
+  }
+
+  // Cache miss - fetch from API
+  fetchData().then(data => {
+    setCache('my-key', data)
+    setData(data)
+    setIsLoading(false)
+  })
+}, [])
+```
+
+### Key Principles
+
+1. **Module-level Map**: Survives unmounts, cleared on page refresh
+2. **TTL expiration**: Prevents stale data (5 min default)
+3. **Check cache before fetch**: Skip loading state if cached
+4. **Update cache on mutations**: Keep cache in sync with local state
+5. **Set `isLoading = false` on cache hit**: Skip shimmer/skeleton
+
+### Current Implementations
+
+- `src/lib/data-enrichment/cache.ts` - Data sources, sheet previews, SmartMapper state
+
+---
+
 ## Commands
 
 ```bash

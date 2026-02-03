@@ -140,6 +140,11 @@ interface TabRawData {
 // Import canonical types from entities (single source of truth)
 import type { EntityType, ColumnCategoryOrNull } from '@/types/entities'
 import type { ComputationType, SourceAuthority, ColumnMapping } from '@/types/enrichment'
+import {
+  getCachedMapperState,
+  setCachedMapperState,
+  type CachedSmartMapperState,
+} from '@/lib/data-enrichment/cache'
 
 type ColumnCategory = ColumnCategoryOrNull
 
@@ -325,6 +330,16 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
     // Always save to localStorage immediately (offline resilience)
     localStorage.setItem(draftKey, JSON.stringify(draft))
 
+    // Update module cache for instant restore on return navigation
+    if (dataSourceId) {
+      setCachedMapperState(dataSourceId, tabName, {
+        phase,
+        headerRow,
+        columns,
+        timestamp: Date.now(),
+      })
+    }
+
     // Debounce DB save (500ms) to avoid hammering the server
     if (dataSourceId) {
       if (saveTimeoutRef.current) {
@@ -378,7 +393,27 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []) // Empty deps — only runs on unmount
 
-  // Restore draft: compare DB and localStorage timestamps, use the freshest
+  // FAST PATH: Check module-level cache immediately on mount (before rawData loads)
+  // This runs once and restores instantly if cached, avoiding the shimmer loading state
+  useEffect(() => {
+    if (draftRestored || restoringDraftRef.current) return
+    if (!dataSourceId) return
+
+    const cached = getCachedMapperState(dataSourceId, tabName)
+    if (cached && cached.columns.length > 0) {
+      // Instant restore from cache - no waiting for rawData, skip shimmer
+      restoringDraftRef.current = true
+      setIsLoading(false) // Skip shimmer - we have columns to show
+      setPhase(cached.phase)
+      setHeaderRow(cached.headerRow)
+      setInitialHeaderRow(cached.headerRow)
+      setColumns(cached.columns as ColumnClassification[])
+      setDraftRestored(true)
+    }
+  }, [dataSourceId, tabName, draftRestored])
+
+  // Restore draft from API: compare DB and localStorage timestamps, use the freshest
+  // Only runs if cache miss (draftRestored is still false after cache check)
   useEffect(() => {
     if (!rawData || draftRestored || restoringDraftRef.current) return
     restoringDraftRef.current = true
@@ -454,7 +489,16 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
               setInitialHeaderRow(savedHeaderRow)
               setColumns(merged)
               setDraftRestored(true)
-              // No toast needed - the restored data being visible is self-evident
+
+              // Update module cache for instant restore on return
+              if (dataSourceId) {
+                setCachedMapperState(dataSourceId, tabName, {
+                  phase: 'classify',
+                  headerRow: savedHeaderRow,
+                  columns: merged,
+                  timestamp: Date.now(),
+                })
+              }
               return
             }
           }
@@ -502,11 +546,22 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
         : dbDraft || localDraft
 
       if (bestDraft) {
-        setPhase(headerAlreadyConfirmed ? 'classify' : 'preview')
+        const restoredPhase = headerAlreadyConfirmed ? 'classify' : 'preview'
+        setPhase(restoredPhase)
         setHeaderRow(bestDraft.headerRow)
         setInitialHeaderRow(bestDraft.headerRow) // Track for unsaved changes
         setColumns(bestDraft.columns)
         setDraftRestored(true)
+
+        // Update module cache for instant restore on return
+        if (dataSourceId) {
+          setCachedMapperState(dataSourceId, tabName, {
+            phase: restoredPhase,
+            headerRow: bestDraft.headerRow,
+            columns: bestDraft.columns,
+            timestamp: Date.now(),
+          })
+        }
         return
       }
 

@@ -2,7 +2,6 @@
 
 import { Suspense, useState, useEffect, useCallback } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
-import { motion, AnimatePresence } from 'framer-motion'
 import { PageHeader } from '@/components/layout/page-header'
 import { CategoryHub, SourceBrowser } from '@/components/data-enrichment/browser'
 import { DataFlowMap } from '@/components/data-enrichment/lineage'
@@ -10,8 +9,6 @@ import { Button } from '@/components/ui/button'
 import { Network } from 'lucide-react'
 
 type DataBrowserView = 'hub' | 'sheets-overview' | 'sheets-browser' | 'forms' | 'docs' | 'flow-map'
-
-const easeOut: [number, number, number, number] = [0.22, 1, 0.36, 1]
 
 // Wrap in Suspense so useSearchParams() works on direct URL navigation
 export default function DataEnrichmentPage() {
@@ -137,66 +134,51 @@ function DataEnrichmentContent() {
       )}
 
       <div className={browserView === 'hub' ? 'p-4 md:p-8' : browserView === 'sheets-browser' ? 'h-[calc(100vh-64px)]' : ''}>
-        <AnimatePresence mode="popLayout" initial={false}>
-          {/* Hub View - Category selection */}
-          {browserView === 'hub' && (
-            <CategoryHub key="hub" onSelectCategory={handleSelectCategory} />
-          )}
+        {/* No AnimatePresence - instant view switching, no overlap */}
+        {/* Hub View - Category selection */}
+        {browserView === 'hub' && (
+          <CategoryHub key="hub" onSelectCategory={handleSelectCategory} />
+        )}
 
-          {/* Sheets Browser View (tab mapping) */}
-          {browserView === 'sheets-browser' && (
-            <SourceBrowser
-              key="sheets-browser"
-              onBack={() => setBrowserView('hub')}
-              initialSourceId={selectedSourceId}
-              initialTabId={selectedTabId}
-              onSourceChange={setSelectedSourceId}
-              onTabChange={setSelectedTabId}
-            />
-          )}
+        {/* Sheets Browser View (tab mapping) */}
+        {browserView === 'sheets-browser' && (
+          <SourceBrowser
+            key="sheets-browser"
+            onBack={() => setBrowserView('hub')}
+            initialSourceId={selectedSourceId}
+            initialTabId={selectedTabId}
+            onSourceChange={setSelectedSourceId}
+            onTabChange={setSelectedTabId}
+          />
+        )}
 
-          {/* Flow Map View */}
-          {browserView === 'flow-map' && (
-            <DataFlowMap
-              key="flow-map"
-              onBack={() => setBrowserView('hub')}
-            />
-          )}
+        {/* Flow Map View */}
+        {browserView === 'flow-map' && (
+          <DataFlowMap
+            key="flow-map"
+            onBack={() => setBrowserView('hub')}
+          />
+        )}
 
-          {/* Forms View - Coming Soon */}
-          {browserView === 'forms' && (
-            <motion.div
-              key="forms"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2, ease: easeOut }}
-              className="p-8 text-center"
-            >
-              <p className="text-muted-foreground">Forms integration coming soon</p>
-              <Button variant="outline" onClick={() => setBrowserView('hub')} className="mt-4">
-                Back to Hub
-              </Button>
-            </motion.div>
-          )}
+        {/* Forms View - Coming Soon */}
+        {browserView === 'forms' && (
+          <div className="p-8 text-center">
+            <p className="text-muted-foreground">Forms integration coming soon</p>
+            <Button variant="outline" onClick={() => setBrowserView('hub')} className="mt-4">
+              Back to Hub
+            </Button>
+          </div>
+        )}
 
-          {/* Docs View - Coming Soon */}
-          {browserView === 'docs' && (
-            <motion.div
-              key="docs"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2, ease: easeOut }}
-              className="p-8 text-center"
-            >
-              <p className="text-muted-foreground">Documents integration coming soon</p>
-              <Button variant="outline" onClick={() => setBrowserView('hub')} className="mt-4">
-                Back to Hub
-              </Button>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {/* Docs View - Coming Soon */}
+        {browserView === 'docs' && (
+          <div className="p-8 text-center">
+            <p className="text-muted-foreground">Documents integration coming soon</p>
+            <Button variant="outline" onClick={() => setBrowserView('hub')} className="mt-4">
+              Back to Hub
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   )

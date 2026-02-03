@@ -13,6 +13,15 @@ import { SyncLoadingOverlay } from '../sync-loading-overlay'
 import { Button } from '@/components/ui/button'
 import { ShimmerGrid } from '@/components/ui/shimmer-grid'
 import { SheetSearchModal } from '../sheet-search-modal'
+import {
+  getCachedSources,
+  setCachedSources,
+  getCachedPreview,
+  setCachedPreview,
+  invalidateSources,
+  type CachedDataSource,
+  type CachedSheetPreview,
+} from '@/lib/data-enrichment/cache'
 import type { CategoryStats } from '@/types/entities'
 
 interface DataSource {
@@ -124,14 +133,29 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
   // Auto-trigger sync preview after mapping save
   const [pendingSyncAfterSave, setPendingSyncAfterSave] = useState(false)
 
-  // Load preview for a source that has no tabs yet
+  // Load preview for a source - checks module-level cache first for instant restore
   const loadPreviewForSource = useCallback(async (sourceId: string, spreadsheetId: string) => {
+    // Check module-level cache first (survives unmount)
+    const cached = getCachedPreview(spreadsheetId)
+    if (cached) {
+      // Instant restore from cache - no loading state needed
+      setSheetPreviews(prev => ({
+        ...prev,
+        [sourceId]: cached as SheetPreview,
+      }))
+      return
+    }
+
+    // Not in cache - fetch from API
     setIsLoadingPreview(true)
     try {
       const response = await fetch(`/api/sheets/preview?id=${spreadsheetId}`)
       if (response.ok) {
         const data = await response.json()
         const preview = data.preview as SheetPreview
+
+        // Store in module-level cache for instant restore on return
+        setCachedPreview(spreadsheetId, preview as CachedSheetPreview)
 
         setSheetPreviews(prev => ({
           ...prev,
@@ -151,10 +175,49 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
     }
   }, []) // Stable — uses refs for callbacks
 
-  // Fetch existing sources — stable function, safe to call from effects and retry button
+  // Helper to handle source selection after loading (shared by cache hit and fetch)
+  const handleSourcesLoaded = useCallback((loadedSources: DataSource[]) => {
+    setSources(loadedSources)
+
+    // Use initialSourceId if provided, otherwise auto-select first
+    const initSrcId = initialSourceIdRef.current
+    const sourceToSelect = initSrcId
+      ? loadedSources.find((s: DataSource) => s.id === initSrcId)
+      : loadedSources[0]
+
+    if (sourceToSelect) {
+      setActiveSourceIdInternal(sourceToSelect.id)
+      onSourceChangeRef.current?.(sourceToSelect.id)
+
+      // Load Google Sheets preview (will use cache if available)
+      if (sourceToSelect.spreadsheet_id) {
+        loadPreviewForSource(sourceToSelect.id, sourceToSelect.spreadsheet_id)
+      }
+
+      // Only default to Overview if user hasn't already selected a tab
+      if (!userHasSelectedTab.current) {
+        userHasSelectedTab.current = true
+        setActiveTabIdInternal(OVERVIEW_TAB_ID)
+        onTabChangeRef.current?.(OVERVIEW_TAB_ID)
+      }
+    }
+  }, [loadPreviewForSource])
+
+  // Fetch existing sources — checks module-level cache first for instant restore
   const fetchSources = useCallback(async () => {
-    setIsLoading(true)
     setAuthError(false)
+
+    // Check module-level cache first (survives unmount)
+    const cached = getCachedSources()
+    if (cached && cached.length > 0) {
+      // Instant restore from cache - no loading state, no spinner
+      setIsLoading(false)
+      handleSourcesLoaded(cached as DataSource[])
+      return
+    }
+
+    // Not in cache - fetch from API
+    setIsLoading(true)
     try {
       const response = await fetch('/api/data-sources')
       if (response.status === 401) {
@@ -164,37 +227,18 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
       if (response.ok) {
         const json = await response.json()
         const fetchedSources = json.data?.sources || json.sources || []
-        setSources(fetchedSources)
 
-        // Use initialSourceId if provided, otherwise auto-select first
-        const initSrcId = initialSourceIdRef.current
-        const sourceToSelect = initSrcId
-          ? fetchedSources.find((s: DataSource) => s.id === initSrcId)
-          : fetchedSources[0]
+        // Store in module-level cache for instant restore on return
+        setCachedSources(fetchedSources as CachedDataSource[])
 
-        if (sourceToSelect) {
-          setActiveSourceIdInternal(sourceToSelect.id)
-          onSourceChangeRef.current?.(sourceToSelect.id)
-
-          // Always fetch Google Sheets preview for full tab discovery.
-          if (sourceToSelect.spreadsheet_id) {
-            loadPreviewForSource(sourceToSelect.id, sourceToSelect.spreadsheet_id)
-          }
-
-          // Only default to Overview if user hasn't already selected a tab
-          if (!userHasSelectedTab.current) {
-            userHasSelectedTab.current = true
-            setActiveTabIdInternal(OVERVIEW_TAB_ID)
-            onTabChangeRef.current?.(OVERVIEW_TAB_ID)
-          }
-        }
+        handleSourcesLoaded(fetchedSources)
       }
     } catch (error) {
       console.error('Error fetching sources:', error)
     } finally {
       setIsLoading(false)
     }
-  }, [loadPreviewForSource]) // Stable — loadPreviewForSource is stable
+  }, [handleSourcesLoaded, loadPreviewForSource])
 
   // Run once on mount
   useEffect(() => {
@@ -327,7 +371,9 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
           const sourcesResponse = await fetch('/api/data-sources')
           if (sourcesResponse.ok) {
             const sourcesData = await sourcesResponse.json()
-            setSources(sourcesData.sources || [])
+            const freshSources = sourcesData.sources || []
+            setSources(freshSources)
+            setCachedSources(freshSources as CachedDataSource[])
           }
 
           toast.success(`Tab set to ${statusLabel}`)
@@ -602,11 +648,12 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
         const data = await previewResponse.json()
         const preview = data.preview as SheetPreview
 
-        // Store preview
+        // Store preview in local state and module cache
         setSheetPreviews(prev => ({
           ...prev,
           [sourceId]: preview,
         }))
+        setCachedPreview(sheet.id, preview as CachedSheetPreview)
 
         // Add to sources list (will be refreshed on next fetch, but show immediately)
         setSources(prev => {
@@ -614,7 +661,7 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
           if (prev.some(s => s.id === sourceId)) {
             return prev
           }
-          return [
+          const newSources = [
             ...prev,
             {
               id: sourceId,
@@ -627,6 +674,9 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
               tabs: [],
             },
           ]
+          // Update module cache
+          setCachedSources(newSources as CachedDataSource[])
+          return newSources
         })
 
         // Select this source
@@ -782,7 +832,9 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
         const sourcesResponse = await fetch('/api/data-sources', { cache: 'no-store' })
         if (sourcesResponse.ok) {
           const json = await sourcesResponse.json()
-          setSources(json.data?.sources || json.sources || [])
+          const freshSources = json.data?.sources || json.sources || []
+          setSources(freshSources)
+          setCachedSources(freshSources as CachedDataSource[]) // Update module cache
 
           // Update activeTabId to the new tab mapping ID if available
           const tabMappingId = result.data?.tab_mapping_id || result.tab_mapping_id
@@ -959,6 +1011,7 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
             sources.find(s => s.id === rs.id)!
           ).filter(Boolean)
           setSources(newOrder)
+          setCachedSources(newOrder as CachedDataSource[]) // Update module cache
 
           // Persist to database
           try {

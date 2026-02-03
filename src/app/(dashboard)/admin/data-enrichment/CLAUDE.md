@@ -406,8 +406,14 @@ The Data Enrichment page remembers where you were:
 
 1. **URL params** (`?view=sheets-browser&source=xxx&tab=yyy`) for bookmarking/sharing
 2. **localStorage** (`data-enrichment-state`) for cross-navigation memory
+3. **Module-level cache** (`src/lib/data-enrichment/cache.ts`) for instant data restore
 
-When returning to Data Enrichment after visiting other pages (Partners, Staff, etc.), the page restores your last position (view, source, tab) from localStorage. URL params take priority if present.
+When returning to Data Enrichment after visiting other pages (Partners, Staff, etc.):
+- The page restores your last position (view, source, tab) from localStorage
+- SourceBrowser checks the module-level cache first — if fresh (< 5 min), data loads instantly with no spinner
+- URL params take priority if present
+
+**View Switching**: Uses simple conditional rendering (no AnimatePresence). Only one view renders at a time — no overlap issues.
 
 ---
 

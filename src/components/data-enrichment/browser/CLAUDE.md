@@ -183,6 +183,24 @@ Tabs use **Google Sheets native order** (the order they appear in the actual spr
 - `/api/data-sources`: `max-age=30, stale-while-revalidate=60`
 - `/api/sheets/raw-rows`: `max-age=60, stale-while-revalidate=120`
 
+**Module-level navigation cache** (`src/lib/data-enrichment/cache.ts`):
+- **Purpose**: Instant restore when navigating back to Data Enrichment
+- Caches:
+  - Data sources list (`data-sources`)
+  - Sheet previews (`sheet-preview:{spreadsheetId}`)
+  - SmartMapper state per tab (`smart-mapper:{dataSourceId}:{tabName}`)
+- 5-minute TTL, survives component unmounts
+- On mount: check cache → if fresh, use instantly (no loading spinner) → if stale, fetch
+- On mutation: update cache alongside local state
+- Helpers: `getCachedSources()`, `setCachedSources()`, `getCachedPreview()`, `setCachedPreview()`, `getCachedMapperState()`, `setCachedMapperState()`
+
+**SmartMapper caching flow**:
+1. Mount: Check `getCachedMapperState()` before any API calls
+2. If cached: Instant restore of phase, headerRow, columns — no API calls
+3. If not cached: Restore from API (saved mappings → drafts → fresh start)
+4. On save: Update cache alongside localStorage and DB draft save
+5. Result: Switching between tabs restores instantly, no "All (0)" flash
+
 ## API Integration
 
 ### GET /api/data-sources
