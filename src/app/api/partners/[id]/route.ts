@@ -43,7 +43,7 @@ export async function GET(
         .select('id, week_start_date, status, notes')
         .eq('partner_id', id)
         .order('week_start_date', { ascending: false })
-        .limit(12),
+        .limit(156), // 3 years of weekly data for the Weekly Status tab
     ])
 
     if (partnerResult.error) {

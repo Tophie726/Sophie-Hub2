@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
+import { motion } from 'framer-motion'
 import {
   ArrowLeft,
   Building2,
@@ -12,7 +13,8 @@ import {
   CalendarDays,
   DollarSign,
   Contact,
-  FileText,
+  LayoutDashboard,
+  Calendar,
 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/page-header'
 import { Button } from '@/components/ui/button'
@@ -21,13 +23,22 @@ import { StatusBadge } from '@/components/entities/status-badge'
 import { TierBadge } from '@/components/entities/tier-badge'
 import { FieldGroupSection } from '@/components/entities/field-group-section'
 import { StaffAssignmentCard } from '@/components/entities/staff-assignment-card'
+import { WeeklyStatusTab } from '@/components/partners/weekly-status-tab'
 import type { PartnerDetail } from '@/types/entities'
+
+type TabId = 'overview' | 'weekly'
+
+const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
+  { id: 'overview', label: 'Overview', icon: <LayoutDashboard className="h-4 w-4" /> },
+  { id: 'weekly', label: 'Weekly Status', icon: <Calendar className="h-4 w-4" /> },
+]
 
 export default function PartnerDetailPage() {
   const { id } = useParams<{ id: string }>()
   const [partner, setPartner] = useState<PartnerDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<TabId>('overview')
 
   useEffect(() => {
     async function fetchPartner() {
@@ -103,168 +114,175 @@ export default function PartnerDetailPage() {
           All Partners
         </Link>
 
-        <div className="max-w-4xl space-y-6">
-          {/* Core Info */}
-          <FieldGroupSection
-            title="Core Info"
-            icon={<Building2 className="h-4 w-4 text-muted-foreground" />}
-            fields={[
-              { label: 'Brand Name', value: partner.brand_name },
-              { label: 'Partner Code', value: partner.partner_code },
-              { label: 'Status', value: partner.status },
-              { label: 'Tier', value: partner.tier },
-              { label: 'Notes', value: partner.notes },
-            ]}
-          />
-
-          {/* Contact */}
-          <FieldGroupSection
-            title="Contact"
-            icon={<Contact className="h-4 w-4 text-muted-foreground" />}
-            fields={[
-              { label: 'Client Name', value: partner.client_name },
-              { label: 'Client Email', value: partner.client_email, type: 'email' },
-              { label: 'Client Phone', value: partner.client_phone, type: 'phone' },
-            ]}
-          />
-
-          {/* Financial */}
-          <FieldGroupSection
-            title="Financial"
-            icon={<DollarSign className="h-4 w-4 text-muted-foreground" />}
-            fields={[
-              { label: 'Base Fee', value: partner.base_fee, type: 'currency' },
-              { label: 'Commission Rate', value: partner.commission_rate, type: 'percent' },
-              { label: 'Billing Day', value: partner.billing_day, type: 'number' },
-            ]}
-          />
-
-          {/* Dates */}
-          <FieldGroupSection
-            title="Dates"
-            icon={<CalendarDays className="h-4 w-4 text-muted-foreground" />}
-            fields={[
-              { label: 'Onboarding Date', value: partner.onboarding_date, type: 'date' },
-              { label: 'Contract Start', value: partner.contract_start_date, type: 'date' },
-              { label: 'Contract End', value: partner.contract_end_date, type: 'date' },
-              { label: 'Churned Date', value: partner.churned_date, type: 'date' },
-            ]}
-          />
-
-          {/* Metrics */}
-          <FieldGroupSection
-            title="Metrics"
-            icon={<Package className="h-4 w-4 text-muted-foreground" />}
-            fields={[
-              { label: 'Parent ASINs', value: partner.parent_asin_count, type: 'number' },
-              { label: 'Child ASINs', value: partner.child_asin_count, type: 'number' },
-            ]}
-          />
-
-          {/* Staff Assignments */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <Users className="h-4 w-4 text-muted-foreground" />
-                Staff Assignments
-                {partner.assignments.length > 0 && (
-                  <span className="text-xs text-muted-foreground font-normal">
-                    ({partner.assignments.length})
-                  </span>
-                )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {partner.assignments.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No staff assigned yet</p>
-              ) : (
-                <div className="space-y-2">
-                  {partner.assignments.map(assignment => (
-                    <StaffAssignmentCard
-                      key={assignment.id}
-                      assignment={assignment}
-                    />
-                  ))}
-                </div>
+        {/* Tab Navigation */}
+        <div className="flex items-center gap-1 bg-muted/50 rounded-lg p-1 mb-6 w-fit">
+          {TABS.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`
+                relative flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors
+                ${activeTab === tab.id
+                  ? 'text-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+                }
+              `}
+            >
+              {activeTab === tab.id && (
+                <motion.div
+                  layoutId="partnerTabIndicator"
+                  className="absolute inset-0 bg-background shadow-sm rounded-md"
+                  transition={{ type: 'spring', bounce: 0.15, duration: 0.4 }}
+                />
               )}
-            </CardContent>
-          </Card>
+              <span className="relative z-10 flex items-center gap-2">
+                {tab.icon}
+                {tab.label}
+              </span>
+            </button>
+          ))}
+        </div>
 
-          {/* ASINs */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <Package className="h-4 w-4 text-muted-foreground" />
-                ASINs
-                {partner.asins.length > 0 && (
-                  <span className="text-xs text-muted-foreground font-normal">
-                    ({partner.asins.length})
-                  </span>
-                )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {partner.asins.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No ASINs linked</p>
-              ) : (
-                <div className="divide-y divide-border/60 -mx-6 px-6">
-                  {partner.asins.map(asin => (
-                    <div key={asin.id} className="flex items-center gap-3 py-2.5">
-                      <code className="text-xs font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-                        {asin.asin_code}
-                      </code>
-                      <span className="text-sm truncate flex-1">
-                        {asin.title || 'Untitled'}
-                      </span>
-                      {asin.is_parent && (
-                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 border border-blue-500/20">
-                          Parent
-                        </span>
-                      )}
-                      {asin.status && (
-                        <span className="text-[10px] text-muted-foreground">
-                          {asin.status}
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+        {/* Tab Content */}
+        <div className="max-w-4xl">
+          {activeTab === 'overview' && (
+            <div className="space-y-6">
+              {/* Core Info */}
+              <FieldGroupSection
+                title="Core Info"
+                icon={<Building2 className="h-4 w-4 text-muted-foreground" />}
+                fields={[
+                  { label: 'Brand Name', value: partner.brand_name },
+                  { label: 'Partner Code', value: partner.partner_code },
+                  { label: 'Status', value: partner.status },
+                  { label: 'Tier', value: partner.tier },
+                  { label: 'Notes', value: partner.notes },
+                ]}
+              />
 
-          {/* Weekly Status History */}
-          {partner.recent_statuses.length > 0 && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium flex items-center gap-2">
-                  <FileText className="h-4 w-4 text-muted-foreground" />
-                  Recent Weekly Statuses
-                  <span className="text-xs text-muted-foreground font-normal">
-                    (last {partner.recent_statuses.length} weeks)
-                  </span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="divide-y divide-border/60 -mx-6 px-6">
-                  {partner.recent_statuses.map(ws => (
-                    <div key={ws.id} className="flex items-center gap-3 py-2.5">
-                      <span className="text-xs text-muted-foreground tabular-nums w-24 shrink-0">
-                        {ws.week_start_date}
+              {/* Contact */}
+              <FieldGroupSection
+                title="Contact"
+                icon={<Contact className="h-4 w-4 text-muted-foreground" />}
+                fields={[
+                  { label: 'Client Name', value: partner.client_name },
+                  { label: 'Client Email', value: partner.client_email, type: 'email' },
+                  { label: 'Client Phone', value: partner.client_phone, type: 'phone' },
+                ]}
+              />
+
+              {/* Financial */}
+              <FieldGroupSection
+                title="Financial"
+                icon={<DollarSign className="h-4 w-4 text-muted-foreground" />}
+                fields={[
+                  { label: 'Base Fee', value: partner.base_fee, type: 'currency' },
+                  { label: 'Commission Rate', value: partner.commission_rate, type: 'percent' },
+                  { label: 'Billing Day', value: partner.billing_day, type: 'number' },
+                ]}
+              />
+
+              {/* Dates */}
+              <FieldGroupSection
+                title="Dates"
+                icon={<CalendarDays className="h-4 w-4 text-muted-foreground" />}
+                fields={[
+                  { label: 'Onboarding Date', value: partner.onboarding_date, type: 'date' },
+                  { label: 'Contract Start', value: partner.contract_start_date, type: 'date' },
+                  { label: 'Contract End', value: partner.contract_end_date, type: 'date' },
+                  { label: 'Churned Date', value: partner.churned_date, type: 'date' },
+                ]}
+              />
+
+              {/* Metrics */}
+              <FieldGroupSection
+                title="Metrics"
+                icon={<Package className="h-4 w-4 text-muted-foreground" />}
+                fields={[
+                  { label: 'Parent ASINs', value: partner.parent_asin_count, type: 'number' },
+                  { label: 'Child ASINs', value: partner.child_asin_count, type: 'number' },
+                ]}
+              />
+
+              {/* Staff Assignments */}
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-medium flex items-center gap-2">
+                    <Users className="h-4 w-4 text-muted-foreground" />
+                    Staff Assignments
+                    {partner.assignments.length > 0 && (
+                      <span className="text-xs text-muted-foreground font-normal">
+                        ({partner.assignments.length})
                       </span>
-                      {ws.status && (
-                        <StatusBadge status={ws.status} entity="partners" />
-                      )}
-                      {ws.notes && (
-                        <span className="text-xs text-muted-foreground truncate flex-1">
-                          {ws.notes}
-                        </span>
-                      )}
+                    )}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {partner.assignments.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No staff assigned yet</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {partner.assignments.map(assignment => (
+                        <StaffAssignmentCard
+                          key={assignment.id}
+                          assignment={assignment}
+                        />
+                      ))}
                     </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* ASINs */}
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-medium flex items-center gap-2">
+                    <Package className="h-4 w-4 text-muted-foreground" />
+                    ASINs
+                    {partner.asins.length > 0 && (
+                      <span className="text-xs text-muted-foreground font-normal">
+                        ({partner.asins.length})
+                      </span>
+                    )}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {partner.asins.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No ASINs linked</p>
+                  ) : (
+                    <div className="divide-y divide-border/60 -mx-6 px-6">
+                      {partner.asins.map(asin => (
+                        <div key={asin.id} className="flex items-center gap-3 py-2.5">
+                          <code className="text-xs font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                            {asin.asin_code}
+                          </code>
+                          <span className="text-sm truncate flex-1">
+                            {asin.title || 'Untitled'}
+                          </span>
+                          {asin.is_parent && (
+                            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 border border-blue-500/20">
+                              Parent
+                            </span>
+                          )}
+                          {asin.status && (
+                            <span className="text-[10px] text-muted-foreground">
+                              {asin.status}
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {activeTab === 'weekly' && (
+            <WeeklyStatusTab
+              statuses={partner.recent_statuses}
+              sourceData={partner.source_data as Record<string, Record<string, Record<string, unknown>>> | null | undefined}
+            />
           )}
         </div>
       </div>

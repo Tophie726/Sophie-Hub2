@@ -7,6 +7,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { getStatusColor } from '@/lib/status-colors'
 
 interface WeeklyStatusPreviewProps {
   /** Raw source_data from partner record */
@@ -15,23 +16,6 @@ interface WeeklyStatusPreviewProps {
   weeks?: number
   /** Callback when clicking to expand */
   onExpand?: () => void
-}
-
-// Get color class for a status - uses partial matching
-function getStatusColor(status: string | null): string {
-  if (!status) return 'bg-gray-700' // No data
-
-  const s = status.toLowerCase().trim()
-
-  // Check in order of specificity
-  if (s.includes('churn') || s.includes('cancel')) return 'bg-red-500'
-  if (s.includes('offboard')) return 'bg-orange-500'
-  if (s.includes('at risk') || s.includes('at-risk')) return 'bg-amber-500'
-  if (s.includes('pause') || s.includes('hold')) return 'bg-gray-400'
-  if (s.includes('onboard') || s.includes('waiting')) return 'bg-blue-500'
-  if (s.includes('track') || s.includes('active') || s.includes('subscribed') || s.includes('healthy')) return 'bg-green-500'
-
-  return 'bg-gray-500' // Unknown status
 }
 
 // Get the Monday of a given date's week

@@ -26,16 +26,24 @@ A visual "uptime bar" style indicator showing partner health over time. Inspired
 
 ### Status Colors
 
-| Status | Color | Description |
-|--------|-------|-------------|
-| Active/Healthy | `green-500` | Partner is in good standing |
-| Subscribed | `green-500` | Same as active |
-| Onboarding | `blue-500` | New partner being onboarded |
-| At Risk | `amber-500` | Needs attention |
-| Paused | `gray-400` | Temporarily paused |
-| Offboarding | `orange-500` | In process of leaving |
-| Churned | `red-500` | Left/cancelled |
-| No Data | `gray-600` | No status recorded for that week |
+**Configuration file**: `src/lib/status-colors.ts` (single source of truth)
+
+| Bucket | Color | Example Keywords | Description |
+|--------|-------|------------------|-------------|
+| Healthy | `green-500` | high perform, on track, active, subscribed, healthy, good, stable, growing | All good |
+| Onboarding | `blue-500` | onboard, waiting, new, setup, getting started | Being set up |
+| Warning | `amber-500` | at risk, under-perform, struggling, concern, declining | Needs attention |
+| Paused | `gray-400` | pause, hold, inactive, dormant, suspended | Temporarily inactive |
+| Offboarding | `orange-500` | offboard, winding down, ending | In process of leaving |
+| Churned | `red-500` | churn, cancel, terminated, ended | Left/cancelled |
+| Unknown | `purple-500` | (any unmatched value) | Unmapped - needs to be added to config |
+| No Data | `gray-700` | (null/empty) | No status recorded for that week |
+
+**Important**:
+- Gray-700 is ONLY for empty/null values (no data recorded)
+- Purple indicates a status value that needs to be added to the mapping
+- To add new statuses, edit `STATUS_BUCKETS` in `src/lib/status-colors.ts`
+- Keywords use partial, case-insensitive matching
 
 ---
 
@@ -171,19 +179,25 @@ interface WeeklyStatusBlockProps {
 ## Open Questions
 
 1. **Week boundaries**: Do weeks start Sunday or Monday? (Need to match Google Sheet convention)
+   - **Answer**: Using Monday as week start (ISO standard)
 
 2. **Missing data**: How to handle weeks with no status? Show empty/gray or skip?
+   - **Answer**: Show gray-700 for no data, but purple for unmapped actual values
 
 3. **Status normalization**: Current sheet has various status values - need mapping:
-   - "Subscribed" → active
-   - "Waiting To Be Onboarded" → onboarding
-   - "Churn" → churned
-   - etc.
+   - **Answer**: Implemented in `src/lib/status-colors.ts` with partial matching buckets
+   - See STATUS_BUCKETS for all keywords per color
 
 4. **Historical data**: How far back should we display? Options:
    - Fixed: Always show 52 weeks (1 year)
    - Dynamic: Show all available data
    - Selectable: Let user choose range
+
+5. **Status color configuration UI** (Phase 2 candidate):
+   - Allow admins to configure which statuses map to which color buckets
+   - Could be a settings panel in the Weekly tab
+   - Show list of "unmapped" statuses (purple) that need assignment
+   - Drag-and-drop or dropdown to assign bucket
 
 ---
 
