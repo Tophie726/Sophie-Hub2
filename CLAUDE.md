@@ -305,21 +305,49 @@ Many Google Sheets have headers on rows other than row 0 (e.g., Master Client Da
 - ✅ Value transform system working (status: Active→active, Churned→churned)
 - ✅ Auto-transform detection for status/tier fields when saving mappings
 - ✅ Navigation caching for instant page returns (module-level cache with 5min TTL)
-- ✅ Progress logging during sync (every 100 rows)
+- ✅ Progress logging during sync (every 500 rows)
 - ✅ Error handling improvements (findExisting uses maybeSingle)
+- ✅ **Batch lookup** - N queries → ~4 queries (10x+ faster)
+- ✅ **Sync locking** - Prevents concurrent syncs on same tab_mapping
+- ✅ **Upsert logic** - Uses ON CONFLICT for graceful duplicate handling
+- ✅ **Duplicate cleanup** - Removed 1100+ duplicate records
+- ✅ **Node 20** - Added .nvmrc, removed Supabase deprecation warning
 
-**Known Issues to Fix:**
-- ⚠️ Sync is slow (~8 rows/sec) due to sequential `findExisting` queries
-- ⚠️ No sync locking - multiple syncs can run simultaneously causing duplicates
-- ⚠️ No real-time progress feedback in UI
-- ⚠️ Missing unique constraint on `brand_name` - allows duplicate partners
+**Pending:**
+- ⚠️ Apply unique constraint migration (run SQL in Supabase Dashboard)
+- ⚠️ Real-time progress feedback in UI (WebSocket or polling)
 
-**Next Steps (Sync Optimization):**
-1. **Batch lookup** - Fetch all existing records in one query, check in memory (10x+ faster)
-2. **Sync locking** - Prevent concurrent syncs on same tab_mapping
-3. **Upsert logic** - Use ON CONFLICT instead of separate find/insert
-4. **Progress WebSocket** - Real-time sync progress in UI
-5. **Unique constraints** - Add to brand_name with proper conflict handling
+### Phase 5 Roadmap: Change Approval Workflow
+
+**Vision:** When syncing from sheets, show a "Review Changes" screen before applying updates to the database. This prevents accidental overwrites and creates an audit trail.
+
+**User Flow:**
+1. User clicks "Sync" on a mapped sheet
+2. System fetches source data and compares to database
+3. **Review Screen** shows:
+   - New records to create (green)
+   - Records to update with field-level diff (yellow)
+   - Records unchanged (grey/collapsed)
+4. User reviews changes, can approve all or selectively
+5. On approval, changes apply to database with full lineage tracking
+
+**Key Features:**
+- **Field-level diffs**: Show "Pod Leader: John Smith → Jane Doe"
+- **Selective approval**: Approve some changes, reject others
+- **Batch operations**: "Approve all new", "Reject all updates"
+- **Conflict detection**: Warn if database was modified since last sync
+- **Audit log**: Track who approved what, when
+
+**Technical Approach:**
+- `staged_changes` table already exists for this purpose
+- Dry-run mode in sync engine already calculates changes without applying
+- Add UI to display EntityChange[] from dry run
+- Add approval endpoint to apply selected changes
+
+**Stretch Goals:**
+- Email notifications for pending approvals
+- Auto-approve rules (e.g., "always accept new partners")
+- Scheduled syncs with auto-approval for low-risk changes
 
 ## Important Context
 
