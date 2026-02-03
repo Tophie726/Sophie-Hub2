@@ -138,13 +138,15 @@ export class GoogleSheetsConnector extends BaseConnector<GoogleSheetConnectorCon
 
   /**
    * Get data from a specific sheet tab with headers
+   * @param headerRow - 0-indexed row number for headers (default: 0)
    */
   async getData(
     token: string,
     config: GoogleSheetConnectorConfig,
-    tabName: string
+    tabName: string,
+    headerRow: number = 0
   ): Promise<SourceData> {
-    const result = await getSheetData(token, config.spreadsheet_id, tabName)
+    const result = await getSheetData(token, config.spreadsheet_id, tabName, headerRow)
     return {
       headers: result.headers,
       rows: result.rows,

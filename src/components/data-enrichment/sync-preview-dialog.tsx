@@ -71,6 +71,8 @@ interface SyncPreviewDialogProps {
   onOpenChange: (open: boolean) => void
   /** Dry run results per tab */
   previewResults: TabPreviewResult[]
+  /** Total number of tabs being analyzed */
+  totalTabs?: number
   /** Whether the dry run is still loading */
   isLoadingPreview: boolean
   /** Whether the actual sync is in progress */
@@ -452,6 +454,7 @@ export function SyncPreviewDialog({
   open,
   onOpenChange,
   previewResults,
+  totalTabs,
   isLoadingPreview,
   isSyncing,
   onConfirm,
@@ -499,11 +502,38 @@ export function SyncPreviewDialog({
 
         {/* Loading state */}
         {isLoadingPreview && (
-          <div className="flex flex-col items-center justify-center py-12 gap-3">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">
-              Analyzing {previewResults.length > 0 ? `${previewResults.length} tabs...` : 'tabs...'}
-            </p>
+          <div className="flex flex-col items-center justify-center py-8 gap-4">
+            <div className="relative">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              {totalTabs && totalTabs > 0 && (
+                <div className="absolute -bottom-1 -right-1 bg-primary text-primary-foreground text-[10px] font-medium rounded-full h-4 w-4 flex items-center justify-center">
+                  {previewResults.length}
+                </div>
+              )}
+            </div>
+            <div className="text-center">
+              <p className="text-sm font-medium">
+                {totalTabs && totalTabs > 0
+                  ? `Analyzing tab ${previewResults.length + 1} of ${totalTabs}...`
+                  : 'Analyzing tabs...'}
+              </p>
+              {previewResults.length > 0 && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  {previewResults[previewResults.length - 1]?.tabName}
+                </p>
+              )}
+            </div>
+            {/* Progress bar */}
+            {totalTabs && totalTabs > 0 && (
+              <div className="w-48 h-1.5 bg-muted rounded-full overflow-hidden">
+                <motion.div
+                  className="h-full bg-primary rounded-full"
+                  initial={{ width: 0 }}
+                  animate={{ width: `${(previewResults.length / totalTabs) * 100}%` }}
+                  transition={{ duration: 0.3, ease: easeOut }}
+                />
+              </div>
+            )}
           </div>
         )}
 

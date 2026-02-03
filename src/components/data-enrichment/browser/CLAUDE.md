@@ -140,18 +140,23 @@ const [successPhase, setSuccessPhase] = useState<'complete' | 'syncing'>('comple
 ### Sync Flow (Dry Run Preview)
 
 When user clicks "Sync" button or auto-triggered after mapping save:
-1. `handleSync` opens `SyncPreviewDialog` and starts loading
-2. For each active tab, calls `POST /api/sync/tab/[id]` with `{ dry_run: true }`
-3. API returns `EntityChange[]` (creates, updates, skips) without writing to DB
-4. Dialog shows summary stats (X creates, Y updates, Z skips) grouped by entity
-5. User reviews per-tab changes with expandable field-level detail
-6. User clicks "Confirm Sync" → `handleConfirmSync` runs actual sync (no dry_run)
-7. Toast shows results, sync status updated
+1. `handleSync` filters to **syncable tabs only**: `columnCount > 0` (has saved mappings)
+2. Opens `SyncPreviewDialog` with total tab count for progress tracking
+3. For each syncable tab, calls `POST /api/sync/tab/[id]` with `{ dry_run: true }`
+4. **Progressive results**: Dialog updates with each tab's results as they complete
+5. API returns `EntityChange[]` (creates, updates, skips) without writing to DB
+6. Dialog shows summary stats (X creates, Y updates, Z skips) grouped by entity
+7. User reviews per-tab changes with expandable field-level detail
+8. User clicks "Confirm Sync" → `handleConfirmSync` runs actual sync (no dry_run)
+9. Toast shows results, sync status updated
 
 **Important:** `SyncPreviewDialog` renders at the root level of SourceBrowser, not inside any tab view. It works as a modal overlay from any active tab — no navigation required.
 
+**CRITICAL — Header Row Handling:**
+The sync engine passes `tab_mappings.header_row` to the Google Sheets connector. Without this, sheets with non-zero header rows (e.g., Master Client Dashboard has headers on row 9) will fail with "Key column not found" errors because the connector would read from row 0.
+
 **Key files:**
-- `sync-preview-dialog.tsx` — Dialog with stats, entity sections, change detail
+- `sync-preview-dialog.tsx` — Dialog with stats, entity sections, change detail, progress bar
 - `source-browser.tsx` — `handleSync` (dry run) + `handleConfirmSync` (actual write)
 
 ### Tab Ordering
@@ -426,6 +431,11 @@ Run through this BEFORE committing any change to the data-enrichment browser:
 - [ ] Saved mappings load when no draft exists
 - [ ] Complete Mapping button: Default → "Saving..." (spinner) → "Mapping Saved" (green) → Overview
 - [ ] No auto-sync triggered after save (user must click Sync manually)
+
+### Header Row & Sync
+- [ ] Sheets with non-zero header rows sync correctly (header row passed to connector)
+- [ ] Only tabs with `columnCount > 0` are synced (not all active tabs)
+- [ ] Sync preview shows progressive results as tabs complete
 
 ### Performance (verify no regressions)
 - [ ] DB tabs render before Google Sheets preview completes

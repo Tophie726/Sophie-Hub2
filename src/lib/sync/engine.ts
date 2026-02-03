@@ -67,7 +67,8 @@ export class SyncEngine {
       const sourceData = await connector.getData(
         accessToken,
         connectorConfig,
-        config.tabMapping.tab_name
+        config.tabMapping.tab_name,
+        config.tabMapping.header_row
       )
 
       // 4. Process rows and determine changes
@@ -328,6 +329,12 @@ export class SyncEngine {
           rowNumber
         )
 
+        // Debug: Log first row's fields to see what's being built
+        if (i === 0) {
+          console.log(`[SyncEngine] First row - keyField: "${keyMapping.target_field}" = "${keyValue}"`)
+          console.log(`[SyncEngine] First row fields:`, JSON.stringify(fields, null, 2))
+        }
+
         // Check for existing record
         const existing = await this.findExisting(
           config.tabMapping.primary_entity,
@@ -512,24 +519,34 @@ export class SyncEngine {
 
       const keyField = creates[0].keyField
 
+      console.log(`[SyncEngine] Attempting to create ${creates.length} records in ${config.tabMapping.primary_entity}`)
+      console.log(`[SyncEngine] Using Supabase URL: ${process.env.NEXT_PUBLIC_SUPABASE_URL}`)
+      console.log(`[SyncEngine] Service role key set: ${!!process.env.SUPABASE_SERVICE_ROLE_KEY}`)
+      console.log(`[SyncEngine] First record payload:`, JSON.stringify(createRecords[0], null, 2))
+
       // Insert in batches of 50, capturing returned IDs
       for (let i = 0; i < createRecords.length; i += 50) {
         const batch = createRecords.slice(i, i + 50)
         const batchChanges = creates.slice(i, i + 50)
+
+        console.log(`[SyncEngine] Inserting batch ${Math.floor(i/50) + 1} with ${batch.length} records`)
 
         const { data: inserted, error } = await this.supabase
           .from(config.tabMapping.primary_entity)
           .insert(batch)
           .select('*')
 
+        console.log(`[SyncEngine] Insert result - data: ${inserted?.length ?? 'null'}, error: ${error ? JSON.stringify(error) : 'null'}`)
+
         if (error) {
-          console.error('Batch insert error:', error)
+          console.error('[SyncEngine] Batch insert error:', error)
           // Mark failed batch changes as skipped
           for (const change of batchChanges) {
             change.type = 'skip'
             change.skipReason = `Insert failed: ${error.message}`
           }
-        } else if (inserted) {
+        } else if (inserted && inserted.length > 0) {
+          console.log(`[SyncEngine] Successfully inserted ${inserted.length} records`)
           // Map returned IDs back to EntityChange objects for lineage
           for (const record of inserted as Record<string, unknown>[]) {
             const keyValue = String(record[keyField] || '')
@@ -537,6 +554,15 @@ export class SyncEngine {
             if (change) {
               change.existing = { id: record.id as string }
             }
+          }
+        } else {
+          // RLS might have blocked the insert - empty array means nothing was written
+          console.error(`[SyncEngine] Insert returned empty array (RLS block?) - batch of ${batch.length} records not inserted`)
+          console.error(`[SyncEngine] First record in failed batch:`, JSON.stringify(batch[0], null, 2))
+          // Mark failed batch changes as skipped
+          for (const change of batchChanges) {
+            change.type = 'skip'
+            change.skipReason = 'Insert returned no data - possible RLS policy blocking write'
           }
         }
       }

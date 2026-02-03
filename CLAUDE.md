@@ -246,6 +246,36 @@ The heart of this rebuild. A visual interface that:
 
 **Two-Layer Data System**: Sheets feed database initially, but individual fields can be migrated to "app-native" over time as adoption grows. See `/src/app/(dashboard)/admin/data-enrichment/CLAUDE.md` for full details.
 
+### Header Row Handling (CRITICAL)
+
+Many Google Sheets have headers on rows other than row 0 (e.g., Master Client Dashboard has headers on row 9). The system must always respect the configured `header_row` when fetching data.
+
+**How it works:**
+1. User confirms header row in SmartMapper Preview phase → saved to `tab_mappings.header_row`
+2. When fetching sheet data, ALWAYS pass the header row to `getSheetData()`:
+   ```typescript
+   // CORRECT:
+   const data = await getSheetData(token, spreadsheetId, tabName, headerRow)
+
+   // WRONG (defaults to row 0):
+   const data = await getSheetData(token, spreadsheetId, tabName)
+   ```
+
+**Where header_row is used:**
+- `lib/sync/engine.ts` - Sync uses `config.tabMapping.header_row`
+- `lib/connectors/google-sheets.ts` - Connector's `getData()` accepts optional `headerRow`
+- `lib/google/sheets.ts` - Core `getSheetData()` slices data based on `headerRow`
+- `api/sheets/tab-data` - Accepts `?headerRow=N` query parameter
+
+**Where header_row is NOT needed:**
+- `api/sheets/raw-rows` - Returns ALL rows for header detection (intentionally no header assumption)
+- AI analysis endpoints - Use raw rows for full context
+
+**When adding new sheet-fetching code:**
+1. If you need data with headers parsed → use `getSheetData()` WITH `headerRow`
+2. If you need raw rows for detection/preview → use `getSheetRawRows()`
+3. Always check if `tab_mappings.header_row` exists and pass it through
+
 ### Partner Management
 - View all partners with search/filter
 - See assignments, ASINs, weekly status history

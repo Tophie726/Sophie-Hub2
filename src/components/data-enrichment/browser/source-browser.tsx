@@ -9,6 +9,7 @@ import { SheetTabBar, OVERVIEW_TAB_ID } from './sheet-tab-bar'
 import { SmartMapper } from '../smart-mapper'
 import { TabOverviewDashboard } from './tab-overview-dashboard'
 import { SyncPreviewDialog, type TabPreviewResult } from '../sync-preview-dialog'
+import { SyncLoadingOverlay } from '../sync-loading-overlay'
 import { Button } from '@/components/ui/button'
 import { ShimmerGrid } from '@/components/ui/shimmer-grid'
 import { SheetSearchModal } from '../sheet-search-modal'
@@ -99,7 +100,16 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
     rowsUpdated?: number
   }>({})
 
-  // Sync preview state
+  // Background sync progress (non-blocking)
+  const [syncProgress, setSyncProgress] = useState<{
+    isRunning: boolean
+    currentTab?: string
+    completedTabs: number
+    totalTabs: number
+    phase: 'dry-run' | 'syncing' | 'idle'
+  }>({ isRunning: false, completedTabs: 0, totalTabs: 0, phase: 'idle' })
+
+  // Sync preview state - now only shown on demand after background sync
   const [showSyncPreview, setShowSyncPreview] = useState(false)
   const [isLoadingSyncPreview, setIsLoadingSyncPreview] = useState(false)
   const [previewResults, setPreviewResults] = useState<TabPreviewResult[]>([])
@@ -374,70 +384,94 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
     }
   }
 
-  // Handle sync: run dry run first to show preview
+  // Handle sync: directly sync to database (no dry run preview)
   const handleSync = useCallback(async () => {
-    if (!activeSource?.id || isSyncing || isLoadingSyncPreview) return
+    if (!activeSource?.id || isSyncing || syncProgress.isRunning) return
 
-    // Get all active tabs with mappings
-    const activeTabs = activeSource.tabs?.filter(
-      t => t.status === 'active' || !t.status
+    // Only sync tabs that have column mappings (columnCount > 0 means they have saved mappings)
+    const syncableTabs = activeSource.tabs?.filter(
+      t => (t.status === 'active' || !t.status) && t.columnCount > 0
     ) || []
 
-    if (activeTabs.length === 0) {
-      toast.info('No active tabs to sync')
+    if (syncableTabs.length === 0) {
+      toast.info('No tabs ready to sync. Map some columns first.')
       return
     }
 
-    // Open preview dialog and run dry run
-    setShowSyncPreview(true)
-    setIsLoadingSyncPreview(true)
-    setPreviewResults([])
+    // Start sync - show overlay animation
+    setSyncProgress({
+      isRunning: true,
+      currentTab: syncableTabs[0]?.tab_name,
+      completedTabs: 0,
+      totalTabs: syncableTabs.length,
+      phase: 'syncing',
+    })
 
-    const results: TabPreviewResult[] = []
+    let totalCreated = 0
+    let totalUpdated = 0
+    let totalProcessed = 0
+    const errors: string[] = []
 
-    for (const tab of activeTabs) {
+    // Process tabs - actually write to database
+    for (let i = 0; i < syncableTabs.length; i++) {
+      const tab = syncableTabs[i]
       if (!tab.id) continue
+
+      setSyncProgress(prev => ({
+        ...prev,
+        currentTab: tab.tab_name,
+        completedTabs: i,
+      }))
 
       try {
         const response = await fetch(`/api/sync/tab/${tab.id}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ dry_run: true }),
+          body: JSON.stringify({}), // No dry_run = actual sync
         })
 
         if (response.ok) {
           const json = await response.json()
           const data = json.data
-          results.push({
-            tabId: tab.id,
-            tabName: tab.tab_name,
-            changes: data.changes || [],
-            stats: data.stats || { rows_processed: 0, rows_created: 0, rows_updated: 0, rows_skipped: 0, errors: [] },
-          })
+          totalProcessed += data.stats?.rows_processed || 0
+          totalCreated += data.stats?.rows_created || 0
+          totalUpdated += data.stats?.rows_updated || 0
         } else {
           const errorData = await response.json().catch(() => ({}))
-          results.push({
-            tabId: tab.id,
-            tabName: tab.tab_name,
-            changes: [],
-            stats: { rows_processed: 0, rows_created: 0, rows_updated: 0, rows_skipped: 0, errors: [] },
-            error: errorData.error?.message || 'Dry run failed',
-          })
+          errors.push(`${tab.tab_name}: ${errorData.error?.message || 'Sync failed'}`)
         }
       } catch {
-        results.push({
-          tabId: tab.id,
-          tabName: tab.tab_name,
-          changes: [],
-          stats: { rows_processed: 0, rows_created: 0, rows_updated: 0, rows_skipped: 0, errors: [] },
-          error: 'Network error',
-        })
+        errors.push(`${tab.tab_name}: Network error`)
       }
     }
 
-    setPreviewResults(results)
-    setIsLoadingSyncPreview(false)
-  }, [activeSource, isSyncing, isLoadingSyncPreview])
+    // Done - hide overlay and show results
+    setSyncProgress({ isRunning: false, completedTabs: 0, totalTabs: 0, phase: 'idle' })
+
+    // Update sync status
+    setSyncStatus({
+      lastSyncAt: new Date().toISOString(),
+      lastSyncStatus: errors.length === 0 ? 'completed' : 'failed',
+      rowsProcessed: totalProcessed,
+      rowsCreated: totalCreated,
+      rowsUpdated: totalUpdated,
+    })
+
+    // Show results toast
+    if (errors.length > 0) {
+      toast.error('Sync completed with errors', {
+        description: errors[0],
+      })
+    } else if (totalCreated === 0 && totalUpdated === 0) {
+      toast.success('Sync complete', {
+        description: 'All data is already up to date',
+      })
+    } else {
+      toast.success('Sync complete!', {
+        description: `${totalCreated} created, ${totalUpdated} updated`,
+      })
+    }
+  }, [activeSource, isSyncing, syncProgress.isRunning])
 
   // Auto-trigger sync preview after mapping save completes and sources refresh
   useEffect(() => {
@@ -910,7 +944,7 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.2, ease: easeOut }}
-      className="space-y-0"
+      className="flex flex-col h-full"
     >
       {/* Header */}
       <div className="flex items-center gap-4 p-4 border-b">
@@ -967,8 +1001,24 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
         />
       )}
 
-      {/* Content Area */}
-      <AnimatePresence mode="wait">
+      {/* Content Area - relative container for overlay */}
+      <div className="relative flex-1 min-h-0">
+        {/* Sync loading overlay - outside scrollable area */}
+        <AnimatePresence>
+          {syncProgress.isRunning && (
+            <SyncLoadingOverlay
+              isVisible={syncProgress.isRunning}
+              phase={syncProgress.phase}
+              currentTab={syncProgress.currentTab}
+              completedTabs={syncProgress.completedTabs}
+              totalTabs={syncProgress.totalTabs}
+            />
+          )}
+        </AnimatePresence>
+
+        {/* Scrollable content */}
+        <div className="h-full overflow-auto">
+        <AnimatePresence mode="wait">
         {(isLoadingPreview || isLoading) && sheetTabs.length === 0 ? (
           /* Shimmer grid loader - only show when we have NO tabs yet */
           <motion.div
@@ -1068,6 +1118,7 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
               onViewModeChange={setDashboardViewMode}
               onSync={handleSync}
               isSyncing={isSyncing}
+              syncProgress={syncProgress}
               syncStatus={syncStatus}
               isLoadingPreview={isLoadingPreview}
             />
@@ -1156,12 +1207,15 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
             </div>
           </motion.div>
         ) : null}
-      </AnimatePresence>
+        </AnimatePresence>
+        </div>
+      </div>
 
       <SyncPreviewDialog
         open={showSyncPreview}
         onOpenChange={setShowSyncPreview}
         previewResults={previewResults}
+        totalTabs={activeSource?.tabs?.filter(t => (t.status === 'active' || !t.status) && t.columnCount > 0).length || 0}
         isLoadingPreview={isLoadingSyncPreview}
         isSyncing={isSyncing}
         onConfirm={handleConfirmSync}

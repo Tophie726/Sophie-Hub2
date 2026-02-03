@@ -91,7 +91,7 @@ function DataEnrichmentContent() {
         </PageHeader>
       )}
 
-      <div className={browserView === 'hub' ? 'p-4 md:p-8' : ''}>
+      <div className={browserView === 'hub' ? 'p-4 md:p-8' : browserView === 'sheets-browser' ? 'h-[calc(100vh-64px)]' : ''}>
         <AnimatePresence mode="popLayout" initial={false}>
           {/* Hub View - Category selection */}
           {browserView === 'hub' && (

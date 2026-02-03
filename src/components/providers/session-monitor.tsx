@@ -58,7 +58,8 @@ export function SessionMonitor() {
     originalFetch.current = window.fetch
 
     window.fetch = async (...args) => {
-      const response = await originalFetch.current!(...args)
+      // Must use .apply to preserve window context, otherwise "Illegal invocation"
+      const response = await originalFetch.current!.apply(window, args)
 
       // Check if it's a 401 from our API
       if (response.status === 401) {

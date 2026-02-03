@@ -65,6 +65,14 @@ interface SyncStatus {
   rowsUpdated?: number
 }
 
+interface SyncProgress {
+  isRunning: boolean
+  currentTab?: string
+  completedTabs: number
+  totalTabs: number
+  phase: 'dry-run' | 'syncing' | 'idle'
+}
+
 interface TabOverviewDashboardProps {
   sourceName: string
   sourceId?: string
@@ -77,6 +85,7 @@ interface TabOverviewDashboardProps {
   // Sync functionality
   onSync?: () => Promise<void>
   isSyncing?: boolean
+  syncProgress?: SyncProgress
   syncStatus?: SyncStatus
   // Preview loading state — suppresses progress flash while tabs are still being discovered
   isLoadingPreview?: boolean
@@ -130,6 +139,7 @@ export function TabOverviewDashboard({
   onViewModeChange,
   onSync,
   isSyncing = false,
+  syncProgress,
   syncStatus,
   isLoadingPreview = false,
 }: TabOverviewDashboardProps) {
@@ -235,58 +245,81 @@ export function TabOverviewDashboard({
             </Popover>
           )}
 
-          {/* Sync button */}
+          {/* Sync button with inline progress */}
           {onSync && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={onSync}
-                    disabled={isSyncing}
-                    className="gap-1.5"
-                  >
-                    {isSyncing ? (
-                      <>
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        <span className="hidden sm:inline">Syncing...</span>
-                      </>
-                    ) : (
-                      <>
-                        <RefreshCw className="h-3.5 w-3.5" />
-                        <span className="hidden sm:inline">Sync</span>
-                      </>
-                    )}
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="max-w-[200px]">
-                  {syncStatus?.lastSyncAt ? (
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-1.5">
-                        {syncStatus.lastSyncStatus === 'completed' ? (
-                          <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
-                        ) : syncStatus.lastSyncStatus === 'failed' ? (
-                          <AlertCircle className="h-3.5 w-3.5 text-red-500" />
-                        ) : (
-                          <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-                        )}
-                        <span className="text-xs">
-                          Last sync: {formatRelativeTime(syncStatus.lastSyncAt)}
-                        </span>
-                      </div>
-                      {syncStatus.lastSyncStatus === 'completed' && (
-                        <p className="text-xs text-muted-foreground">
-                          {syncStatus.rowsProcessed} rows · {syncStatus.rowsCreated} created · {syncStatus.rowsUpdated} updated
-                        </p>
+            <div className="flex items-center gap-2">
+              {/* Background sync progress indicator */}
+              {syncProgress?.isRunning && (
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted/50 px-2 py-1 rounded-md">
+                  <Loader2 className="h-3 w-3 animate-spin text-primary" />
+                  <span className="hidden sm:inline">
+                    {syncProgress.phase === 'dry-run' ? 'Analyzing' : 'Syncing'}
+                    {syncProgress.totalTabs > 1 && ` ${syncProgress.completedTabs + 1}/${syncProgress.totalTabs}`}
+                  </span>
+                </div>
+              )}
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={onSync}
+                      disabled={isSyncing || syncProgress?.isRunning}
+                      className="gap-1.5"
+                    >
+                      {isSyncing ? (
+                        <>
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          <span className="hidden sm:inline">Syncing...</span>
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw className="h-3.5 w-3.5" />
+                          <span className="hidden sm:inline">Sync</span>
+                        </>
                       )}
-                    </div>
-                  ) : (
-                    <span className="text-xs">Pull data from source to entities</span>
-                  )}
-                </TooltipContent>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-[200px]">
+                    {syncProgress?.isRunning ? (
+                      <div className="space-y-1">
+                        <span className="text-xs">
+                          {syncProgress.phase === 'dry-run' ? 'Analyzing changes...' : 'Writing to database...'}
+                        </span>
+                        {syncProgress.currentTab && (
+                          <p className="text-xs text-muted-foreground truncate max-w-[180px]">
+                            {syncProgress.currentTab}
+                          </p>
+                        )}
+                      </div>
+                    ) : syncStatus?.lastSyncAt ? (
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-1.5">
+                          {syncStatus.lastSyncStatus === 'completed' ? (
+                            <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                          ) : syncStatus.lastSyncStatus === 'failed' ? (
+                            <AlertCircle className="h-3.5 w-3.5 text-red-500" />
+                          ) : (
+                            <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+                          )}
+                          <span className="text-xs">
+                            Last sync: {formatRelativeTime(syncStatus.lastSyncAt)}
+                          </span>
+                        </div>
+                        {syncStatus.lastSyncStatus === 'completed' && (
+                          <p className="text-xs text-muted-foreground">
+                            {syncStatus.rowsProcessed} rows · {syncStatus.rowsCreated} created · {syncStatus.rowsUpdated} updated
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-xs">Pull data from source to entities</span>
+                    )}
+                  </TooltipContent>
               </Tooltip>
             </TooltipProvider>
+            </div>
           )}
 
           {/* View toggle */}

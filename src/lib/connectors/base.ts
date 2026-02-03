@@ -92,12 +92,14 @@ export interface IConnector<TConfig extends ConnectorConfig = ConnectorConfig> {
    * @param token - OAuth token or API key
    * @param config - Connector configuration with source identifier
    * @param tabName - Name/identifier of the tab to fetch
+   * @param headerRow - 0-indexed row number for headers (default: 0)
    * @returns Headers and data rows
    */
   getData(
     token: string,
     config: TConfig,
-    tabName: string
+    tabName: string,
+    headerRow?: number
   ): Promise<SourceData>
 
   /**
@@ -138,7 +140,8 @@ export abstract class BaseConnector<TConfig extends ConnectorConfig>
   abstract getData(
     token: string,
     config: TConfig,
-    tabName: string
+    tabName: string,
+    headerRow?: number
   ): Promise<SourceData>
 
   /**

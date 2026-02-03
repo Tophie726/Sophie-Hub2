@@ -126,11 +126,13 @@ export async function getSheetPreview(
 
 /**
  * Get all data from a specific tab
+ * @param headerRow - 0-indexed row number for headers (default: 0)
  */
 export async function getSheetData(
   accessToken: string,
   spreadsheetId: string,
-  tabName: string
+  tabName: string,
+  headerRow: number = 0
 ): Promise<{ headers: string[]; rows: string[][] }> {
   const auth = new google.auth.OAuth2()
   auth.setCredentials({ access_token: accessToken })
@@ -148,9 +150,12 @@ export async function getSheetData(
     return { headers: [], rows: [] }
   }
 
+  // Use specified header row, with data rows starting after it
+  const effectiveHeaderRow = Math.min(headerRow, values.length - 1)
+
   return {
-    headers: values[0].map((v) => String(v || '')),
-    rows: values.slice(1).map((row) => row.map((v) => String(v || ''))),
+    headers: values[effectiveHeaderRow].map((v) => String(v || '')),
+    rows: values.slice(effectiveHeaderRow + 1).map((row) => row.map((v) => String(v || ''))),
   }
 }
 

@@ -385,55 +385,9 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
 
     async function restoreDraft() {
       const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
-      let dbDraft: DraftState | null = null
-      let localDraft: DraftState | null = null
 
-      // Fetch DB draft
-      if (dataSourceId) {
-        try {
-          const response = await fetch(
-            `/api/tab-mappings/draft?data_source_id=${dataSourceId}&tab_name=${encodeURIComponent(tabName)}`,
-            { cache: 'no-store' }
-          )
-          const data = await response.json()
-          if (data.draft?.columns?.length > 0 && data.draft.timestamp > sevenDaysAgo) {
-            dbDraft = data.draft
-          }
-        } catch (e) {
-          console.warn('Failed to load draft from DB:', e)
-        }
-      }
-
-      // Check localStorage
-      try {
-        const savedDraft = localStorage.getItem(draftKey)
-        if (savedDraft) {
-          const draft: DraftState = JSON.parse(savedDraft)
-          if (draft.timestamp > sevenDaysAgo && draft.columns.length > 0) {
-            localDraft = draft
-          }
-        }
-      } catch (e) {
-        console.warn('Failed to restore draft from localStorage:', e)
-      }
-
-      // Use whichever draft is newer (handles stale DB when debounce was cancelled on unmount)
-      const bestDraft = dbDraft && localDraft
-        ? (localDraft.timestamp > dbDraft.timestamp ? localDraft : dbDraft)
-        : dbDraft || localDraft
-
-      if (bestDraft) {
-        setPhase(headerAlreadyConfirmed ? 'classify' : 'preview')
-        setHeaderRow(bestDraft.headerRow)
-        setInitialHeaderRow(bestDraft.headerRow) // Track for unsaved changes
-        setColumns(bestDraft.columns)
-        setDraftRestored(true)
-        return
-      }
-
-      // Step 3: Try loading persisted column_mappings (saved data, not drafts)
-      // IMPORTANT: Saved mappings only include classified columns (category != null).
-      // We need to merge them with the full sheet headers so unmapped columns are still visible.
+      // STEP 1: Check for SAVED column_mappings FIRST (these are the source of truth after completing mapping)
+      // If saved mappings exist, they take priority over drafts
       if (dataSourceId) {
         try {
           const savedResponse = await fetch(
@@ -488,6 +442,13 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
                 }
               })
 
+              // Clear any stale draft since we have saved mappings
+              localStorage.removeItem(draftKey)
+              fetch(
+                `/api/tab-mappings/draft?data_source_id=${dataSourceId}&tab_name=${encodeURIComponent(tabName)}`,
+                { method: 'DELETE' }
+              ).catch(() => {})
+
               setPhase('classify')
               setHeaderRow(savedHeaderRow)
               setInitialHeaderRow(savedHeaderRow)
@@ -502,6 +463,54 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
         }
       }
 
+      // STEP 2: No saved mappings - check for drafts (work in progress)
+      let dbDraft: DraftState | null = null
+      let localDraft: DraftState | null = null
+
+      // Fetch DB draft
+      if (dataSourceId) {
+        try {
+          const response = await fetch(
+            `/api/tab-mappings/draft?data_source_id=${dataSourceId}&tab_name=${encodeURIComponent(tabName)}`,
+            { cache: 'no-store' }
+          )
+          const data = await response.json()
+          if (data.draft?.columns?.length > 0 && data.draft.timestamp > sevenDaysAgo) {
+            dbDraft = data.draft
+          }
+        } catch (e) {
+          console.warn('Failed to load draft from DB:', e)
+        }
+      }
+
+      // Check localStorage
+      try {
+        const savedDraft = localStorage.getItem(draftKey)
+        if (savedDraft) {
+          const draft: DraftState = JSON.parse(savedDraft)
+          if (draft.timestamp > sevenDaysAgo && draft.columns.length > 0) {
+            localDraft = draft
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to restore draft from localStorage:', e)
+      }
+
+      // Use whichever draft is newer (handles stale DB when debounce was cancelled on unmount)
+      const bestDraft = dbDraft && localDraft
+        ? (localDraft.timestamp > dbDraft.timestamp ? localDraft : dbDraft)
+        : dbDraft || localDraft
+
+      if (bestDraft) {
+        setPhase(headerAlreadyConfirmed ? 'classify' : 'preview')
+        setHeaderRow(bestDraft.headerRow)
+        setInitialHeaderRow(bestDraft.headerRow) // Track for unsaved changes
+        setColumns(bestDraft.columns)
+        setDraftRestored(true)
+        return
+      }
+
+      // STEP 3: No saved mappings AND no drafts - start fresh
       setDraftRestored(true)
     }
 
@@ -511,6 +520,15 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
   // Clear draft when completing (both DB and localStorage)
   const handleCompleteWithClear = async () => {
     setIsSavingMapping(true)
+
+    // IMPORTANT: Clear pending draft ref FIRST so the unmount handler doesn't re-save it
+    pendingDraftRef.current = null
+
+    // Clear any pending save timeout
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current)
+      saveTimeoutRef.current = null
+    }
 
     // Clear localStorage
     localStorage.removeItem(draftKey)
@@ -1716,7 +1734,7 @@ function ClassifyPhase({
                 {embedded ? 'Set keys and categories for each column.' : <>Classify columns and mark which one is the <strong>key identifier</strong> for each entity type.</>}
               </CardDescription>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3">
               {/* AI Suggest All button */}
               <Button
                 variant="outline"
@@ -3307,12 +3325,18 @@ function MapPhase({
 
   useEffect(() => {
     if (saveSuccess && onSyncAfterSave) {
-      // Brief success flash, then auto-transition to sync
+      // Brief success flash, then trigger sync and navigate away
       const t1 = setTimeout(() => setSuccessPhase('syncing'), 1200)
-      const t2 = setTimeout(() => onSyncAfterSave(), 2000)
+      const t2 = setTimeout(() => {
+        onSyncAfterSave()
+        // Navigate to Overview after triggering sync so user isn't stuck on this card
+        if (onNavigateAfterSave) {
+          setTimeout(() => onNavigateAfterSave(), 300)
+        }
+      }, 1800)
       return () => { clearTimeout(t1); clearTimeout(t2) }
     }
-  }, [saveSuccess, onSyncAfterSave])
+  }, [saveSuccess, onSyncAfterSave, onNavigateAfterSave])
 
   // Saving/Success takeover
   if (isSaving || saveSuccess) {

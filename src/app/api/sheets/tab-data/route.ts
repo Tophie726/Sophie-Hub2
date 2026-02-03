@@ -28,6 +28,8 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams
     const spreadsheetId = searchParams.get('id')
     const tabName = searchParams.get('tab')
+    const headerRowParam = searchParams.get('headerRow')
+    const headerRow = headerRowParam ? parseInt(headerRowParam, 10) : 0
 
     if (!spreadsheetId || !tabName) {
       return NextResponse.json(
@@ -36,7 +38,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const data = await getSheetData(session.accessToken, spreadsheetId, tabName)
+    const data = await getSheetData(session.accessToken, spreadsheetId, tabName, headerRow)
 
     return NextResponse.json(data)
   } catch (error) {
