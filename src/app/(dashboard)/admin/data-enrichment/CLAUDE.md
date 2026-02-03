@@ -400,6 +400,15 @@ Hub (category cards)
 
 **Note:** Overview tab is always first and selected by default when switching sources. SmartMapper's "Back" returns to Overview.
 
+### Navigation State Persistence
+
+The Data Enrichment page remembers where you were:
+
+1. **URL params** (`?view=sheets-browser&source=xxx&tab=yyy`) for bookmarking/sharing
+2. **localStorage** (`data-enrichment-state`) for cross-navigation memory
+
+When returning to Data Enrichment after visiting other pages (Partners, Staff, etc.), the page restores your last position (view, source, tab) from localStorage. URL params take priority if present.
+
 ---
 
 ## TAB STATUS SYSTEM

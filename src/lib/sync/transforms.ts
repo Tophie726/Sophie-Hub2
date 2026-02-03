@@ -114,6 +114,30 @@ const transforms: Record<TransformType, TransformFn> = {
       return null
     }
   },
+
+  value_mapping: (value, config) => {
+    if (!value) return config?.default ?? null
+    const trimmed = value.trim()
+    if (!trimmed) return config?.default ?? null
+
+    const mappings = (config?.mappings as Record<string, string>) || {}
+
+    // Try exact match first
+    if (trimmed in mappings) {
+      return mappings[trimmed]
+    }
+
+    // Try case-insensitive match
+    const lowerValue = trimmed.toLowerCase()
+    for (const [key, mappedValue] of Object.entries(mappings)) {
+      if (key.toLowerCase() === lowerValue) {
+        return mappedValue
+      }
+    }
+
+    // Return default if no match
+    return config?.default ?? null
+  },
 }
 
 // =============================================================================

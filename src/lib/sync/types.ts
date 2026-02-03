@@ -170,6 +170,7 @@ export type TransformType =
   | 'boolean'
   | 'number'
   | 'json'
+  | 'value_mapping'
 
 // =============================================================================
 // Sync Run Status

@@ -22,6 +22,7 @@ import {
   Users,
   BookOpen,
   Boxes,
+  ExternalLink,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -41,6 +42,7 @@ interface ProductDef {
   services: string[]
   composedOf?: string[]
   isModule?: boolean
+  landingPageUrl?: string
 }
 
 const allProducts: ProductDef[] = [
@@ -51,6 +53,7 @@ const allProducts: ProductDef[] = [
     icon: Target,
     color: 'blue',
     services: ['PPC Management'],
+    landingPageUrl: 'https://sophiesociety.com/services/ppc-basic',
   },
   {
     id: 'cc',
@@ -60,6 +63,7 @@ const allProducts: ProductDef[] = [
     icon: Palette,
     color: 'pink',
     services: ['Content & Creative'],
+    landingPageUrl: 'https://sophiesociety.com/services/content-creative',
   },
   {
     id: 'sophie_ppc',
@@ -70,6 +74,7 @@ const allProducts: ProductDef[] = [
     color: 'teal',
     services: ['PPC Management', 'Content & Creative'],
     composedOf: ['ppc_basic', 'cc'],
+    landingPageUrl: 'https://sophiesociety.com/services/sophie-ppc-partnership',
   },
   {
     id: 'fam',
@@ -80,6 +85,7 @@ const allProducts: ProductDef[] = [
     color: 'amber',
     services: ['PPC Management', 'Content & Creative', 'Catalogue Mgmt', 'Inventory Mgmt', 'Account Strategy'],
     composedOf: ['sophie_ppc', 'catalogue', 'inventory'],
+    landingPageUrl: 'https://sophiesociety.com/services/full-account-management',
   },
   {
     id: 'tiktok',
@@ -88,6 +94,7 @@ const allProducts: ProductDef[] = [
     icon: Clapperboard,
     color: 'violet',
     services: ['TikTok Ads'],
+    landingPageUrl: 'https://sophiesociety.com/services/tiktok',
   },
   {
     id: 'pli',
@@ -97,6 +104,7 @@ const allProducts: ProductDef[] = [
     icon: Rocket,
     color: 'orange',
     services: ['Launch Strategy', 'Market Research', 'Launch PPC'],
+    landingPageUrl: 'https://sophiesociety.com/services/product-launch-incubator',
   },
   {
     id: 'catalogue',
@@ -106,6 +114,7 @@ const allProducts: ProductDef[] = [
     color: 'emerald',
     services: ['Catalogue Mgmt'],
     isModule: true,
+    landingPageUrl: 'https://sophiesociety.com/services/catalogue-management',
   },
   {
     id: 'inventory',
@@ -115,6 +124,7 @@ const allProducts: ProductDef[] = [
     color: 'sky',
     services: ['Inventory Mgmt'],
     isModule: true,
+    landingPageUrl: 'https://sophiesociety.com/services/inventory-management',
   },
 ]
 
@@ -211,6 +221,20 @@ function CardsView() {
               >
                 {/* Gradient accent top */}
                 <div className={cn('h-1 bg-gradient-to-r to-transparent', c.accent)} />
+
+                {/* Landing page link */}
+                {product.landingPageUrl && (
+                  <a
+                    href={product.landingPageUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="absolute top-3 right-3 p-1.5 rounded-md text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted/50 transition-colors z-10"
+                    title="View landing page"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                  </a>
+                )}
 
                 <div className="p-5">
                   {/* Icon + Title */}
@@ -357,6 +381,17 @@ function RowsView() {
                 <Users className="h-3 w-3 inline mr-1" />
                 --
               </div>
+              {product.landingPageUrl && (
+                <a
+                  href={product.landingPageUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-1.5 rounded-md text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted/50 transition-colors"
+                  title="View landing page"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </a>
+              )}
             </div>
           )
         })}

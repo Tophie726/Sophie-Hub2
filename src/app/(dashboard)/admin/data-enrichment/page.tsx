@@ -22,19 +22,53 @@ export default function DataEnrichmentPage() {
   )
 }
 
+const STORAGE_KEY = 'data-enrichment-state'
+
 function DataEnrichmentContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
 
-  // Read initial state from URL params
-  const initialView = (searchParams.get('view') as DataBrowserView) || 'hub'
-  const initialSourceId = searchParams.get('source') || null
-  const initialTabId = searchParams.get('tab') || null
+  // Read initial state from URL params, then localStorage fallback
+  const getInitialState = () => {
+    // URL params take priority
+    const urlView = searchParams.get('view') as DataBrowserView | null
+    const urlSourceId = searchParams.get('source')
+    const urlTabId = searchParams.get('tab')
 
-  // Data Browser view state (initialized from URL)
-  const [browserView, setBrowserView] = useState<DataBrowserView>(initialView)
-  const [selectedSourceId, setSelectedSourceId] = useState<string | null>(initialSourceId)
-  const [selectedTabId, setSelectedTabId] = useState<string | null>(initialTabId)
+    if (urlView || urlSourceId || urlTabId) {
+      return {
+        view: urlView || 'hub',
+        sourceId: urlSourceId,
+        tabId: urlTabId,
+      }
+    }
+
+    // Fallback to localStorage
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem(STORAGE_KEY)
+        if (stored) {
+          const parsed = JSON.parse(stored)
+          return {
+            view: (parsed.view as DataBrowserView) || 'hub',
+            sourceId: parsed.sourceId || null,
+            tabId: parsed.tabId || null,
+          }
+        }
+      } catch {
+        // Ignore parse errors
+      }
+    }
+
+    return { view: 'hub' as DataBrowserView, sourceId: null, tabId: null }
+  }
+
+  const initial = getInitialState()
+
+  // Data Browser view state (initialized from URL or localStorage)
+  const [browserView, setBrowserView] = useState<DataBrowserView>(initial.view)
+  const [selectedSourceId, setSelectedSourceId] = useState<string | null>(initial.sourceId)
+  const [selectedTabId, setSelectedTabId] = useState<string | null>(initial.tabId)
 
   // Sync state to URL when it changes
   const updateURL = useCallback((view: DataBrowserView, sourceId: string | null, tabId: string | null) => {
@@ -53,9 +87,20 @@ function DataEnrichmentContent() {
     router.replace(newPath, { scroll: false })
   }, [router])
 
-  // Update URL when view, source, or tab changes
+  // Update URL and localStorage when view, source, or tab changes
   useEffect(() => {
     updateURL(browserView, selectedSourceId, selectedTabId)
+
+    // Also persist to localStorage for cross-navigation memory
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        view: browserView,
+        sourceId: selectedSourceId,
+        tabId: selectedTabId,
+      }))
+    } catch {
+      // Ignore storage errors
+    }
   }, [browserView, selectedSourceId, selectedTabId, updateURL])
 
   // Handle category selection from the hub

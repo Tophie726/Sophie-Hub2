@@ -992,14 +992,27 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
       />
 
       {/* Sheet Tab Bar */}
-      {sheetTabs.length > 0 && (
+      {/* Show shimmer tabs while loading preview (to avoid tab reordering jump) */}
+      {activeSourceId && isLoadingPreview && !activePreview ? (
+        <div className="bg-muted/20 px-4 py-2">
+          <div className="flex items-center gap-2">
+            {/* Shimmer Overview tab */}
+            <div className="h-8 w-20 bg-muted/50 rounded-lg animate-pulse" />
+            <div className="w-px h-5 bg-border/30" />
+            {/* Shimmer tab placeholders */}
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="h-8 w-28 bg-muted/30 rounded-lg animate-pulse" style={{ animationDelay: `${i * 100}ms` }} />
+            ))}
+          </div>
+        </div>
+      ) : sheetTabs.length > 0 ? (
         <SheetTabBar
           tabs={sheetTabs.filter(t => !t.status || t.status === 'active' || t.status === 'reference')}
           activeTabId={activeTabId}
           onSelectTab={handleSelectTab}
           onStatusChange={handleTabStatusChange}
         />
-      )}
+      ) : null}
 
       {/* Content Area - relative container for overlay */}
       <div className="relative flex-1 min-h-0">

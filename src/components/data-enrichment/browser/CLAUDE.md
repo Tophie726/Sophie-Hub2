@@ -163,7 +163,7 @@ The sync engine passes `tab_mappings.header_row` to the Google Sheets connector.
 
 Tabs use **Google Sheets native order** (the order they appear in the actual spreadsheet). The merge logic maps over `previewTabs` (which preserves sheet order) and enriches with DB data where available.
 
-Before preview loads, DB tabs show in API order (alphabetical from `.order('tab_name')`). When preview arrives, tabs reorder to match the real sheet — this is expected and brief since preview loads in the background.
+**Shimmer loading state**: While waiting for Google Sheets preview to load, the SheetTabBar shows animated shimmer placeholder tabs. This prevents the jarring "reorder jump" that would occur if we showed DB tabs (alphabetical order) then switched to sheet order when preview arrives. Once preview loads, real tabs appear in correct sheet order immediately.
 
 ### Performance Optimizations
 

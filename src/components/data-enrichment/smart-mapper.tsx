@@ -454,7 +454,7 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
               setInitialHeaderRow(savedHeaderRow)
               setColumns(merged)
               setDraftRestored(true)
-              toast.info('Restored saved mappings')
+              // No toast needed - the restored data being visible is self-evident
               return
             }
           }
