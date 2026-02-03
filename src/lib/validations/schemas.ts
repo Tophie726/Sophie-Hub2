@@ -125,6 +125,8 @@ export const ColumnMappingSchema = z.object({
   authority: z.enum(['source_of_truth', 'reference', 'derived']).default('reference'),
   is_key: z.boolean().default(false),
   tag_ids: z.array(z.string().uuid()).optional(),
+  transform_type: z.enum(['none', 'trim', 'lowercase', 'uppercase', 'date', 'currency', 'boolean', 'number', 'json', 'value_mapping']).default('none'),
+  transform_config: z.record(z.string(), z.unknown()).nullable().optional(),
 })
 
 export const SaveMappingSchema = z.object({

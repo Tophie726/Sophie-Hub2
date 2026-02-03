@@ -293,12 +293,24 @@ export class SyncEngine {
       ? sourceData.rows.slice(0, options.rowLimit)
       : sourceData.rows
 
+    console.log(`[SyncEngine] Processing ${rowsToProcess.length} rows...`)
+
     for (let i = 0; i < rowsToProcess.length; i++) {
       const row = rowsToProcess[i]
       const rowNumber = i + 2 // 1-indexed + header row
 
+      // Progress logging every 100 rows
+      if (i > 0 && i % 100 === 0) {
+        console.log(`[SyncEngine] Processed ${i}/${rowsToProcess.length} rows...`)
+      }
+
       try {
         const keyValue = row[keyColumnIndex]?.trim()
+
+        // Debug: log which row we're starting
+        if (i < 5) {
+          console.log(`[SyncEngine] Starting row ${i}: key="${keyValue}"`)
+        }
 
         // Capture ALL raw column values for zero-data-loss storage
         const rawCapture = this.buildSourceData(
@@ -336,16 +348,28 @@ export class SyncEngine {
         }
 
         // Check for existing record
+        if (i < 5) console.log(`[SyncEngine] Row ${i}: checking existing...`)
         const existing = await this.findExisting(
           config.tabMapping.primary_entity,
           keyMapping.target_field,
           keyValue
         )
+        if (i < 5) console.log(`[SyncEngine] Row ${i}: existing check done`)
+
+        // Debug: Log existing check result for first row
+        if (i === 0) {
+          console.log(`[SyncEngine] First row - existing:`, existing ? 'FOUND' : 'NOT FOUND')
+        }
 
         // Apply authority rules
         const authorizedFields = options.forceOverwrite
           ? fields
           : this.filterByAuthority(fields, config.columnMappings, !!existing)
+
+        // Debug: Log authorized fields for first row
+        if (i === 0) {
+          console.log(`[SyncEngine] First row - authorizedFields (${Object.keys(authorizedFields).length}):`, JSON.stringify(authorizedFields, null, 2))
+        }
 
         // Determine change type
         if (Object.keys(authorizedFields).length === 0) {
@@ -480,13 +504,23 @@ export class SyncEngine {
     keyField: string,
     keyValue: string
   ): Promise<Record<string, unknown> | null> {
-    const { data } = await this.supabase
-      .from(entity)
-      .select('*')
-      .ilike(keyField, keyValue)
-      .single()
+    try {
+      const { data, error } = await this.supabase
+        .from(entity)
+        .select('*')
+        .ilike(keyField, keyValue)
+        .maybeSingle() // Use maybeSingle instead of single to avoid error on no match
 
-    return data
+      if (error) {
+        console.error(`[SyncEngine] findExisting error for ${keyValue}:`, error.message)
+        return null
+      }
+
+      return data
+    } catch (err) {
+      console.error(`[SyncEngine] findExisting exception for ${keyValue}:`, err)
+      return null
+    }
   }
 
   // ===========================================================================

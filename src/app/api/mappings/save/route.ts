@@ -175,20 +175,83 @@ export async function POST(request: NextRequest) {
       cm.category !== 'computed'
     )
 
+    // Auto-detect transforms for fields that need special handling
+    // This ensures proper value conversion even if the UI doesn't set transforms explicitly
+    const getAutoTransform = (targetField: string | null): { type: string; config: Record<string, unknown> | null } => {
+      if (!targetField) return { type: 'none', config: null }
+
+      // Status field needs value_mapping to normalize values
+      // Valid partners.status values: 'onboarding', 'active', 'paused', 'at_risk', 'offboarding', 'churned'
+      if (targetField === 'status') {
+        return {
+          type: 'value_mapping',
+          config: {
+            mappings: {
+              'Active': 'active',
+              'Paused': 'paused',
+              'Discontinued': 'churned',
+              'Churned': 'churned',
+              'Onboarding': 'onboarding',
+              'At Risk': 'at_risk',
+              'Offboarding': 'offboarding',
+              'active': 'active',
+              'paused': 'paused',
+              'churned': 'churned',
+              'onboarding': 'onboarding',
+              'at_risk': 'at_risk',
+              'offboarding': 'offboarding',
+            },
+            default: 'active'
+          }
+        }
+      }
+
+      // Tier field needs value_mapping to normalize
+      if (targetField === 'tier') {
+        return {
+          type: 'value_mapping',
+          config: {
+            mappings: {
+              'Tier 1': 'tier_1',
+              'Tier 2': 'tier_2',
+              'Tier 3': 'tier_3',
+              'tier_1': 'tier_1',
+              'tier_2': 'tier_2',
+              'tier_3': 'tier_3',
+              '1': 'tier_1',
+              '2': 'tier_2',
+              '3': 'tier_3',
+            },
+            default: 'tier_2'
+          }
+        }
+      }
+
+      return { type: 'none', config: null }
+    }
+
     if (regularMappings.length > 0) {
       // Insert column mappings and get back the IDs
       const { data: insertedMappings, error } = await supabase
         .from('column_mappings')
         .insert(
-          regularMappings.map(cm => ({
-            tab_mapping_id: tabMappingId,
-            source_column: cm.source_column,
-            source_column_index: cm.source_column_index,
-            category: cm.category,
-            target_field: cm.target_field,
-            authority: cm.authority,
-            is_key: cm.is_key,
-          }))
+          regularMappings.map(cm => {
+            // Use explicit transform if provided, otherwise auto-detect
+            const hasExplicitTransform = cm.transform_type && cm.transform_type !== 'none'
+            const autoTransform = getAutoTransform(cm.target_field)
+
+            return {
+              tab_mapping_id: tabMappingId,
+              source_column: cm.source_column,
+              source_column_index: cm.source_column_index,
+              category: cm.category,
+              target_field: cm.target_field,
+              authority: cm.authority,
+              is_key: cm.is_key,
+              transform_type: hasExplicitTransform ? cm.transform_type : autoTransform.type,
+              transform_config: hasExplicitTransform ? cm.transform_config : autoTransform.config,
+            }
+          })
         )
         .select('id, source_column_index')
 
