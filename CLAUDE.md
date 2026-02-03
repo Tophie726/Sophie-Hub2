@@ -297,7 +297,29 @@ Many Google Sheets have headers on rows other than row 0 (e.g., Master Client Da
   - API routes: GET /api/partners, /api/partners/[id], /api/staff, /api/staff/[id]
   - Partner detail: field groups, staff assignments, ASINs, weekly status history
   - Staff detail: field groups, assigned partners
-- Next: end-to-end sync verification with real data, lineage visualization
+
+### Phase 4 Progress (Feb 2026)
+
+**Completed:**
+- ✅ First successful sync: 1823 partners from Master Client Sheet
+- ✅ Value transform system working (status: Active→active, Churned→churned)
+- ✅ Auto-transform detection for status/tier fields when saving mappings
+- ✅ Navigation caching for instant page returns (module-level cache with 5min TTL)
+- ✅ Progress logging during sync (every 100 rows)
+- ✅ Error handling improvements (findExisting uses maybeSingle)
+
+**Known Issues to Fix:**
+- ⚠️ Sync is slow (~8 rows/sec) due to sequential `findExisting` queries
+- ⚠️ No sync locking - multiple syncs can run simultaneously causing duplicates
+- ⚠️ No real-time progress feedback in UI
+- ⚠️ Missing unique constraint on `brand_name` - allows duplicate partners
+
+**Next Steps (Sync Optimization):**
+1. **Batch lookup** - Fetch all existing records in one query, check in memory (10x+ faster)
+2. **Sync locking** - Prevent concurrent syncs on same tab_mapping
+3. **Upsert logic** - Use ON CONFLICT instead of separate find/insert
+4. **Progress WebSocket** - Real-time sync progress in UI
+5. **Unique constraints** - Add to brand_name with proper conflict handling
 
 ## Important Context
 
@@ -522,6 +544,37 @@ ORDER BY changed_at DESC;
 3. `source_data` JSONB — raw source capture: every column from every import, even unmapped
 
 **RLS**: Only admins can read version history. Triggers run as SECURITY DEFINER (bypass RLS for writes).
+
+### Value Transforms
+
+The sync engine supports value transformation during import via `column_mappings.transform_type` and `transform_config`:
+
+**Available Transforms:**
+- `none` - Pass through as-is
+- `trim` - Remove whitespace
+- `lowercase` / `uppercase` - Case conversion
+- `date` - Parse various date formats to ISO
+- `currency` - Extract numeric value from "$1,234.56"
+- `boolean` - Convert yes/no/true/false/1/0 to boolean
+- `number` - Parse numeric strings
+- `value_mapping` - Map specific values to database-valid values
+
+**Auto-Detection:**
+The save endpoint automatically applies transforms for known fields:
+- `status` field: Maps "Active"→"active", "Churned"→"churned", "Paused"→"paused", etc.
+- `tier` field: Maps "Tier 1"→"tier_1", "Tier 2"→"tier_2", etc.
+
+**Value Mapping Example:**
+```typescript
+transform_config: {
+  mappings: {
+    "Active": "active",
+    "Churned": "churned",
+    "Discontinued": "churned"
+  },
+  default: "active"  // Fallback if no match
+}
+```
 
 ---
 
