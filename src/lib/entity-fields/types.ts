@@ -22,6 +22,7 @@ export type FieldGroup =
   | 'Dates'
   | 'Staff Assignments'
   | 'Metrics'
+  | 'Subscription'
   | 'Status & Role'
   | 'Links'
   | 'Product Info'

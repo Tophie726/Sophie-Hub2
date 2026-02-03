@@ -24,9 +24,13 @@ import type {
 const PARTNER_FIELDS: FieldDefinition[] = [
   // Core Info
   { name: 'brand_name', label: 'Brand Name', description: 'The brand/company name (unique identifier)', type: 'text', group: 'Core Info', isKey: true, aliases: ['brand', 'company name', 'partner name', 'account name'] },
+  { name: 'partner_code', label: 'Partner Code', description: 'Internal partner code (e.g., SO-0123)', type: 'text', group: 'Core Info', aliases: ['code', 'partner id', 'account code'] },
   { name: 'status', label: 'Status', description: 'Active, Churned, Onboarding, etc.', type: 'text', group: 'Core Info', aliases: ['partner status', 'account status', 'subscription status'] },
-  { name: 'tier', label: 'Tier', description: 'Service tier level', type: 'text', group: 'Core Info', aliases: ['service tier', 'tier level', 'package'] },
-  { name: 'notes', label: 'Notes', description: 'General notes about the partner', type: 'text', group: 'Core Info' },
+  { name: 'tier', label: 'Tier', description: 'Service tier level', type: 'text', group: 'Core Info', aliases: ['service tier', 'tier level', 'package', 'tier (from allocation)'] },
+  { name: 'notes', label: 'Notes', description: 'General notes about the partner', type: 'text', group: 'Core Info', aliases: ['leadership notes', 'partner notes'] },
+  { name: 'seller_central_name', label: 'Seller Central Name', description: 'Amazon Seller Central account name', type: 'text', group: 'Core Info', aliases: ['seller central', 'sc name', 'amazon account'] },
+  { name: 'marketplace', label: 'Marketplace', description: 'Amazon marketplace (US, UK, etc.)', type: 'text', group: 'Core Info', aliases: ['amazon marketplace', 'market'] },
+  { name: 'product_category', label: 'Product Category', description: 'Main product category', type: 'text', group: 'Core Info', aliases: ['category', 'niche'] },
 
   // Contact
   { name: 'client_name', label: 'Client Name', description: 'Primary contact person name', type: 'text', group: 'Contact', aliases: ['contact name', 'client contact', 'primary contact'] },
@@ -45,38 +49,58 @@ const PARTNER_FIELDS: FieldDefinition[] = [
   { name: 'churned_date', label: 'Churned Date', description: 'Date partner churned (if applicable)', type: 'date', group: 'Dates', aliases: ['churn date', 'churned'] },
 
   // Metrics
-  { name: 'parent_asin_count', label: 'Parent ASIN Count', description: 'Number of parent ASINs', type: 'number', group: 'Metrics', aliases: ['parent asins', 'parent count'] },
-  { name: 'child_asin_count', label: 'Child ASIN Count', description: 'Number of child ASINs', type: 'number', group: 'Metrics', aliases: ['child asins', 'child count'] },
+  { name: 'parent_asin_count', label: 'Parent ASIN Count', description: 'Number of parent ASINs', type: 'number', group: 'Metrics', aliases: ['parent asins', 'parent count', 'no. of parent asins'] },
+  { name: 'child_asin_count', label: 'Child ASIN Count', description: 'Number of child ASINs', type: 'number', group: 'Metrics', aliases: ['child asins', 'child count', 'no. of child asins'] },
+  { name: 'months_subscribed', label: 'Months Subscribed', description: 'Total months as a subscriber', type: 'number', group: 'Metrics', aliases: ['subscription months', 'tenure'] },
 
-  // Staff Assignments (all reference staff via junction table)
+  // Subscription
+  { name: 'content_subscriber', label: 'Content Subscriber', description: 'Whether partner subscribes to content services', type: 'text', group: 'Subscription', aliases: ['content sub', 'content subscription'] },
+  { name: 'prepaid_client', label: 'Prepaid Client', description: 'Whether client is prepaid', type: 'text', group: 'Subscription', aliases: ['prepaid'] },
+  { name: 'onboarding_fee', label: 'Onboarding Fee', description: 'Whether onboarding fee was charged', type: 'text', group: 'Subscription', aliases: ['onboard fee'] },
+  { name: 'payment_status', label: 'Payment Status', description: 'Current payment status', type: 'text', group: 'Subscription', aliases: ['payment'] },
+  { name: 'happy_client', label: 'Happy Client', description: 'Client satisfaction flag', type: 'text', group: 'Subscription', aliases: ['satisfied', 'client satisfaction'] },
+
+  // Links
+  { name: 'client_folder_url', label: 'Client Folder', description: 'Google Drive client folder URL', type: 'text', group: 'Links', aliases: ['client folder', 'drive folder', 'folder link'] },
+  { name: 'internal_brand_sheet_url', label: 'Internal Brand Sheet', description: 'Link to internal brand sheet', type: 'text', group: 'Links', aliases: ['internal brand sheet', 'brand sheet'] },
+  { name: 'slack_channel_url', label: 'Slack Channel', description: 'Client Slack channel URL', type: 'text', group: 'Links', aliases: ['slack channel link', 'slack channel', 'slack'] },
+  { name: 'slack_alert_channel', label: 'Slack Alert Channel', description: 'Slack alert channel URL', type: 'text', group: 'Links', aliases: ['alert channel'] },
+  { name: 'looker_studio_url', label: 'Looker Studio', description: 'Looker Studio dashboard URL', type: 'text', group: 'Links', aliases: ['looker studio link', 'looker', 'dashboard'] },
+  { name: 'notion_url', label: 'Notion Link', description: 'Notion workspace URL', type: 'text', group: 'Links', aliases: ['notion link', 'notion'] },
+  { name: 'close_io_url', label: 'Close.io Link', description: 'Close CRM record URL', type: 'text', group: 'Links', aliases: ['close.io link', 'close io', 'close link'] },
+  { name: 'ad_console_id', label: 'Ad Console ID', description: 'Amazon Advertising console ID', type: 'text', group: 'Links', aliases: ['ad console', 'advertising console'] },
+
+  // Staff Names (raw text - stores name even without staff link)
+  // These enable graceful degradation: name shows with "unlinked" indicator until staff syncs
+  { name: 'pod_leader_name', label: 'POD Leader', description: 'POD Leader name (may not link to staff yet)', type: 'text', group: 'Staff Assignments', aliases: ['pod leader', 'pl', 'pod lead'] },
+  { name: 'brand_manager_name', label: 'Brand Manager', description: 'Brand Manager name (may not link to staff yet)', type: 'text', group: 'Staff Assignments', aliases: ['brand manager', 'bm'] },
+  { name: 'account_manager_name', label: 'Account Manager', description: 'Account Manager name (may not link to staff yet)', type: 'text', group: 'Staff Assignments', aliases: ['account manager', 'am'] },
+  { name: 'sales_rep_name', label: 'Sales Rep', description: 'Sales Rep name (may not link to staff yet)', type: 'text', group: 'Staff Assignments', aliases: ['sales rep', 'salesperson', 'sales person', 'sales representative'] },
+
+  // Staff References (junction table - created when staff syncs and names match)
   {
-    name: 'pod_leader_id', label: 'POD Leader', description: 'Assigned POD Leader',
+    name: 'pod_leader_id', label: 'POD Leader (Linked)', description: 'Linked POD Leader staff record',
     type: 'reference', group: 'Staff Assignments',
-    aliases: ['pod leader', 'pl', 'pod lead'],
     reference: { entity: 'staff', matchField: 'full_name', storage: 'junction', junctionTable: 'partner_assignments', junctionRole: 'pod_leader' },
   },
   {
-    name: 'account_manager_id', label: 'Account Manager', description: 'Assigned Account Manager',
+    name: 'account_manager_id', label: 'Account Manager (Linked)', description: 'Linked Account Manager staff record',
     type: 'reference', group: 'Staff Assignments',
-    aliases: ['account manager', 'am'],
     reference: { entity: 'staff', matchField: 'full_name', storage: 'junction', junctionTable: 'partner_assignments', junctionRole: 'account_manager' },
   },
   {
-    name: 'brand_manager_id', label: 'Brand Manager', description: 'Assigned Brand Manager',
+    name: 'brand_manager_id', label: 'Brand Manager (Linked)', description: 'Linked Brand Manager staff record',
     type: 'reference', group: 'Staff Assignments',
-    aliases: ['brand manager', 'bm'],
     reference: { entity: 'staff', matchField: 'full_name', storage: 'junction', junctionTable: 'partner_assignments', junctionRole: 'brand_manager' },
   },
   {
-    name: 'sales_rep_id', label: 'Sales Rep', description: 'Assigned Sales Representative',
+    name: 'sales_rep_id', label: 'Sales Rep (Linked)', description: 'Linked Sales Rep staff record',
     type: 'reference', group: 'Staff Assignments',
-    aliases: ['sales rep', 'salesperson', 'sales person', 'sales representative'],
     reference: { entity: 'staff', matchField: 'full_name', storage: 'junction', junctionTable: 'partner_assignments', junctionRole: 'sales_rep' },
   },
   {
-    name: 'ppc_specialist_id', label: 'PPC Specialist', description: 'Assigned PPC Specialist',
+    name: 'ppc_specialist_id', label: 'PPC Specialist (Linked)', description: 'Linked PPC Specialist staff record',
     type: 'reference', group: 'Staff Assignments',
-    aliases: ['ppc specialist', 'ppc', 'ppc manager'],
     reference: { entity: 'staff', matchField: 'full_name', storage: 'junction', junctionTable: 'partner_assignments', junctionRole: 'ppc_specialist' },
   },
 ]
@@ -189,6 +213,7 @@ export function getGroupedFieldDefs(entity: EntityType): GroupedFieldDefs[] {
     'Status & Role',
     'Financial',
     'Metrics',
+    'Subscription',
     'Dates',
     'Links',
     'Product Info',

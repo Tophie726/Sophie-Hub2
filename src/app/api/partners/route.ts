@@ -52,13 +52,11 @@ export async function GET(request: Request) {
 
     const { search, status, tier, sort, order, limit, offset } = validation.data
 
-    // Query 1: Partners with count
+    // Query 1: Partners with count - select ALL columns including source_data
+    // This enables dynamic column display without code changes
     let query = supabase
       .from('partners')
-      .select(
-        'id, partner_code, brand_name, client_name, client_email, status, tier, parent_asin_count, child_asin_count, onboarding_date, created_at',
-        { count: 'exact' }
-      )
+      .select('*', { count: 'exact' })
 
     // Search across brand_name, client_name, partner_code
     if (search) {

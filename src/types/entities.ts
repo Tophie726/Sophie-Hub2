@@ -188,6 +188,11 @@ export interface PartnerListItem {
   child_asin_count: number | null
   onboarding_date: string | null
   created_at: string
+  // Staff name fields (raw text from source - always available)
+  pod_leader_name: string | null
+  brand_manager_name: string | null
+  sales_rep_name: string | null
+  // Staff linked records (from junction table - available when staff synced)
   pod_leader?: { id: string; full_name: string } | null
 }
 

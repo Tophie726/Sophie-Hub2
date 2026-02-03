@@ -527,6 +527,37 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
     }
   }, [pendingSyncAfterSave, activeSource, handleSync])
 
+  // Polling fallback: detect sync completion even if fetch response is lost
+  // This handles cases where the fetch takes 8+ minutes and browser loses connection
+  useEffect(() => {
+    if (!syncProgress.isRunning) return
+
+    const pollInterval = setInterval(async () => {
+      try {
+        // Check if there are any running syncs in the database
+        const res = await fetch('/api/sync/status')
+        if (res.ok) {
+          const json = await res.json()
+          const runningCount = json.data?.running_syncs ?? 0
+
+          // If no syncs running but UI shows running, the sync completed
+          // and we missed the response - reset the UI
+          if (runningCount === 0 && syncProgress.isRunning) {
+            console.log('[SyncPolling] Detected sync completion via polling - resetting UI')
+            setSyncProgress({ isRunning: false, completedTabs: 0, totalTabs: 0, phase: 'idle' })
+            toast.success('Sync complete', {
+              description: 'Data has been synced to the database',
+            })
+          }
+        }
+      } catch {
+        // Ignore polling errors
+      }
+    }, 10000) // Poll every 10 seconds
+
+    return () => clearInterval(pollInterval)
+  }, [syncProgress.isRunning])
+
   // Confirm sync: apply changes for real
   const handleConfirmSync = useCallback(async () => {
     if (!activeSource?.id || isSyncing) return
