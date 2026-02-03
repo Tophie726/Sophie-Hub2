@@ -817,11 +817,7 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
   // Auth error state - session not ready or expired
   if (authError) {
     return (
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        className="space-y-6"
-      >
+      <div className="space-y-6">
         <div className="flex items-center gap-3 md:gap-4 px-4 md:px-0">
           <Button variant="ghost" size="icon" onClick={onBack}>
             <ArrowLeft className="h-5 w-5" />
@@ -846,17 +842,13 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
             </Button>
           </div>
         </div>
-      </motion.div>
+      </div>
     )
   }
 
   if (isLoading) {
     return (
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        className="space-y-0"
-      >
+      <div className="flex flex-col h-full">
         {/* Header - same as loaded state */}
         <div className="flex items-center gap-4 p-4 border-b">
           <Button variant="ghost" size="icon" onClick={onBack}>
@@ -885,18 +877,14 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
             />
           </div>
         </div>
-      </motion.div>
+      </div>
     )
   }
 
   // Empty state - no sources yet
   if (sources.length === 0 && !isLoadingPreview) {
     return (
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 0.2, ease: easeOut }}
+      <div
         className="space-y-6"
       >
         {/* Header */}
@@ -934,18 +922,12 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
           onOpenChange={setShowSearchModal}
           onSelectSheet={handleSelectSheet}
         />
-      </motion.div>
+      </div>
     )
   }
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.2, ease: easeOut }}
-      className="flex flex-col h-full"
-    >
+    <div className="flex flex-col h-full">
       {/* Header */}
       <div className="flex items-center gap-4 p-4 border-b">
         <Button variant="ghost" size="icon" onClick={onBack}>
@@ -1094,10 +1076,10 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
           /* Overview Dashboard */
           <motion.div
             key={`${activeSourceId}-overview`}
-            initial={{ opacity: 0, y: 10 }}
+            initial={false}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.2, ease: easeOut }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15, ease: easeOut }}
           >
             <TabOverviewDashboard
               sourceName={activeSource?.name || ''}
@@ -1139,10 +1121,10 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
         ) : activeSourceId && activeTabId && activeTab && (activeSource?.spreadsheet_id || activePreview) ? (
           <motion.div
             key={`${activeSourceId}-${activeTabId}`}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.2, ease: easeOut }}
+            initial={false}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15, ease: easeOut }}
             className="p-4"
           >
             <SmartMapper
@@ -1187,10 +1169,10 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
           /* Empty state - tabs exist but none selected */
           <motion.div
             key="select-tab"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
+            initial={false}
+            animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.3, ease: easeOut }}
+            transition={{ duration: 0.15, ease: easeOut }}
             className="flex flex-col items-center justify-center py-24 px-4"
           >
             <div className="max-w-sm text-center space-y-4">
@@ -1240,6 +1222,6 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
         onOpenChange={setShowSearchModal}
         onSelectSheet={handleSelectSheet}
       />
-    </motion.div>
+    </div>
   )
 }
