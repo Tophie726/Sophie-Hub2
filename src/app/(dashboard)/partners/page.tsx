@@ -528,8 +528,8 @@ export default function PartnersPage() {
     })
   }
 
-  // Move column in the order (for drag-and-drop)
-  const moveColumn = (fromIndex: number, toIndex: number) => {
+  // Move column in the order (for drag-and-drop) - reserved for future use
+  const _moveColumn = (fromIndex: number, toIndex: number) => {
     setColumnOrder(prev => {
       const next = [...prev]
       const [moved] = next.splice(fromIndex, 1)
@@ -537,6 +537,7 @@ export default function PartnersPage() {
       return next
     })
   }
+  void _moveColumn // silence unused warning
 
   const fetchPartners = useCallback(async (append = false, currentOffset = 0) => {
     if (append) {

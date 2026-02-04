@@ -1,4 +1,3 @@
-import { NextResponse } from 'next/server'
 import { requireRole } from '@/lib/auth/api-auth'
 import { ROLES } from '@/lib/auth/roles'
 import { getAdminClient } from '@/lib/supabase/admin'
