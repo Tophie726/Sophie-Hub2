@@ -80,6 +80,17 @@ The data enrichment pipeline and entity pages are functionally complete. Partner
 | Entity types | PartnerListItem, StaffListItem, PartnerDetail, StaffDetail in entities.ts |
 | useDebounce hook | 300ms debounce for search input |
 
+### Vercel Deployment (Done - 2026-02-04)
+
+| Item | Notes |
+|------|-------|
+| Vercel project setup | Connected to GitHub repo `Tophie726/Sophie-Hub2` |
+| Auto-deploy on push | Main branch deploys automatically |
+| Custom password gate | Middleware-based staging password (no Vercel paid feature needed) |
+| Environment variables | All 9 env vars configured in Vercel dashboard |
+| Google OAuth | Vercel domain added to Google Cloud Console |
+| Production URL | https://sophie-hub-v2.vercel.app |
+
 ---
 
 ## Up Next

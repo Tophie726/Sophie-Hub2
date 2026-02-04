@@ -937,6 +937,53 @@ npm run lint     # Run ESLint
 
 ---
 
+## Vercel Deployment
+
+Sophie Hub v2 is deployed to Vercel with automatic deploys on push to main.
+
+### URLs
+- **Production**: https://sophie-hub-v2.vercel.app
+- **GitHub**: https://github.com/Tophie726/Sophie-Hub2
+
+### Custom Password Gate
+
+Instead of Vercel's paid password protection, we use a custom middleware-based solution:
+
+- **Middleware** (`src/middleware.ts`): Checks for `STAGING_PASSWORD` env var, redirects unauthenticated users to `/password`
+- **Password page** (`src/app/(gate)/password/page.tsx`): Simple password form with Sophie Hub branding
+- **Verify API** (`src/app/api/gate/verify/route.ts`): Sets httpOnly cookie valid for 30 days
+
+**To change the password**: Update `STAGING_PASSWORD` in Vercel environment variables and redeploy.
+
+**To disable the gate**: Remove `STAGING_PASSWORD` env var entirely — middleware will allow all traffic.
+
+### Environment Variables
+
+All env vars must be set in Vercel dashboard (Settings → Environment Variables):
+
+| Variable | Purpose |
+|----------|---------|
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key |
+| `GOOGLE_CLIENT_ID` | Google OAuth client ID |
+| `GOOGLE_CLIENT_SECRET` | Google OAuth client secret |
+| `NEXTAUTH_SECRET` | NextAuth.js secret |
+| `ADMIN_EMAILS` | Comma-separated admin emails |
+| `ENCRYPTION_KEY` | Encryption key for sensitive data |
+| `STAGING_PASSWORD` | Password for staging gate |
+
+**Important**: When adding env vars via CLI, use `printf '%s' 'value' | vercel env add NAME production` to avoid newline issues.
+
+### Google OAuth Setup
+
+The Vercel domain must be registered in Google Cloud Console:
+
+- **Authorized JavaScript origins**: `https://sophie-hub-v2.vercel.app`
+- **Authorized redirect URIs**: `https://sophie-hub-v2.vercel.app/api/auth/callback/google`
+
+---
+
 ## Remote/Mobile Development (Tailscale)
 
 To access the dev server from mobile devices over Tailscale:
