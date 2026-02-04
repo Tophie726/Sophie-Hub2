@@ -312,16 +312,22 @@ Many Google Sheets have headers on rows other than row 0 (e.g., Master Client Da
 - ✅ **Upsert logic** - Uses ON CONFLICT for graceful duplicate handling
 - ✅ **Duplicate cleanup** - Removed 1100+ duplicate records
 - ✅ **Node 20** - Added .nvmrc, removed Supabase deprecation warning
-- ✅ **Partner Health Dashboard** - Health distribution card on dashboard with stacked bar
+- ✅ **Partner Health Dashboard** - Health distribution card on dashboard + compact bar in Partners header
 - ✅ **Status Color Mappings** - Admin-configurable status→bucket mappings in Settings
-  - Database table: `status_color_mappings` with seed defaults
+  - Database table: `status_color_mappings` with seed defaults (37 patterns)
   - API routes: CRUD at `/api/admin/status-mappings`, unmapped discovery
   - Settings UI: Table with add/edit/delete, quick-map for unmapped statuses
   - Auto-discovery of unmapped statuses from partner source_data
   - Weekly status tab refactored to use centralized bucket-based colors
+- ✅ **Weekly Status Year Calendar** - Full year view with 12 months grid
+  - ISO week numbering (Week 1 can start in late December)
+  - Color inheritance for past weeks with no data (faded previous status)
+  - Future weeks show no color (blank)
+  - 5 color intensity levels for visual hierarchy
+- ✅ **Partners Default Filter** - Active status selected by default
 
 **Pending:**
-- ⚠️ Apply unique constraint migration (run SQL in Supabase Dashboard)
+- ⚠️ Vercel staging deployment setup
 - ⚠️ Real-time progress feedback in UI (WebSocket or polling)
 
 ### Phase 5 Roadmap: Change Approval Workflow
