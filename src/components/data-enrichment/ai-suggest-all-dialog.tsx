@@ -18,7 +18,6 @@ import {
   Sparkles,
   Loader2,
   Check,
-  X,
   Building2,
   Users,
   Package,
@@ -31,7 +30,6 @@ import {
   AlertTriangle,
   HelpCircle,
 } from 'lucide-react'
-import { easeOut } from '@/lib/animations'
 import { type ColumnCategory } from '@/types/entities'
 
 // =============================================================================

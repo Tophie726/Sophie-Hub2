@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 import {
   Plus,
   Pencil,
@@ -479,9 +479,10 @@ export function SyncPreviewDialog({
   }, [previewResults])
 
   const hasChanges = totals.creates > 0 || totals.updates > 0
-  const tabsWithChanges = previewResults.filter(
+  const _tabsWithChanges = previewResults.filter(
     (r) => r.stats.rows_created > 0 || r.stats.rows_updated > 0
   )
+  void _tabsWithChanges // reserved for filtering UI
   const tabsWithErrors = previewResults.filter((r) => r.error)
 
   return (

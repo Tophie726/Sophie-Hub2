@@ -18,7 +18,6 @@ import {
   setCachedSources,
   getCachedPreview,
   setCachedPreview,
-  invalidateSources,
   type CachedDataSource,
   type CachedSheetPreview,
 } from '@/lib/data-enrichment/cache'
@@ -120,8 +119,9 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
 
   // Sync preview state - now only shown on demand after background sync
   const [showSyncPreview, setShowSyncPreview] = useState(false)
-  const [isLoadingSyncPreview, setIsLoadingSyncPreview] = useState(false)
-  const [previewResults, setPreviewResults] = useState<TabPreviewResult[]>([])
+  const [_isLoadingSyncPreview, _setIsLoadingSyncPreview] = useState(false)
+  const [_previewResults, _setPreviewResults] = useState<TabPreviewResult[]>([])
+  void _isLoadingSyncPreview; void _setIsLoadingSyncPreview; void _previewResults; void _setPreviewResults // reserved for future use
 
   // For new sources - store preview data until saved
   const [sheetPreviews, setSheetPreviews] = useState<Record<string, SheetPreview>>({})

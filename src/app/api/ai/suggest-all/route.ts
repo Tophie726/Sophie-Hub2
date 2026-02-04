@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { requirePermission } from '@/lib/auth/api-auth'
 import { apiSuccess, apiError, apiValidationError, ApiErrors } from '@/lib/api/response'
-import { getMappingAssistant, type ColumnInput, type ColumnSuggestion } from '@/lib/ai/mapping-sdk'
+import { getMappingAssistant, type ColumnInput } from '@/lib/ai/mapping-sdk'
 import { checkRateLimit, rateLimitHeaders } from '@/lib/rate-limit'
 import { hasSystemSetting } from '@/lib/settings'
 import { audit } from '@/lib/audit'

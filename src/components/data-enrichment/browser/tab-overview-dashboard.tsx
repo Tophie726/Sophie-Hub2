@@ -145,7 +145,8 @@ export function TabOverviewDashboard({
 }: TabOverviewDashboardProps) {
   const [showHidden, setShowHidden] = useState(false)
   const [showFlagged, setShowFlagged] = useState(true)
-  const [showSyncHistory, setShowSyncHistory] = useState(false)
+  const [_showSyncHistory, _setShowSyncHistory] = useState(false)
+  void _showSyncHistory; void _setShowSyncHistory // reserved for future use
   const [syncHistoryKey, setSyncHistoryKey] = useState(0) // For refreshing after sync
 
   // Split tabs into categories

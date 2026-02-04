@@ -143,7 +143,6 @@ import type { ComputationType, SourceAuthority, ColumnMapping } from '@/types/en
 import {
   getCachedMapperState,
   setCachedMapperState,
-  type CachedSmartMapperState,
 } from '@/lib/data-enrichment/cache'
 
 type ColumnCategory = ColumnCategoryOrNull

@@ -22,7 +22,6 @@ import {
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useFlowData } from './hooks/useFlowData'
-import type { FlowMapResponse } from './utils/transform'
 import type { EntityType } from '@/types/entities'
 
 const easeOut: [number, number, number, number] = [0.22, 1, 0.36, 1]
@@ -288,9 +287,10 @@ export function DataFlowMap({ onBack }: DataFlowMapProps) {
                 const info = entityInfo[entityType]
                 const Icon = info.icon
                 const entityData = data.entities.find((e) => e.type === entityType)
-                const sourceCount = transformedSources.filter((s) =>
+                const _sourceCount = transformedSources.filter((s) =>
                   s.mappings.some((m) => m.entity === entityType)
                 ).length
+                void _sourceCount // reserved for future badge display
 
                 return (
                   <div

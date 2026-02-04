@@ -58,7 +58,8 @@ export function StatusMappingSettings() {
   const [buckets, setBuckets] = useState<BucketInfo[]>([])
   const [unmapped, setUnmapped] = useState<UnmappedStatus[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [isLoadingUnmapped, setIsLoadingUnmapped] = useState(true)
+  const [_isLoadingUnmapped, setIsLoadingUnmapped] = useState(true)
+  void _isLoadingUnmapped // reserved for loading UI
 
   // Edit state
   const [editingId, setEditingId] = useState<string | null>(null)

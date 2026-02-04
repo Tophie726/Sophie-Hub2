@@ -10,8 +10,9 @@ function FieldGroupNodeComponent({ data }: NodeProps) {
   const nodeData = data as unknown as FieldGroupNodeData
   const { entityType, groupName, fieldCount, mappedFieldCount } = nodeData
 
-  const textColor = getEntityTextColor(entityType)
-  const bgColor = getEntityBgColor(entityType)
+  const _textColor = getEntityTextColor(entityType)
+  const _bgColor = getEntityBgColor(entityType)
+  void _textColor; void _bgColor // reserved for future styling
   const progress = fieldCount > 0 ? Math.round((mappedFieldCount / fieldCount) * 100) : 0
 
   return (

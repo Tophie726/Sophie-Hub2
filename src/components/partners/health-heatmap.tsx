@@ -215,7 +215,8 @@ export function HealthHeatmap({ statusFilter = [], search = '' }: HealthHeatmapP
     !(heatmapCache.filterKey === filterKey && heatmapCache.partners)
   )
   const [error, setError] = useState<string | null>(null)
-  const [total, setTotal] = useState(0)
+  const [_total, _setTotal] = useState(0)
+  void _total; void _setTotal // reserved for pagination
   const [sortBy, setSortByState] = useState<SortOption>(() =>
     (heatmapCache.sortBy as SortOption) || 'name'
   )

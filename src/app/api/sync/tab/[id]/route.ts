@@ -1,7 +1,7 @@
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth/config'
 import { requirePermission } from '@/lib/auth/api-auth'
-import { apiSuccess, apiError, apiValidationError, ApiErrors } from '@/lib/api/response'
+import { apiSuccess, apiValidationError, ApiErrors } from '@/lib/api/response'
 import { getSyncEngine } from '@/lib/sync'
 import { checkSyncRateLimit, rateLimitHeaders } from '@/lib/rate-limit'
 import { z } from 'zod'
@@ -109,7 +109,7 @@ export async function POST(
         errors: result.stats.errors,
       },
       // Strip sourceData from changes to keep dry-run payloads small
-      changes: result.changes.map(({ sourceData, ...rest }) => rest),
+      changes: result.changes.map(({ sourceData: _sourceData, ...rest }) => rest),
       duration_ms: result.durationMs,
     })
   } catch (error) {

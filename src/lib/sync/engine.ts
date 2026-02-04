@@ -677,7 +677,7 @@ export class SyncEngine {
     // Individual updates (to track lineage per field)
     for (const update of updates) {
       // Deep-merge source_data with existing record's source_data
-      let updateFields = { ...update.fields }
+      const updateFields: Record<string, unknown> = { ...update.fields }
       if (update.sourceData) {
         const existingSourceData = (update.existing?.source_data as Record<string, unknown>) || {}
         updateFields.source_data = deepMergeSourceData(existingSourceData, update.sourceData)

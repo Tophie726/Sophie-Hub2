@@ -19,11 +19,12 @@ interface SyncLoadingOverlayProps {
  */
 export function SyncLoadingOverlay({
   isVisible,
-  phase,
+  phase: _phase,
   currentTab,
   completedTabs,
   totalTabs,
 }: SyncLoadingOverlayProps) {
+  void _phase // reserved for phase-specific styling
   if (!isVisible) return null
 
   const progress = totalTabs > 0 ? (completedTabs / totalTabs) * 100 : 0
