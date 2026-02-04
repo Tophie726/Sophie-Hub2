@@ -688,10 +688,10 @@ export function HealthHeatmap({ statusFilter = [], search = '' }: HealthHeatmapP
               </div>
 
               {/* Summary row */}
-              <div className="flex items-center py-1 border-t bg-muted/50">
+              <div className="flex items-center py-1 border-t bg-muted">
                 <div
                   style={{ width: nameColWidth }}
-                  className="shrink-0 px-3 text-xs font-medium text-muted-foreground bg-muted/50 sticky left-0 z-30 border-r border-border/20"
+                  className="shrink-0 px-3 text-xs font-medium text-muted-foreground bg-muted sticky left-0 z-30 border-r border-border/20"
                 >
                   Summary
                 </div>

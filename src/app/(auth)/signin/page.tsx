@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { signIn } from 'next-auth/react'
 import { motion } from 'framer-motion'
@@ -51,7 +51,8 @@ function getSafeCallbackUrl(url: string | null): string {
   return '/dashboard'
 }
 
-export default function SignInPage() {
+// Inner component that uses useSearchParams (must be wrapped in Suspense)
+function SignInContent() {
   const [isLoading, setIsLoading] = useState(false)
   const searchParams = useSearchParams()
 
@@ -167,5 +168,23 @@ export default function SignInPage() {
       {/* Safe area padding for home indicator */}
       <div className="h-safe-area-inset-bottom" />
     </div>
+  )
+}
+
+// Loading fallback for Suspense
+function SignInLoading() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-background to-muted/30">
+      <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+    </div>
+  )
+}
+
+// Main page component with Suspense boundary
+export default function SignInPage() {
+  return (
+    <Suspense fallback={<SignInLoading />}>
+      <SignInContent />
+    </Suspense>
   )
 }
