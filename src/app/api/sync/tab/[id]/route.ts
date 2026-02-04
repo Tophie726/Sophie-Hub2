@@ -109,7 +109,8 @@ export async function POST(
         errors: result.stats.errors,
       },
       // Strip sourceData from changes to keep dry-run payloads small
-      changes: result.changes.map(({ sourceData: _sourceData, ...rest }) => rest),
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      changes: result.changes.map(({ sourceData, ...rest }) => rest),
       duration_ms: result.durationMs,
     })
   } catch (error) {

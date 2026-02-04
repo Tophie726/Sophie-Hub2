@@ -84,7 +84,8 @@ const getConfidenceLabel = (confidence: number) => {
 
 export function AISourceAnalysis({
   sourceName,
-  sourceId: _sourceId,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  sourceId,
   spreadsheetId,
   tabs,
   onAnalysisComplete,
