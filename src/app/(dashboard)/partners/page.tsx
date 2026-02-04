@@ -3,28 +3,41 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import Link from 'next/link'
 import { format, parseISO } from 'date-fns'
-import { Building2, Plus, Database, ChevronRight, Loader2, Settings2, List, LayoutGrid } from 'lucide-react'
+import { Building2, Plus, Database, ChevronRight, Loader2, Settings2, Activity, RefreshCw, FileSpreadsheet, MoreHorizontal, Sparkles } from 'lucide-react'
+import { toast } from 'sonner'
 import { PageHeader } from '@/components/layout/page-header'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { ShimmerGrid } from '@/components/ui/shimmer-grid'
 import { EntityListToolbar } from '@/components/entities/entity-list-toolbar'
-import { StatusBadge } from '@/components/entities/status-badge'
+import { StatusBadge, ComputedStatusBadge } from '@/components/entities/status-badge'
 import { TierBadge } from '@/components/entities/tier-badge'
 import { WeeklyStatusPreview } from '@/components/partners/weekly-status-preview'
 import { HealthBarCompact } from '@/components/partners/health-bar-compact'
-import { HealthHeatmap } from '@/components/partners/health-heatmap'
+import { HealthHeatmap, clearHeatmapCache } from '@/components/partners/health-heatmap'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuCheckboxItem,
+  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { useDebounce } from '@/lib/hooks/use-debounce'
 
-// Extended partner type that includes source_data
+// Module-level cache for view state persistence
+const viewCache = {
+  showHeatmap: false,
+}
+
+// Extended partner type that includes source_data and computed status
 interface Partner {
   id: string
   partner_code: string | null
@@ -32,17 +45,25 @@ interface Partner {
   client_name: string | null
   client_email: string | null
   client_phone: string | null
-  status: string | null
+  status: string | null  // Sheet-derived status
   tier: string | null
   parent_asin_count: number | null
   child_asin_count: number | null
   onboarding_date: string | null
   created_at: string
+  updated_at: string | null
   pod_leader_name: string | null
   brand_manager_name: string | null
   sales_rep_name: string | null
   pod_leader?: { id: string; full_name: string } | null
   source_data?: Record<string, Record<string, Record<string, unknown>>> | null
+  // Computed status fields from API
+  computed_status?: string | null
+  computed_status_label?: string
+  computed_status_bucket?: string
+  latest_weekly_status?: string | null
+  status_matches?: boolean
+  weeks_without_data?: number
   [key: string]: unknown // Allow dynamic field access
 }
 
@@ -52,6 +73,8 @@ interface ColumnDef {
   label: string
   source: 'db' | 'source_data'
   sourceKey?: string // For source_data fields: "Seller Central Name"
+  sourceType?: 'sheet' | 'computed' | 'both' // Where the data comes from
+  sourceTab?: string // Tab name for source_data fields
   defaultVisible: boolean
   width?: string
   align?: 'left' | 'right'
@@ -64,14 +87,24 @@ const CORE_COLUMNS: ColumnDef[] = [
     key: 'status',
     label: 'Status',
     source: 'db',
+    sourceType: 'computed', // Computed from latest weekly status
     defaultVisible: true,
-    width: 'w-24',
-    render: (p) => <StatusBadge status={p.status} entity="partners" />
+    width: 'w-28',
+    render: (p) => (
+      <ComputedStatusBadge
+        computedStatus={p.computed_status ?? null}
+        displayLabel={p.computed_status_label || (p.status ? p.status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : 'No Data')}
+        sheetStatus={p.status}
+        statusMatches={p.status_matches ?? true}
+        latestWeeklyStatus={p.latest_weekly_status}
+      />
+    )
   },
   {
     key: 'weekly',
     label: 'Weekly',
     source: 'db',
+    sourceType: 'sheet', // From source_data weekly columns
     defaultVisible: true,
     width: 'w-14',
     render: (p) => <WeeklyStatusPreview sourceData={p.source_data} weeks={8} />
@@ -80,17 +113,19 @@ const CORE_COLUMNS: ColumnDef[] = [
     key: 'tier',
     label: 'Tier',
     source: 'db',
+    sourceType: 'sheet', // From sheet sync
     defaultVisible: true,
     width: 'w-20',
     render: (p) => <TierBadge tier={p.tier} />
   },
-  { key: 'client_name', label: 'Client', source: 'db', defaultVisible: true, width: 'w-32' },
-  { key: 'client_email', label: 'Email', source: 'db', defaultVisible: false, width: 'w-40' },
-  { key: 'client_phone', label: 'Phone', source: 'db', defaultVisible: false, width: 'w-28' },
+  { key: 'client_name', label: 'Client', source: 'db', sourceType: 'sheet', defaultVisible: true, width: 'w-32' },
+  { key: 'client_email', label: 'Email', source: 'db', sourceType: 'sheet', defaultVisible: false, width: 'w-40' },
+  { key: 'client_phone', label: 'Phone', source: 'db', sourceType: 'sheet', defaultVisible: false, width: 'w-28' },
   {
     key: 'pod_leader_name',
     label: 'Pod Leader',
     source: 'db',
+    sourceType: 'sheet',
     defaultVisible: true,
     width: 'w-28',
     render: (p) => {
@@ -108,12 +143,13 @@ const CORE_COLUMNS: ColumnDef[] = [
       return <span className="text-muted-foreground">--</span>
     }
   },
-  { key: 'brand_manager_name', label: 'Brand Manager', source: 'db', defaultVisible: false, width: 'w-28' },
-  { key: 'sales_rep_name', label: 'Sales Rep', source: 'db', defaultVisible: false, width: 'w-28' },
+  { key: 'brand_manager_name', label: 'Brand Manager', source: 'db', sourceType: 'sheet', defaultVisible: false, width: 'w-28' },
+  { key: 'sales_rep_name', label: 'Sales Rep', source: 'db', sourceType: 'sheet', defaultVisible: false, width: 'w-28' },
   {
     key: 'asin_count',
     label: 'ASINs',
     source: 'db',
+    sourceType: 'sheet',
     defaultVisible: true,
     width: 'w-16',
     align: 'right',
@@ -126,10 +162,21 @@ const CORE_COLUMNS: ColumnDef[] = [
     key: 'onboarding_date',
     label: 'Onboarded',
     source: 'db',
+    sourceType: 'sheet',
     defaultVisible: false,
     width: 'w-28',
     align: 'right',
     render: (p) => p.onboarding_date ? format(parseISO(p.onboarding_date), 'MMM d, yyyy') : '--'
+  },
+  {
+    key: 'updated_at',
+    label: 'Last Synced',
+    source: 'db',
+    sourceType: 'computed',
+    defaultVisible: false,
+    width: 'w-28',
+    align: 'right',
+    render: (p) => p.updated_at ? format(parseISO(p.updated_at), 'MMM d, h:mm a') : '--'
   },
 ]
 
@@ -142,8 +189,10 @@ function isWeeklyColumn(columnName: string): boolean {
 }
 
 // Extract unique source_data keys from partners (excluding weekly columns)
+// Also captures the tab name for lineage display
 function extractSourceDataColumns(partners: Partner[]): ColumnDef[] {
-  const fieldSet = new Map<string, string>() // sourceKey -> label
+  // Map: sourceKey -> { label, tabName }
+  const fieldSet = new Map<string, { label: string; tabName: string }>()
 
   for (const partner of partners) {
     if (!partner.source_data) continue
@@ -151,9 +200,9 @@ function extractSourceDataColumns(partners: Partner[]): ColumnDef[] {
     // source_data structure: { gsheets: { "Tab Name": { "Column Name": value } } }
     for (const connector of Object.values(partner.source_data)) {
       if (typeof connector !== 'object' || !connector) continue
-      for (const tabData of Object.values(connector)) {
+      for (const [tabName, tabData] of Object.entries(connector)) {
         if (typeof tabData !== 'object' || !tabData) continue
-        for (const columnName of Object.keys(tabData)) {
+        for (const columnName of Object.keys(tabData as Record<string, unknown>)) {
           // Skip weekly status columns - they have their own display
           if (isWeeklyColumn(columnName)) continue
 
@@ -164,7 +213,7 @@ function extractSourceDataColumns(partners: Partner[]): ColumnDef[] {
             c.label.toLowerCase() === columnName.toLowerCase()
           )
           if (!existsAsCore && !fieldSet.has(columnName)) {
-            fieldSet.set(columnName, columnName)
+            fieldSet.set(columnName, { label: columnName, tabName })
           }
         }
       }
@@ -174,11 +223,13 @@ function extractSourceDataColumns(partners: Partner[]): ColumnDef[] {
   // Convert to column definitions, sorted alphabetically
   return Array.from(fieldSet.entries())
     .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([sourceKey, label]) => ({
+    .map(([sourceKey, { label, tabName }]) => ({
       key: `source_${sourceKey.toLowerCase().replace(/[^a-z0-9]/g, '_')}`,
       label,
       source: 'source_data' as const,
       sourceKey,
+      sourceType: 'sheet' as const,
+      sourceTab: tabName,
       defaultVisible: false,
       width: 'w-32',
     }))
@@ -217,78 +268,200 @@ const sortOptions = [
   { value: 'tier', label: 'Tier' },
 ]
 
-function PartnerRow({ partner, columns, visibleColumns }: {
-  partner: Partner
-  columns: ColumnDef[]
-  visibleColumns: Set<string>
+// Column dropdown item with source indicator and lineage tooltip
+function ColumnDropdownItem({
+  col,
+  isVisible,
+  fieldLineage,
+  onToggle,
+}: {
+  col: ColumnDef
+  isVisible: boolean
+  fieldLineage: Record<string, { sourceColumn: string; tabName: string; sheetName: string }>
+  onToggle: () => void
 }) {
   return (
-    <Link href={`/partners/${partner.id}`}>
-      <div className="flex items-center gap-4 px-5 py-3.5 hover:bg-muted/30 transition-colors cursor-pointer">
-        {/* Brand name + code - always visible */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="font-medium text-sm truncate">{partner.brand_name}</span>
-            {partner.partner_code && (
-              <span className="hidden sm:inline text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded shrink-0">
-                {partner.partner_code}
+    <DropdownMenuCheckboxItem
+      checked={isVisible}
+      onCheckedChange={onToggle}
+      className="text-sm"
+    >
+      <span className="flex items-center justify-between w-full">
+        <span className="truncate">{col.label}</span>
+        {col.sourceType === 'computed' && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-purple-500/10 text-purple-600 dark:text-purple-400 ml-2 shrink-0 cursor-help">
+                <Sparkles className="h-3 w-3" />
               </span>
-            )}
-          </div>
-          {/* Mobile: show client name below brand */}
-          <div className="md:hidden text-xs text-muted-foreground mt-0.5 truncate">
-            {partner.client_name || 'No client contact'}
-          </div>
-        </div>
-
-        {/* Dynamic columns */}
-        {columns.map(col => {
-          if (!visibleColumns.has(col.key)) return null
-
-          let content: React.ReactNode
-          if (col.render) {
-            content = col.render(partner)
-          } else if (col.source === 'source_data' && col.sourceKey) {
-            content = getSourceDataValue(partner, col.sourceKey)
-          } else {
-            const value = partner[col.key]
-            content = value !== null && value !== undefined && value !== '' ? String(value) : '--'
-          }
-
-          return (
-            <div
-              key={col.key}
-              className={`${col.width || 'w-28'} hidden md:block text-sm ${col.align === 'right' ? 'text-right' : ''} text-muted-foreground truncate`}
-            >
-              {content}
-            </div>
-          )
-        })}
-
-        {/* Mobile status + chevron */}
-        <div className="flex md:hidden items-center gap-2 shrink-0">
-          <StatusBadge status={partner.status} entity="partners" />
-          <ChevronRight className="h-4 w-4 text-muted-foreground" />
-        </div>
-
-        {/* Spacer for settings button alignment */}
-        <div className="hidden md:block w-6 shrink-0" />
-      </div>
-    </Link>
+            </TooltipTrigger>
+            <TooltipContent side="left" className="text-xs z-[100]">
+              <div className="font-medium">Computed by App</div>
+              <div className="text-muted-foreground">Calculated from source data</div>
+            </TooltipContent>
+          </Tooltip>
+        )}
+        {col.sourceType === 'sheet' && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-green-500/10 text-green-600 dark:text-green-400 ml-2 shrink-0 cursor-help">
+                <FileSpreadsheet className="h-3 w-3" />
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="left" className="text-xs z-[100] max-w-xs">
+              {col.key === 'weekly' ? (
+                <div className="space-y-0.5">
+                  <div className="font-medium">Weekly Status Columns</div>
+                  <div className="text-muted-foreground">Pattern-matched from sheet</div>
+                </div>
+              ) : col.source === 'source_data' && col.sourceTab ? (
+                // Source data columns have their lineage directly on the column def
+                <div className="space-y-0.5">
+                  <div className="font-medium">Google Sheet</div>
+                  <div className="text-muted-foreground">
+                    Tab: <span className="text-foreground">{col.sourceTab}</span>
+                  </div>
+                  <div className="text-muted-foreground">
+                    Column: <span className="text-foreground">{col.sourceKey}</span>
+                  </div>
+                </div>
+              ) : fieldLineage[col.key] ? (
+                // Core columns lookup from field-lineage API
+                <div className="space-y-0.5">
+                  <div className="font-medium">{fieldLineage[col.key].sheetName}</div>
+                  <div className="text-muted-foreground">
+                    Tab: <span className="text-foreground">{fieldLineage[col.key].tabName}</span>
+                  </div>
+                  <div className="text-muted-foreground">
+                    Column: <span className="text-foreground">{fieldLineage[col.key].sourceColumn}</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-muted-foreground">Not mapped in Data Enrichment</div>
+              )}
+            </TooltipContent>
+          </Tooltip>
+        )}
+      </span>
+    </DropdownMenuCheckboxItem>
   )
 }
 
-type ViewMode = 'list' | 'heatmap'
+function PartnerRow({ partner, columns, visibleColumns, onSync }: {
+  partner: Partner
+  columns: ColumnDef[]
+  visibleColumns: Set<string>
+  onSync: (partnerId: string, brandName: string) => void
+}) {
+  const [isSyncing, setIsSyncing] = useState(false)
+
+  const handleSync = async (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsSyncing(true)
+    await onSync(partner.id, partner.brand_name)
+    setIsSyncing(false)
+  }
+
+  return (
+    <div className="flex items-center gap-4 px-5 py-3.5 hover:bg-muted/30 transition-colors">
+      {/* Brand name + code - clickable link */}
+      <Link href={`/partners/${partner.id}`} className="flex-1 min-w-0 cursor-pointer">
+        <div className="flex items-center gap-2">
+          <span className="font-medium text-sm truncate hover:underline">{partner.brand_name}</span>
+          {partner.partner_code && (
+            <span className="hidden sm:inline text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded shrink-0">
+              {partner.partner_code}
+            </span>
+          )}
+        </div>
+        {/* Mobile: show client name below brand */}
+        <div className="md:hidden text-xs text-muted-foreground mt-0.5 truncate">
+          {partner.client_name || 'No client contact'}
+        </div>
+      </Link>
+
+      {/* Dynamic columns */}
+      {columns.map(col => {
+        if (!visibleColumns.has(col.key)) return null
+
+        let content: React.ReactNode
+        if (col.render) {
+          content = col.render(partner)
+        } else if (col.source === 'source_data' && col.sourceKey) {
+          content = getSourceDataValue(partner, col.sourceKey)
+        } else {
+          const value = partner[col.key]
+          content = value !== null && value !== undefined && value !== '' ? String(value) : '--'
+        }
+
+        return (
+          <div
+            key={col.key}
+            className={`${col.width || 'w-28'} hidden md:block text-sm ${col.align === 'right' ? 'text-right' : ''} text-muted-foreground truncate`}
+          >
+            {content}
+          </div>
+        )
+      })}
+
+      {/* Mobile status + chevron */}
+      <Link href={`/partners/${partner.id}`} className="flex md:hidden items-center gap-2 shrink-0">
+        <StatusBadge status={partner.status} entity="partners" />
+        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+      </Link>
+
+      {/* Row actions dropdown */}
+      <div className="hidden md:block shrink-0">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="sm" className="h-7 w-7 p-0 hover:bg-muted">
+              {isSyncing ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <MoreHorizontal className="h-3.5 w-3.5" />
+              )}
+              <span className="sr-only">Row actions</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuItem asChild>
+              <Link href={`/partners/${partner.id}`} className="cursor-pointer">
+                <ChevronRight className="h-4 w-4 mr-2" />
+                View Details
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={handleSync} disabled={isSyncing}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Sync
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    </div>
+  )
+}
 
 export default function PartnersPage() {
   const [partners, setPartners] = useState<Partner[]>([])
   const [loading, setLoading] = useState(true)
   const [isFiltering, setIsFiltering] = useState(false) // Subtle indicator for filter changes
+  const [isRefreshing, setIsRefreshing] = useState(false) // For manual refresh
   const [loadingMore, setLoadingMore] = useState(false)
   const initialLoadDone = useRef(false)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string[]>(['active']) // Default to Active partners
-  const [viewMode, setViewMode] = useState<ViewMode>('list')
+  const [showHeatmap, setShowHeatmapState] = useState(() => viewCache.showHeatmap)
+
+  // Wrapper to persist heatmap toggle to cache
+  const setShowHeatmap = useCallback((value: boolean | ((prev: boolean) => boolean)) => {
+    setShowHeatmapState(prev => {
+      const newValue = typeof value === 'function' ? value(prev) : value
+      viewCache.showHeatmap = newValue
+      return newValue
+    })
+  }, [])
   const [sort, setSort] = useState('brand_name')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
   const [total, setTotal] = useState(0)
@@ -296,6 +469,13 @@ export default function PartnersPage() {
   const [visibleColumns, setVisibleColumns] = useState<Set<string>>(
     () => new Set(CORE_COLUMNS.filter(c => c.defaultVisible).map(c => c.key))
   )
+
+  // Field lineage info for tooltips (which sheet/tab/column each field came from)
+  const [fieldLineage, setFieldLineage] = useState<Record<string, {
+    sourceColumn: string
+    tabName: string
+    sheetName: string
+  }>>({})
 
   const debouncedSearch = useDebounce(search, 300)
 
@@ -305,6 +485,37 @@ export default function PartnersPage() {
   // All available columns
   const allColumns = useMemo(() => [...CORE_COLUMNS, ...sourceDataColumns], [sourceDataColumns])
 
+  // Column order state - preserves user's ordering preference
+  const [columnOrder, setColumnOrder] = useState<string[]>(() => allColumns.map(c => c.key))
+
+  // Update column order when new columns are discovered
+  useEffect(() => {
+    setColumnOrder(prev => {
+      const newKeys = allColumns.map(c => c.key)
+      const existingKeys = new Set(prev)
+      // Add any new columns that weren't in the previous order
+      const addedKeys = newKeys.filter(k => !existingKeys.has(k))
+      // Remove any columns that no longer exist
+      const filteredPrev = prev.filter(k => newKeys.includes(k))
+      return [...filteredPrev, ...addedKeys]
+    })
+  }, [allColumns])
+
+  // Ordered columns for rendering - follows columnOrder
+  const orderedColumns = useMemo(() => {
+    const colMap = new Map(allColumns.map(c => [c.key, c]))
+    return columnOrder
+      .map(key => colMap.get(key))
+      .filter((c): c is ColumnDef => c !== undefined)
+  }, [allColumns, columnOrder])
+
+  // Columns ordered for the dropdown: visible first, then hidden
+  const dropdownOrderedColumns = useMemo(() => {
+    const visible = orderedColumns.filter(c => visibleColumns.has(c.key))
+    const hidden = orderedColumns.filter(c => !visibleColumns.has(c.key))
+    return { visible, hidden }
+  }, [orderedColumns, visibleColumns])
+
   const toggleColumn = (key: string) => {
     setVisibleColumns(prev => {
       const next = new Set(prev)
@@ -313,6 +524,16 @@ export default function PartnersPage() {
       } else {
         next.add(key)
       }
+      return next
+    })
+  }
+
+  // Move column in the order (for drag-and-drop)
+  const moveColumn = (fromIndex: number, toIndex: number) => {
+    setColumnOrder(prev => {
+      const next = [...prev]
+      const [moved] = next.splice(fromIndex, 1)
+      next.splice(toIndex, 0, moved)
       return next
     })
   }
@@ -365,12 +586,59 @@ export default function PartnersPage() {
     fetchPartners(false)
   }, [fetchPartners])
 
+  // Fetch field lineage info (which sheet/tab/column each field came from)
+  useEffect(() => {
+    async function fetchFieldLineage() {
+      try {
+        const res = await fetch('/api/partners/field-lineage')
+        const json = await res.json()
+        if (json.data?.lineage) {
+          setFieldLineage(json.data.lineage)
+        }
+      } catch (error) {
+        console.error('Failed to fetch field lineage:', error)
+      }
+    }
+    fetchFieldLineage()
+  }, [])
+
   const handleLoadMore = () => {
     fetchPartners(true, partners.length)
   }
 
-  // Group columns for the dropdown menu
-  const coreColumnKeys = new Set(CORE_COLUMNS.map(c => c.key))
+  // Manual refresh - clears cache and re-fetches
+  const handleRefresh = async () => {
+    setIsRefreshing(true)
+    // Clear the heatmap cache
+    clearHeatmapCache()
+    await fetchPartners(false)
+    setIsRefreshing(false)
+  }
+
+  // Sync a single partner from Google Sheet
+  const handleSyncPartner = async (partnerId: string, brandName: string) => {
+    try {
+      const res = await fetch(`/api/partners/${partnerId}/sync`, { method: 'POST' })
+      const json = await res.json()
+
+      if (!res.ok) {
+        toast.error(json.error?.message || 'Sync failed')
+        return
+      }
+
+      const data = json.data
+      if (data?.synced) {
+        toast.success(`${brandName} synced from sheet`)
+        // Update the partner in our local state with fresh data
+        await fetchPartners(false)
+      } else {
+        toast.warning(data?.message || 'Partner not found in source sheet')
+      }
+    } catch (err) {
+      console.error('Sync failed:', err)
+      toast.error('Failed to sync partner')
+    }
+  }
 
   return (
     <div className="min-h-screen">
@@ -378,32 +646,26 @@ export default function PartnersPage() {
         title="Partners"
         description={total > 0 ? `${total} partner brands` : 'View and manage all partner brands'}
       >
-        <div className="flex items-center gap-3">
-          {/* View mode toggle */}
-          <div className="flex items-center bg-muted rounded-lg p-0.5">
-            <button
-              onClick={() => setViewMode('list')}
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-all ${
-                viewMode === 'list'
-                  ? 'bg-background text-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <List className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">List</span>
-            </button>
-            <button
-              onClick={() => setViewMode('heatmap')}
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-all ${
-                viewMode === 'heatmap'
-                  ? 'bg-background text-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <LayoutGrid className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Heatmap</span>
-            </button>
-          </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleRefresh}
+            disabled={isRefreshing || loading}
+            className="h-8 w-8 p-0"
+            title="Refresh partner data"
+          >
+            <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+          </Button>
+          <Button
+            variant={showHeatmap ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setShowHeatmap(!showHeatmap)}
+            className="gap-1.5"
+          >
+            <Activity className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">{showHeatmap ? 'Show List' : 'Health Overview'}</span>
+          </Button>
           <HealthBarCompact />
           <Button className="gap-2">
             <Plus className="h-4 w-4" />
@@ -429,16 +691,16 @@ export default function PartnersPage() {
 
       <div className="p-6 md:p-8">
         {/* Heatmap View */}
-        {viewMode === 'heatmap' && (
-          <HealthHeatmap maxPartners={100} />
-        )}
-
-        {/* List View */}
-        {viewMode === 'list' && loading ? (
+        {showHeatmap ? (
+          <HealthHeatmap
+            statusFilter={statusFilter}
+            search={debouncedSearch}
+          />
+        ) : loading ? (
           <div className="rounded-xl border bg-card p-1">
             <ShimmerGrid variant="table" rows={10} columns={6} />
           </div>
-        ) : viewMode === 'list' && partners.length === 0 ? (
+        ) : partners.length === 0 ? (
           <Card className="border-dashed">
             <CardContent className="flex flex-col items-center justify-center py-16">
               <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-500/10 mb-6">
@@ -464,14 +726,14 @@ export default function PartnersPage() {
               )}
             </CardContent>
           </Card>
-        ) : viewMode === 'list' ? (
+        ) : (
           <>
             <div className={`rounded-xl border bg-card transition-opacity duration-150 ${isFiltering ? 'opacity-60' : ''}`}>
               {/* Sticky header row — sticks below the toolbar */}
               <div className="sticky top-[113px] z-10 bg-card border-b border-border/60 rounded-t-xl">
                 <div className="hidden md:flex items-center gap-4 px-5 py-2.5 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
                   <div className="flex-1 min-w-0">Brand</div>
-                  {allColumns.map(col => {
+                  {orderedColumns.map(col => {
                     if (!visibleColumns.has(col.key)) return null
                     return (
                       <div
@@ -490,38 +752,47 @@ export default function PartnersPage() {
                         <span className="sr-only">Toggle columns</span>
                       </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-64 max-h-[400px] overflow-y-auto">
-                      <DropdownMenuLabel className="text-xs">Database Columns</DropdownMenuLabel>
-                      <DropdownMenuSeparator />
-                      {CORE_COLUMNS.map(col => (
-                        <DropdownMenuCheckboxItem
-                          key={col.key}
-                          checked={visibleColumns.has(col.key)}
-                          onCheckedChange={() => toggleColumn(col.key)}
-                          className="text-sm"
-                        >
-                          {col.label}
-                        </DropdownMenuCheckboxItem>
-                      ))}
-                      {sourceDataColumns.length > 0 && (
-                        <>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuLabel className="text-xs">
-                            Source Data ({sourceDataColumns.length} fields)
-                          </DropdownMenuLabel>
-                          <DropdownMenuSeparator />
-                          {sourceDataColumns.map(col => (
-                            <DropdownMenuCheckboxItem
-                              key={col.key}
-                              checked={visibleColumns.has(col.key)}
-                              onCheckedChange={() => toggleColumn(col.key)}
-                              className="text-sm"
-                            >
-                              {col.label}
-                            </DropdownMenuCheckboxItem>
-                          ))}
-                        </>
-                      )}
+                    <DropdownMenuContent align="end" className="w-72 max-h-[400px] overflow-y-auto z-50">
+                      <TooltipProvider delayDuration={400}>
+                        {/* Visible columns section */}
+                        {dropdownOrderedColumns.visible.length > 0 && (
+                          <>
+                            <DropdownMenuLabel className="text-xs flex items-center justify-between">
+                              <span>Visible Columns ({dropdownOrderedColumns.visible.length})</span>
+                            </DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            {dropdownOrderedColumns.visible.map(col => (
+                              <ColumnDropdownItem
+                                key={col.key}
+                                col={col}
+                                isVisible={true}
+                                fieldLineage={fieldLineage}
+                                onToggle={() => toggleColumn(col.key)}
+                              />
+                            ))}
+                          </>
+                        )}
+
+                        {/* Hidden columns section */}
+                        {dropdownOrderedColumns.hidden.length > 0 && (
+                          <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuLabel className="text-xs">
+                              Hidden Columns ({dropdownOrderedColumns.hidden.length})
+                            </DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            {dropdownOrderedColumns.hidden.map(col => (
+                              <ColumnDropdownItem
+                                key={col.key}
+                                col={col}
+                                isVisible={false}
+                                fieldLineage={fieldLineage}
+                                onToggle={() => toggleColumn(col.key)}
+                              />
+                            ))}
+                          </>
+                        )}
+                      </TooltipProvider>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>
@@ -531,8 +802,9 @@ export default function PartnersPage() {
                   <PartnerRow
                     key={partner.id}
                     partner={partner}
-                    columns={allColumns}
+                    columns={orderedColumns}
                     visibleColumns={visibleColumns}
+                    onSync={handleSyncPartner}
                   />
                 ))}
               </div>
@@ -554,7 +826,7 @@ export default function PartnersPage() {
               </div>
             )}
           </>
-        ) : null}
+        )}
       </div>
     </div>
   )

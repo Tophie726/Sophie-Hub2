@@ -1,6 +1,7 @@
 import { getAdminClient } from '@/lib/supabase/admin'
 import { requireAuth } from '@/lib/auth/api-auth'
 import { apiSuccess, apiError, ApiErrors, ErrorCodes } from '@/lib/api/response'
+import { computePartnerStatus, matchesStatusFilter } from '@/lib/partners/computed-status'
 import { z } from 'zod'
 
 const supabase = getAdminClient()
@@ -11,7 +12,7 @@ const QuerySchema = z.object({
   tier: z.string().optional(),
   sort: z.enum(['brand_name', 'created_at', 'tier', 'onboarding_date']).optional().default('brand_name'),
   order: z.enum(['asc', 'desc']).optional().default('asc'),
-  limit: z.coerce.number().int().min(1).max(100).optional().default(50),
+  limit: z.coerce.number().int().min(1).max(1000).optional().default(50),
   offset: z.coerce.number().int().min(0).optional().default(0),
 })
 
@@ -52,11 +53,16 @@ export async function GET(request: Request) {
 
     const { search, status, tier, sort, order, limit, offset } = validation.data
 
-    // Query 1: Partners with count - select ALL columns including source_data
-    // This enables dynamic column display without code changes
+    // Parse status filter values
+    const statusFilters = status
+      ? status.split(',').map(s => s.trim()).filter(Boolean)
+      : []
+
+    // Query 1: Partners - select ALL columns including source_data
+    // Note: Status filtering is done in JS based on computed status from weekly data
     let query = supabase
       .from('partners')
-      .select('*', { count: 'exact' })
+      .select('*')
 
     // Search across brand_name, client_name, partner_code
     if (search) {
@@ -65,32 +71,49 @@ export async function GET(request: Request) {
       )
     }
 
-    // Filter by status
-    if (status) {
-      const statuses = status.split(',').map(s => s.trim()).filter(Boolean)
-      query = query.in('status', statuses)
-    }
-
-    // Filter by tier
+    // Filter by tier (DB-level filter is fine for tier)
     if (tier) {
       const tiers = tier.split(',').map(t => t.trim()).filter(Boolean)
       query = query.in('tier', tiers)
     }
 
-    // Sort + paginate
-    query = query
-      .order(sort, { ascending: order === 'asc' })
-      .range(offset, offset + limit - 1)
+    // Sort
+    query = query.order(sort, { ascending: order === 'asc' })
 
-    const { data: partners, error, count } = await query
+    const { data: allPartners, error } = await query
 
     if (error) {
       console.error('Error fetching partners:', error)
       return ApiErrors.database(error.message)
     }
 
-    // Query 2: Batch fetch pod_leader assignments for returned partners
-    const partnerIds = (partners || []).map(p => p.id)
+    // Compute status for each partner and apply status filter
+    let filteredPartners = (allPartners || []).map(p => {
+      const computed = computePartnerStatus(p.source_data, p.status)
+      return {
+        ...p,
+        computed_status: computed.computedStatus,
+        computed_status_label: computed.displayLabel,
+        computed_status_bucket: computed.bucket,
+        latest_weekly_status: computed.latestWeeklyStatus,
+        status_matches: computed.matchesSheetStatus,
+        weeks_without_data: computed.weeksWithoutData,
+      }
+    })
+
+    // Apply status filter based on computed status
+    if (statusFilters.length > 0) {
+      filteredPartners = filteredPartners.filter(p =>
+        matchesStatusFilter(p.source_data, p.status, statusFilters)
+      )
+    }
+
+    // Apply pagination after filtering
+    const total = filteredPartners.length
+    const paginatedPartners = filteredPartners.slice(offset, offset + limit)
+
+    // Query 2: Batch fetch pod_leader assignments for paginated partners
+    const partnerIds = paginatedPartners.map(p => p.id)
     const podLeaders: Record<string, { id: string; full_name: string }> = {}
 
     if (partnerIds.length > 0) {
@@ -112,15 +135,15 @@ export async function GET(request: Request) {
     }
 
     // Merge pod leaders into results
-    const partnersWithLeaders = (partners || []).map(p => ({
+    const partnersWithLeaders = paginatedPartners.map(p => ({
       ...p,
       pod_leader: podLeaders[p.id] || null,
     }))
 
     return apiSuccess({
       partners: partnersWithLeaders,
-      total: count || 0,
-      has_more: (count || 0) > offset + limit,
+      total,
+      has_more: total > offset + limit,
     }, 200, {
       'Cache-Control': 'private, max-age=10, stale-while-revalidate=30',
     })

@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
+import { toast } from 'sonner'
 import {
   ArrowLeft,
   Building2,
@@ -15,6 +16,7 @@ import {
   Contact,
   LayoutDashboard,
   Calendar,
+  RefreshCw,
 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/page-header'
 import { Button } from '@/components/ui/button'
@@ -39,29 +41,60 @@ export default function PartnerDetailPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<TabId>('overview')
+  const [isSyncing, setIsSyncing] = useState(false)
+
+  const fetchPartner = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/partners/${id}`)
+      const json = await res.json()
+
+      if (!res.ok) {
+        setError(json.error?.message || 'Failed to load partner')
+        return
+      }
+
+      setPartner(json.data?.partner || null)
+    } catch (err) {
+      console.error('Failed to fetch partner:', err)
+      setError('Failed to load partner')
+    } finally {
+      setLoading(false)
+    }
+  }, [id])
+
+  // Sync this partner's data from the source sheet
+  const handleSync = async () => {
+    if (!id || isSyncing) return
+
+    setIsSyncing(true)
+    try {
+      const res = await fetch(`/api/partners/${id}/sync`, { method: 'POST' })
+      const json = await res.json()
+
+      if (!res.ok) {
+        toast.error(json.error?.message || 'Sync failed')
+        return
+      }
+
+      const data = json.data
+      if (data?.synced) {
+        toast.success(data.message || 'Partner synced successfully')
+        // Refresh partner data
+        await fetchPartner()
+      } else {
+        toast.warning(data?.message || 'Partner not found in source sheet')
+      }
+    } catch (err) {
+      console.error('Sync failed:', err)
+      toast.error('Failed to sync partner')
+    } finally {
+      setIsSyncing(false)
+    }
+  }
 
   useEffect(() => {
-    async function fetchPartner() {
-      try {
-        const res = await fetch(`/api/partners/${id}`)
-        const json = await res.json()
-
-        if (!res.ok) {
-          setError(json.error?.message || 'Failed to load partner')
-          return
-        }
-
-        setPartner(json.data?.partner || null)
-      } catch (err) {
-        console.error('Failed to fetch partner:', err)
-        setError('Failed to load partner')
-      } finally {
-        setLoading(false)
-      }
-    }
-
     if (id) fetchPartner()
-  }, [id])
+  }, [id, fetchPartner])
 
   if (loading) {
     return (
@@ -99,6 +132,16 @@ export default function PartnerDetailPage() {
         description={partner.partner_code || undefined}
       >
         <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleSync}
+            disabled={isSyncing || loading}
+            className="h-8 w-8 p-0"
+            title="Sync from all data sources"
+          >
+            <RefreshCw className={`h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} />
+          </Button>
           <StatusBadge status={partner.status} entity="partners" />
           <TierBadge tier={partner.tier} />
         </div>

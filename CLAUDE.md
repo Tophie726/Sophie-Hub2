@@ -325,6 +325,26 @@ Many Google Sheets have headers on rows other than row 0 (e.g., Master Client Da
   - Future weeks show no color (blank)
   - 5 color intensity levels for visual hierarchy
 - ✅ **Partners Default Filter** - Active status selected by default
+- ✅ **Health Heatmap** - GitHub-style weekly status visualization
+  - 156 weeks (~3 years) of partner health history
+  - Sorting: Currently At Risk, Most Turbulent, Healthiest, Most Data
+  - Event delegation for 88k+ cells (optimized scroll performance)
+  - Module-level caching for view state persistence
+- ✅ **Computed Partner Status** - Calculate status from latest weekly data
+  - `src/lib/partners/computed-status.ts` - Status computation logic
+  - Extracts latest weekly status from `source_data` JSONB
+  - Maps weekly status → bucket → partner status value
+  - Compares computed vs sheet-derived status (mismatch indicator)
+  - API returns: `computed_status`, `computed_status_label`, `status_matches`
+  - Filters now work on computed status (from weekly data, not DB field)
+- ✅ **Partner List Refresh** - Manual refresh button in Partners page header
+  - Clears heatmap cache on refresh
+  - Re-fetches partner data with current filters
+- ✅ **Per-Partner Sync** - Sync single partner from Google Sheet
+  - API route: `POST /api/partners/[id]/sync`
+  - Finds partner row in source sheet by key field
+  - Updates only that partner's `source_data` and mapped fields
+  - Sync button in partner detail page header
 
 **Pending:**
 - ⚠️ Vercel staging deployment setup
