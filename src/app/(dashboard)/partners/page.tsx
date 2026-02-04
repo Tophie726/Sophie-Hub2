@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import Link from 'next/link'
 import { format, parseISO } from 'date-fns'
-import { Building2, Plus, Database, ChevronRight, Loader2, Settings2 } from 'lucide-react'
+import { Building2, Plus, Database, ChevronRight, Loader2, Settings2, List, LayoutGrid } from 'lucide-react'
 import { PageHeader } from '@/components/layout/page-header'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -13,6 +13,7 @@ import { StatusBadge } from '@/components/entities/status-badge'
 import { TierBadge } from '@/components/entities/tier-badge'
 import { WeeklyStatusPreview } from '@/components/partners/weekly-status-preview'
 import { HealthBarCompact } from '@/components/partners/health-bar-compact'
+import { HealthHeatmap } from '@/components/partners/health-heatmap'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -277,6 +278,8 @@ function PartnerRow({ partner, columns, visibleColumns }: {
   )
 }
 
+type ViewMode = 'list' | 'heatmap'
+
 export default function PartnersPage() {
   const [partners, setPartners] = useState<Partner[]>([])
   const [loading, setLoading] = useState(true)
@@ -285,6 +288,7 @@ export default function PartnersPage() {
   const initialLoadDone = useRef(false)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string[]>(['active']) // Default to Active partners
+  const [viewMode, setViewMode] = useState<ViewMode>('list')
   const [sort, setSort] = useState('brand_name')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
   const [total, setTotal] = useState(0)
@@ -374,7 +378,32 @@ export default function PartnersPage() {
         title="Partners"
         description={total > 0 ? `${total} partner brands` : 'View and manage all partner brands'}
       >
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
+          {/* View mode toggle */}
+          <div className="flex items-center bg-muted rounded-lg p-0.5">
+            <button
+              onClick={() => setViewMode('list')}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-all ${
+                viewMode === 'list'
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <List className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">List</span>
+            </button>
+            <button
+              onClick={() => setViewMode('heatmap')}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-all ${
+                viewMode === 'heatmap'
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <LayoutGrid className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Heatmap</span>
+            </button>
+          </div>
           <HealthBarCompact />
           <Button className="gap-2">
             <Plus className="h-4 w-4" />
@@ -399,11 +428,17 @@ export default function PartnersPage() {
       />
 
       <div className="p-6 md:p-8">
-        {loading ? (
+        {/* Heatmap View */}
+        {viewMode === 'heatmap' && (
+          <HealthHeatmap maxPartners={100} />
+        )}
+
+        {/* List View */}
+        {viewMode === 'list' && loading ? (
           <div className="rounded-xl border bg-card p-1">
             <ShimmerGrid variant="table" rows={10} columns={6} />
           </div>
-        ) : partners.length === 0 ? (
+        ) : viewMode === 'list' && partners.length === 0 ? (
           <Card className="border-dashed">
             <CardContent className="flex flex-col items-center justify-center py-16">
               <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-500/10 mb-6">
@@ -429,7 +464,7 @@ export default function PartnersPage() {
               )}
             </CardContent>
           </Card>
-        ) : (
+        ) : viewMode === 'list' ? (
           <>
             <div className={`rounded-xl border bg-card transition-opacity duration-150 ${isFiltering ? 'opacity-60' : ''}`}>
               {/* Sticky header row — sticks below the toolbar */}
@@ -519,7 +554,7 @@ export default function PartnersPage() {
               </div>
             )}
           </>
-        )}
+        ) : null}
       </div>
     </div>
   )

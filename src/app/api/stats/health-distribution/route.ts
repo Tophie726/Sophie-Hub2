@@ -1,6 +1,6 @@
 import { requireAuth } from '@/lib/auth/api-auth'
 import { getAdminClient } from '@/lib/supabase/admin'
-import { apiSuccess, apiError } from '@/lib/api/response'
+import { apiSuccess, apiError, ApiErrors } from '@/lib/api/response'
 import { BUCKET_COLORS, BUCKET_LABELS, STATUS_BUCKETS, type StatusColorBucket } from '@/lib/status-colors'
 
 interface StatusMapping {
