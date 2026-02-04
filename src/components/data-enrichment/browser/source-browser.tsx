@@ -119,9 +119,10 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
 
   // Sync preview state - now only shown on demand after background sync
   const [showSyncPreview, setShowSyncPreview] = useState(false)
-  const [_isLoadingSyncPreview, _setIsLoadingSyncPreview] = useState(false)
-  const [_previewResults, _setPreviewResults] = useState<TabPreviewResult[]>([])
-  void _isLoadingSyncPreview; void _setIsLoadingSyncPreview; void _previewResults; void _setPreviewResults // reserved for future use
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [isLoadingSyncPreview, _setIsLoadingSyncPreview] = useState(false)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [previewResults, _setPreviewResults] = useState<TabPreviewResult[]>([])
 
   // For new sources - store preview data until saved
   const [sheetPreviews, setSheetPreviews] = useState<Record<string, SheetPreview>>({})
