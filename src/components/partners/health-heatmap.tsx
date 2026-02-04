@@ -80,7 +80,7 @@ type SortOption = 'name' | 'current-risk' | 'turbulent' | 'healthiest' | 'recent
 
 const SORT_OPTIONS: { value: SortOption; label: string }[] = [
   { value: 'name', label: 'Name (A-Z)' },
-  { value: 'current-risk', label: 'Currently At Risk' },
+  { value: 'current-risk', label: 'Highest Risk First' },
   { value: 'turbulent', label: 'Most Turbulent' },
   { value: 'healthiest', label: 'Healthiest' },
   { value: 'recent-activity', label: 'Most Data' },

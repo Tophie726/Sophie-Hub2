@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
 import { toast } from 'sonner'
@@ -37,10 +37,16 @@ const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
 
 export default function PartnerDetailPage() {
   const { id } = useParams<{ id: string }>()
+  const searchParams = useSearchParams()
+
+  // Initialize tab from URL query param, default to 'overview'
+  const initialTab = (searchParams.get('tab') as TabId) || 'overview'
+  const validTab = TABS.some(t => t.id === initialTab) ? initialTab : 'overview'
+
   const [partner, setPartner] = useState<PartnerDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<TabId>('overview')
+  const [activeTab, setActiveTab] = useState<TabId>(validTab)
   const [isSyncing, setIsSyncing] = useState(false)
 
   const fetchPartner = useCallback(async () => {
