@@ -526,6 +526,22 @@ Reference fields encode which entity they point to, the match field, and storage
 
 **Field Alias Auto-Matching**: Each field definition supports an optional `aliases` array for fuzzy column name matching during the Map phase. When source columns are auto-matched to entity fields, the matcher checks `name`, `label`, and all `aliases` (case-insensitive). Example: a source column "Email Address" auto-matches to `client_email` via its alias.
 
+### Mapping Requirement: Category + Target Field
+
+**CRITICAL**: When a column is categorized as `partner`, `staff`, or `asin`, it MUST have a `target_field` set to be extracted to proper database columns during sync.
+
+- **Category only** (no target_field): Data is captured in `source_data` JSONB but NOT extracted to table columns
+- **Category + target_field**: Data is both captured in `source_data` AND extracted to the specified column
+
+**Auto-matching behavior:**
+- When user clicks category shortcut (e.g., "Partner"), the system auto-matches the source column name to a target field using aliases
+- If no match found, `target_field` remains null and a warning is shown on save
+- User should manually select a target field from the dropdown
+
+**Validation:**
+- On save, if any entity-category columns have no target_field, a warning toast is shown
+- The mapping still saves (for zero-data-loss), but user is informed that columns won't sync to proper fields
+
 ### Zero-Data-Loss Source Capture
 
 All entity tables (`partners`, `staff`, `asins`) have a `source_data` JSONB column that captures **every raw value** from every synced source row — including unmapped and skipped columns. This ensures no data is ever lost during import.

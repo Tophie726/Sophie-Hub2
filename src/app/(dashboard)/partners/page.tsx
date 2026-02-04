@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import Link from 'next/link'
 import { format, parseISO } from 'date-fns'
 import { Building2, Plus, Database, ChevronRight, Loader2, Settings2 } from 'lucide-react'
@@ -283,7 +283,7 @@ export default function PartnersPage() {
   const [loadingMore, setLoadingMore] = useState(false)
   const initialLoadDone = useRef(false)
   const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState<string[]>([])
+  const [statusFilter, setStatusFilter] = useState<string[]>(['active']) // Default to Active partners
   const [sort, setSort] = useState('brand_name')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
   const [total, setTotal] = useState(0)

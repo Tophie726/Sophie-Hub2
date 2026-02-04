@@ -574,6 +574,18 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
 
   // Clear draft when completing (both DB and localStorage)
   const handleCompleteWithClear = async () => {
+    // Warn about entity columns that have no target_field (they won't sync to proper columns)
+    const unmappedEntityCols = columns.filter(c =>
+      (c.category === 'partner' || c.category === 'staff' || c.category === 'asin') &&
+      !c.targetField
+    )
+    if (unmappedEntityCols.length > 0) {
+      toast.warning(`${unmappedEntityCols.length} column(s) categorized but not mapped to a field`, {
+        description: 'Data will be stored in source_data but won\'t sync to proper columns. Click a column to select a target field.',
+        duration: 6000,
+      })
+    }
+
     setIsSavingMapping(true)
 
     // IMPORTANT: Clear pending draft ref FIRST so the unmount handler doesn't re-save it
@@ -805,13 +817,34 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
     }
   }, [rawData, headerRow, draftRestored, columns.length])
 
+  // Helper to auto-match a source column name to a target field for an entity category
+  const autoMatchTargetField = (sourceColumn: string, category: ColumnCategory): string | null => {
+    const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '')
+    const entity = category === 'partner' ? 'partners' : category === 'staff' ? 'staff' : category === 'asin' ? 'asins' : null
+    if (!entity) return null
+
+    const fields = getFieldsForEntity(entity)
+    const normalizedSource = normalize(sourceColumn)
+
+    const match = fields.find(f => {
+      if (normalize(f.label) === normalizedSource || normalize(f.name) === normalizedSource) return true
+      if (f.aliases?.some(alias => normalize(alias) === normalizedSource)) return true
+      return false
+    })
+
+    return match?.name ?? null
+  }
+
   // Handlers
   const handleCategoryChange = (columnIndex: number, category: ColumnCategory) => {
     setColumnsHistory(prev => [...prev.slice(-19), columns]) // Keep last 20 states
     setColumns(prev => prev.map((col, idx) => {
       if (idx !== columnIndex) return col
-      // If changing category, reset isKey, computed config, and AI flags (manual override)
-      return { ...col, category, isKey: false, targetField: null, computedConfig: undefined, aiSuggested: undefined, aiConfidence: undefined }
+      // If changing to an entity category, try to auto-match a target field
+      const targetField = (category === 'partner' || category === 'staff' || category === 'asin')
+        ? autoMatchTargetField(col.sourceColumn, category)
+        : null
+      return { ...col, category, isKey: false, targetField, computedConfig: undefined, aiSuggested: undefined, aiConfidence: undefined }
     }))
   }
 
@@ -819,7 +852,11 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
     setColumnsHistory(prev => [...prev.slice(-19), columns]) // Keep last 20 states
     setColumns(prev => prev.map((col, idx) => {
       if (!indices.includes(idx)) return col
-      return { ...col, category, isKey: false, targetField: null, computedConfig: undefined, aiSuggested: undefined, aiConfidence: undefined }
+      // If changing to an entity category, try to auto-match a target field
+      const targetField = (category === 'partner' || category === 'staff' || category === 'asin')
+        ? autoMatchTargetField(col.sourceColumn, category)
+        : null
+      return { ...col, category, isKey: false, targetField, computedConfig: undefined, aiSuggested: undefined, aiConfidence: undefined }
     }))
   }
 

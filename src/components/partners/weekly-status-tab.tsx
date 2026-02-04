@@ -8,11 +8,9 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { CalendarDays, LayoutGrid, List } from 'lucide-react'
+import { Card, CardContent } from '@/components/ui/card'
+import { ChevronLeft, ChevronRight, LayoutGrid, List } from 'lucide-react'
 import {
-  getStatusColor,
   getStatusBucket,
   BUCKET_COLORS,
   BUCKET_LABELS,
@@ -27,31 +25,145 @@ interface WeeklyStatus {
 }
 
 interface WeeklyStatusTabProps {
-  /** Partner's weekly statuses from API (already sorted by date DESC) */
   statuses: WeeklyStatus[]
-  /** Partner's source_data for extracting additional weekly columns */
   sourceData?: Record<string, Record<string, Record<string, unknown>>> | null
 }
 
-type TimeRange = 'ytd' | '3mo' | '6mo' | '1yr' | 'all'
-type ViewMode = 'grid' | 'list'
+type ViewMode = 'calendar' | 'list'
 
-const TIME_RANGES: { value: TimeRange; label: string }[] = [
-  { value: 'ytd', label: 'YTD' },
-  { value: '3mo', label: '3 Months' },
-  { value: '6mo', label: '6 Months' },
-  { value: '1yr', label: '1 Year' },
-  { value: 'all', label: 'All' },
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April',
+  'May', 'June', 'July', 'August',
+  'September', 'October', 'November', 'December',
 ]
 
-// Get the Monday of a given date's week
-function getMonday(date: Date): Date {
-  const d = new Date(date)
-  const day = d.getDay()
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1)
-  d.setDate(diff)
-  d.setHours(0, 0, 0, 0)
-  return d
+const DAY_NAMES = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
+
+// Status color classes - full opacity for Wk column
+const STATUS_COLORS_FULL: Record<string, string> = {
+  // Healthy (green)
+  'on track': 'bg-green-500',
+  'healthy': 'bg-green-500',
+  'active': 'bg-green-500',
+  'good': 'bg-green-500',
+  'high performing': 'bg-green-500',
+  // Onboarding (blue)
+  'onboarding': 'bg-blue-500',
+  'new': 'bg-blue-500',
+  'ramping': 'bg-blue-500',
+  'subscribed': 'bg-blue-500',
+  'waiting to be onboarded': 'bg-blue-500',
+  // Warning (amber)
+  'needs attention': 'bg-amber-500',
+  'warning': 'bg-amber-500',
+  'at risk': 'bg-amber-500',
+  'attention': 'bg-amber-500',
+  'under-performing': 'bg-amber-500',
+  'underperforming': 'bg-amber-500',
+  'under performing': 'bg-amber-500',
+  'on track - unhappy': 'bg-amber-500',
+  // Paused (gray)
+  'paused': 'bg-gray-400',
+  'on hold': 'bg-gray-400',
+  'inactive': 'bg-gray-400',
+  // Offboarding (orange)
+  'offboarding': 'bg-orange-500',
+  'churning': 'bg-orange-500',
+  // Churned (red)
+  'churn': 'bg-red-500',
+  'churned': 'bg-red-500',
+  'cancelled': 'bg-red-500',
+  'lost': 'bg-red-500',
+}
+
+// Lighter versions for day cells (still visible, just slightly lighter than Wk)
+const STATUS_COLORS_LIGHT: Record<string, string> = {
+  'on track': 'bg-green-400', 'healthy': 'bg-green-400', 'active': 'bg-green-400',
+  'good': 'bg-green-400', 'high performing': 'bg-green-400',
+  'onboarding': 'bg-blue-400', 'new': 'bg-blue-400', 'ramping': 'bg-blue-400',
+  'subscribed': 'bg-blue-400', 'waiting to be onboarded': 'bg-blue-400',
+  'needs attention': 'bg-amber-400', 'warning': 'bg-amber-400', 'at risk': 'bg-amber-400',
+  'attention': 'bg-amber-400', 'under-performing': 'bg-amber-400',
+  'underperforming': 'bg-amber-400', 'under performing': 'bg-amber-400',
+  'on track - unhappy': 'bg-amber-400',
+  'paused': 'bg-gray-300', 'on hold': 'bg-gray-300', 'inactive': 'bg-gray-300',
+  'offboarding': 'bg-orange-400', 'churning': 'bg-orange-400',
+  'churn': 'bg-red-400', 'churned': 'bg-red-400', 'cancelled': 'bg-red-400', 'lost': 'bg-red-400',
+}
+
+// Faded versions for inherited (no data) weeks - Wk column (more visible)
+const STATUS_COLORS_FADED: Record<string, string> = {
+  'on track': 'bg-green-400/60', 'healthy': 'bg-green-400/60', 'active': 'bg-green-400/60',
+  'good': 'bg-green-400/60', 'high performing': 'bg-green-400/60',
+  'onboarding': 'bg-blue-400/60', 'new': 'bg-blue-400/60', 'ramping': 'bg-blue-400/60',
+  'subscribed': 'bg-blue-400/60', 'waiting to be onboarded': 'bg-blue-400/60',
+  'needs attention': 'bg-amber-400/60', 'warning': 'bg-amber-400/60', 'at risk': 'bg-amber-400/60',
+  'attention': 'bg-amber-400/60', 'under-performing': 'bg-amber-400/60',
+  'underperforming': 'bg-amber-400/60', 'under performing': 'bg-amber-400/60',
+  'on track - unhappy': 'bg-amber-400/60',
+  'paused': 'bg-gray-300/60', 'on hold': 'bg-gray-300/60', 'inactive': 'bg-gray-300/60',
+  'offboarding': 'bg-orange-400/60', 'churning': 'bg-orange-400/60',
+  'churn': 'bg-red-400/60', 'churned': 'bg-red-400/60', 'cancelled': 'bg-red-400/60', 'lost': 'bg-red-400/60',
+}
+
+// Faded for inherited days (still visible)
+const STATUS_COLORS_FADED_LIGHT: Record<string, string> = {
+  'on track': 'bg-green-300/50', 'healthy': 'bg-green-300/50', 'active': 'bg-green-300/50',
+  'good': 'bg-green-300/50', 'high performing': 'bg-green-300/50',
+  'onboarding': 'bg-blue-300/50', 'new': 'bg-blue-300/50', 'ramping': 'bg-blue-300/50',
+  'subscribed': 'bg-blue-300/50', 'waiting to be onboarded': 'bg-blue-300/50',
+  'needs attention': 'bg-amber-300/50', 'warning': 'bg-amber-300/50', 'at risk': 'bg-amber-300/50',
+  'attention': 'bg-amber-300/50', 'under-performing': 'bg-amber-300/50',
+  'underperforming': 'bg-amber-300/50', 'under performing': 'bg-amber-300/50',
+  'on track - unhappy': 'bg-amber-300/50',
+  'paused': 'bg-gray-200/50', 'on hold': 'bg-gray-200/50', 'inactive': 'bg-gray-200/50',
+  'offboarding': 'bg-orange-300/50', 'churning': 'bg-orange-300/50',
+  'churn': 'bg-red-300/50', 'churned': 'bg-red-300/50', 'cancelled': 'bg-red-300/50', 'lost': 'bg-red-300/50',
+}
+
+// Colors for days outside current month but still in colored week
+const STATUS_COLORS_OUTSIDE: Record<string, string> = {
+  'on track': 'bg-green-200/40', 'healthy': 'bg-green-200/40', 'active': 'bg-green-200/40',
+  'good': 'bg-green-200/40', 'high performing': 'bg-green-200/40',
+  'onboarding': 'bg-blue-200/40', 'new': 'bg-blue-200/40', 'ramping': 'bg-blue-200/40',
+  'subscribed': 'bg-blue-200/40', 'waiting to be onboarded': 'bg-blue-200/40',
+  'needs attention': 'bg-amber-200/40', 'warning': 'bg-amber-200/40', 'at risk': 'bg-amber-200/40',
+  'attention': 'bg-amber-200/40', 'under-performing': 'bg-amber-200/40',
+  'underperforming': 'bg-amber-200/40', 'under performing': 'bg-amber-200/40',
+  'on track - unhappy': 'bg-amber-200/40',
+  'paused': 'bg-gray-100/40', 'on hold': 'bg-gray-100/40', 'inactive': 'bg-gray-100/40',
+  'offboarding': 'bg-orange-200/40', 'churning': 'bg-orange-200/40',
+  'churn': 'bg-red-200/40', 'churned': 'bg-red-200/40', 'cancelled': 'bg-red-200/40', 'lost': 'bg-red-200/40',
+}
+
+function getStatusColorFull(status: string | null): string {
+  if (!status) return 'bg-muted'
+  const key = status.toLowerCase().trim()
+  return STATUS_COLORS_FULL[key] || 'bg-purple-500'
+}
+
+function getStatusColorLight(status: string | null): string {
+  if (!status) return ''
+  const key = status.toLowerCase().trim()
+  return STATUS_COLORS_LIGHT[key] || 'bg-purple-400/70'
+}
+
+function getStatusColorFaded(status: string | null): string {
+  if (!status) return 'bg-muted/30'
+  const key = status.toLowerCase().trim()
+  return STATUS_COLORS_FADED[key] || 'bg-purple-300/50'
+}
+
+function getStatusColorFadedLight(status: string | null): string {
+  if (!status) return ''
+  const key = status.toLowerCase().trim()
+  return STATUS_COLORS_FADED_LIGHT[key] || 'bg-purple-300/50'
+}
+
+function getStatusColorOutside(status: string | null): string {
+  if (!status) return ''
+  const key = status.toLowerCase().trim()
+  return STATUS_COLORS_OUTSIDE[key] || 'bg-purple-200/40'
 }
 
 // Format date as M/D/YY for lookup
@@ -62,25 +174,13 @@ function formatDateKey(date: Date): string {
   return `${m}/${d}/${y}`
 }
 
-// Format date nicely for display
-function formatDateDisplay(date: Date): string {
-  return date.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  })
-}
-
-// Get week number of the year
+// Get ISO week number
 function getWeekNumber(date: Date): number {
-  const firstDayOfYear = new Date(date.getFullYear(), 0, 1)
-  const pastDaysOfYear = (date.getTime() - firstDayOfYear.getTime()) / 86400000
-  return Math.ceil((pastDaysOfYear + firstDayOfYear.getDay() + 1) / 7)
-}
-
-// Get month name
-function getMonthName(date: Date): string {
-  return date.toLocaleDateString('en-US', { month: 'short' })
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()))
+  const dayNum = d.getUTCDay() || 7
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum)
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1))
+  return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7)
 }
 
 // Build lookup from source_data weekly columns
@@ -120,346 +220,439 @@ function buildSourceDataLookup(
 }
 
 // Build lookup from weekly_statuses table
-function buildStatusesLookup(
-  statuses: WeeklyStatus[]
-): Map<string, WeeklyStatus> {
+function buildStatusesLookup(statuses: WeeklyStatus[]): Map<string, WeeklyStatus> {
   const lookup = new Map<string, WeeklyStatus>()
-
   for (const ws of statuses) {
-    // week_start_date is ISO format like "2026-01-05"
     const date = new Date(ws.week_start_date)
     const key = formatDateKey(date)
     lookup.set(key, ws)
   }
-
   return lookup
 }
 
-interface WeekData {
+interface DayData {
   date: Date
-  dateKey: string
+  day: number
+  isCurrentMonth: boolean
+  isToday: boolean
+}
+
+interface WeekRowData {
   weekNumber: number
-  monthName: string
+  days: DayData[]
   status: string | null
+  inheritedStatus: string | null // Previous status when no data (only for past weeks)
   notes: string | null
-  isNewMonth: boolean
+  mondayDate: Date | null
+  hasData: boolean
+  isFuture: boolean // Week starts after today
+}
+
+function buildMonthCalendar(
+  year: number,
+  month: number,
+  statusLookup: Map<string, WeeklyStatus>,
+  sourceDataLookup: Map<string, { status: string; weekNumber: number }>,
+  lastKnownStatus: string | null
+): { weeks: WeekRowData[]; lastStatus: string | null } {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  const firstDay = new Date(year, month, 1)
+  const lastDay = new Date(year, month + 1, 0)
+
+  // Start from the Sunday before or on the first day
+  const startDate = new Date(firstDay)
+  startDate.setDate(startDate.getDate() - startDate.getDay())
+
+  const weeks: WeekRowData[] = []
+  const current = new Date(startDate)
+  let runningStatus = lastKnownStatus
+
+  while (current <= lastDay || current.getDay() !== 0) {
+    const weekDays: DayData[] = []
+    let weekMonday: Date | null = null
+    let weekStatus: string | null = null
+    let weekNotes: string | null = null
+    let hasData = false
+
+    for (let i = 0; i < 7; i++) {
+      const isCurrentMonth = current.getMonth() === month
+      const isMonday = current.getDay() === 1
+      const isToday = current.getTime() === today.getTime()
+
+      if (isMonday) {
+        weekMonday = new Date(current)
+        const key = formatDateKey(current)
+        const fromTable = statusLookup.get(key)
+        const fromSource = sourceDataLookup.get(key)
+        weekStatus = fromTable?.status || fromSource?.status || null
+        weekNotes = fromTable?.notes || null
+        hasData = weekStatus !== null
+
+        if (hasData) {
+          runningStatus = weekStatus
+        }
+      }
+
+      weekDays.push({
+        date: new Date(current),
+        day: current.getDate(),
+        isCurrentMonth,
+        isToday,
+      })
+
+      current.setDate(current.getDate() + 1)
+    }
+
+    // Only add weeks that have at least one day in the current month
+    if (weekDays.some(d => d.isCurrentMonth)) {
+      // Check if this week is in the future (Monday is after today)
+      const isFuture = weekMonday ? weekMonday > today : false
+
+      weeks.push({
+        weekNumber: weekDays[1] ? getWeekNumber(weekDays[1].date) : getWeekNumber(weekDays[0].date),
+        days: weekDays,
+        status: weekStatus,
+        // Only inherit status for past/current weeks, not future
+        inheritedStatus: (hasData || isFuture) ? null : runningStatus,
+        notes: weekNotes,
+        mondayDate: weekMonday,
+        hasData,
+        isFuture,
+      })
+    }
+
+    // Break if we've moved past the month
+    if (current.getMonth() > month && current.getFullYear() >= year) break
+    if (current.getFullYear() > year) break
+  }
+
+  return { weeks, lastStatus: runningStatus }
 }
 
 export function WeeklyStatusTab({ statuses, sourceData }: WeeklyStatusTabProps) {
-  const [timeRange, setTimeRange] = useState<TimeRange>('ytd')
-  const [viewMode, setViewMode] = useState<ViewMode>('grid')
+  const currentYear = new Date().getFullYear()
+  const [year, setYear] = useState(currentYear)
+  const [viewMode, setViewMode] = useState<ViewMode>('calendar')
 
-  // Build the display data
-  const { weeks, legendBuckets } = useMemo(() => {
-    const sourceDataLookup = buildSourceDataLookup(sourceData)
-    const statusesLookup = buildStatusesLookup(statuses)
+  const statusLookup = useMemo(() => buildStatusesLookup(statuses), [statuses])
+  const sourceDataLookup = useMemo(() => buildSourceDataLookup(sourceData), [sourceData])
 
-    // Determine date range
-    const today = new Date()
-    const thisMonday = getMonday(today)
-    let startDate: Date
+  // Build calendar data for all 12 months, tracking last known status
+  const monthsData = useMemo(() => {
+    const result: { name: string; weeks: WeekRowData[] }[] = []
+    let lastStatus: string | null = null
 
-    switch (timeRange) {
-      case 'ytd':
-        startDate = new Date(today.getFullYear(), 0, 1)
-        startDate = getMonday(startDate)
-        break
-      case '3mo':
-        startDate = new Date(thisMonday)
-        startDate.setMonth(startDate.getMonth() - 3)
-        break
-      case '6mo':
-        startDate = new Date(thisMonday)
-        startDate.setMonth(startDate.getMonth() - 6)
-        break
-      case '1yr':
-        startDate = new Date(thisMonday)
-        startDate.setFullYear(startDate.getFullYear() - 1)
-        break
-      case 'all':
-        // Find earliest data point
-        let earliest = thisMonday
-        for (const ws of statuses) {
-          const d = new Date(ws.week_start_date)
-          if (d < earliest) earliest = d
-        }
-        // Also check source_data dates
-        for (const key of Array.from(sourceDataLookup.keys())) {
-          const parts = key.split('/')
-          if (parts.length === 3) {
-            let year = parseInt(parts[2], 10)
-            if (year < 100) year += 2000
-            const d = new Date(year, parseInt(parts[0], 10) - 1, parseInt(parts[1], 10))
-            if (d < earliest) earliest = d
-          }
-        }
-        startDate = getMonday(earliest)
-        break
+    for (let i = 0; i < 12; i++) {
+      const { weeks, lastStatus: newLastStatus } = buildMonthCalendar(
+        year, i, statusLookup, sourceDataLookup, lastStatus
+      )
+      result.push({ name: MONTH_NAMES[i], weeks })
+      lastStatus = newLastStatus
     }
 
-    // Generate weeks from startDate to thisMonday
-    const result: WeekData[] = []
+    return result
+  }, [year, statusLookup, sourceDataLookup])
+
+  // Calculate legend stats for the year
+  const legendBuckets = useMemo(() => {
     const bucketCounts = new Map<StatusColorBucket, number>()
-    let lastMonth = ''
 
-    const current = new Date(startDate)
-    while (current <= thisMonday) {
-      const dateKey = formatDateKey(current)
-      const weekNum = getWeekNumber(current)
-      const monthName = getMonthName(current)
-      const isNewMonth = monthName !== lastMonth
-      lastMonth = monthName
-
-      // Prefer weekly_statuses table, fallback to source_data
-      const fromTable = statusesLookup.get(dateKey)
-      const fromSource = sourceDataLookup.get(dateKey)
-
-      const status = fromTable?.status || fromSource?.status || null
-      const notes = fromTable?.notes || null
-
-      result.push({
-        date: new Date(current),
-        dateKey,
-        weekNumber: fromSource?.weekNumber || weekNum,
-        monthName,
-        status,
-        notes,
-        isNewMonth,
-      })
-
-      // Count for legend
-      const bucket = getStatusBucket(status)
-      bucketCounts.set(bucket, (bucketCounts.get(bucket) || 0) + 1)
-
-      current.setDate(current.getDate() + 7)
+    for (const month of monthsData) {
+      for (const week of month.weeks) {
+        if (week.mondayDate && week.mondayDate.getFullYear() === year) {
+          const bucket = getStatusBucket(week.status)
+          bucketCounts.set(bucket, (bucketCounts.get(bucket) || 0) + 1)
+        }
+      }
     }
 
-    // Build legend (only show buckets that have data)
-    const legendBuckets: { bucket: StatusColorBucket; count: number }[] = []
     const orderedBuckets: StatusColorBucket[] = [
-      'healthy',
-      'onboarding',
-      'warning',
-      'paused',
-      'offboarding',
-      'churned',
-      'unknown',
-      'no-data',
+      'healthy', 'onboarding', 'warning', 'paused', 'offboarding', 'churned', 'unknown', 'no-data',
     ]
 
-    for (const bucket of orderedBuckets) {
-      const count = bucketCounts.get(bucket) || 0
-      if (count > 0) {
-        legendBuckets.push({ bucket, count })
-      }
-    }
+    return orderedBuckets
+      .filter(bucket => (bucketCounts.get(bucket) || 0) > 0)
+      .map(bucket => ({ bucket, count: bucketCounts.get(bucket) || 0 }))
+  }, [monthsData, year])
 
-    return { weeks: result, legendBuckets }
-  }, [statuses, sourceData, timeRange])
+  // Build list data
+  const listData = useMemo(() => {
+    const weeks: { date: Date; weekNumber: number; status: string | null; notes: string | null; hasData: boolean; inheritedStatus: string | null; isFuture: boolean }[] = []
 
-  // Group weeks by month for grid view
-  const monthGroups = useMemo(() => {
-    const groups: { month: string; year: number; weeks: WeekData[] }[] = []
-    let currentGroup: { month: string; year: number; weeks: WeekData[] } | null = null
-
-    for (const week of weeks) {
-      const monthYear = `${week.monthName} ${week.date.getFullYear()}`
-
-      if (!currentGroup || currentGroup.month !== week.monthName || currentGroup.year !== week.date.getFullYear()) {
-        currentGroup = {
-          month: week.monthName,
-          year: week.date.getFullYear(),
-          weeks: [],
+    for (const month of monthsData) {
+      for (const week of month.weeks) {
+        if (week.mondayDate && week.mondayDate.getFullYear() === year) {
+          const exists = weeks.some(w => w.date.getTime() === week.mondayDate!.getTime())
+          if (!exists) {
+            weeks.push({
+              date: week.mondayDate,
+              weekNumber: week.weekNumber,
+              status: week.status,
+              notes: week.notes,
+              hasData: week.hasData,
+              inheritedStatus: week.inheritedStatus,
+              isFuture: week.isFuture,
+            })
+          }
         }
-        groups.push(currentGroup)
       }
-
-      currentGroup.weeks.push(week)
     }
 
-    return groups
-  }, [weeks])
+    return weeks.sort((a, b) => b.date.getTime() - a.date.getTime())
+  }, [monthsData, year])
 
   return (
-    <div className="space-y-4">
-      {/* Controls */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        {/* Time Range Selector */}
-        <div className="flex items-center gap-1 bg-muted/50 rounded-lg p-1">
-          {TIME_RANGES.map(range => (
+    <TooltipProvider delayDuration={150}>
+      <div className="space-y-4">
+        {/* Controls */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          {/* Year Selector */}
+          <div className="flex items-center gap-2">
             <button
-              key={range.value}
-              onClick={() => setTimeRange(range.value)}
-              className={`
-                relative px-3 py-1.5 text-sm font-medium rounded-md transition-colors
-                ${timeRange === range.value
-                  ? 'text-foreground'
-                  : 'text-muted-foreground hover:text-foreground'
-                }
-              `}
+              onClick={() => setYear(y => y - 1)}
+              className="p-1.5 rounded-md hover:bg-muted transition-colors"
+              title="Previous year"
             >
-              {timeRange === range.value && (
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+            <span className="text-lg font-semibold tabular-nums min-w-[4rem] text-center">
+              {year}
+            </span>
+            <button
+              onClick={() => setYear(y => y + 1)}
+              disabled={year >= currentYear}
+              className="p-1.5 rounded-md hover:bg-muted transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              title="Next year"
+            >
+              <ChevronRight className="h-5 w-5" />
+            </button>
+          </div>
+
+          {/* View Mode Toggle */}
+          <div className="flex items-center gap-1 bg-muted/50 rounded-lg p-1">
+            <button
+              onClick={() => setViewMode('calendar')}
+              className={`
+                relative p-2 rounded-md transition-colors
+                ${viewMode === 'calendar' ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'}
+              `}
+              title="Calendar view"
+            >
+              {viewMode === 'calendar' && (
                 <motion.div
-                  layoutId="timeRangeIndicator"
+                  layoutId="viewModeIndicator"
                   className="absolute inset-0 bg-background shadow-sm rounded-md"
                   transition={{ type: 'spring', bounce: 0.15, duration: 0.4 }}
                 />
               )}
-              <span className="relative z-10">{range.label}</span>
+              <LayoutGrid className="relative z-10 h-4 w-4" />
             </button>
+            <button
+              onClick={() => setViewMode('list')}
+              className={`
+                relative p-2 rounded-md transition-colors
+                ${viewMode === 'list' ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'}
+              `}
+              title="List view"
+            >
+              {viewMode === 'list' && (
+                <motion.div
+                  layoutId="viewModeIndicator"
+                  className="absolute inset-0 bg-background shadow-sm rounded-md"
+                  transition={{ type: 'spring', bounce: 0.15, duration: 0.4 }}
+                />
+              )}
+              <List className="relative z-10 h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Legend */}
+        <div className="flex flex-wrap items-center gap-4 text-xs">
+          {legendBuckets.map(({ bucket, count }) => (
+            <div key={bucket} className="flex items-center gap-1.5">
+              <div className={`w-3 h-3 rounded-sm ${BUCKET_COLORS[bucket]}`} />
+              <span className="text-muted-foreground">
+                {BUCKET_LABELS[bucket]} ({count})
+              </span>
+            </div>
           ))}
         </div>
 
-        {/* View Mode Toggle */}
-        <div className="flex items-center gap-1 bg-muted/50 rounded-lg p-1">
-          <button
-            onClick={() => setViewMode('grid')}
-            className={`
-              relative p-2 rounded-md transition-colors
-              ${viewMode === 'grid'
-                ? 'text-foreground'
-                : 'text-muted-foreground hover:text-foreground'
-              }
-            `}
-            title="Grid view"
-          >
-            {viewMode === 'grid' && (
-              <motion.div
-                layoutId="viewModeIndicator"
-                className="absolute inset-0 bg-background shadow-sm rounded-md"
-                transition={{ type: 'spring', bounce: 0.15, duration: 0.4 }}
-              />
-            )}
-            <LayoutGrid className="relative z-10 h-4 w-4" />
-          </button>
-          <button
-            onClick={() => setViewMode('list')}
-            className={`
-              relative p-2 rounded-md transition-colors
-              ${viewMode === 'list'
-                ? 'text-foreground'
-                : 'text-muted-foreground hover:text-foreground'
-              }
-            `}
-            title="List view"
-          >
-            {viewMode === 'list' && (
-              <motion.div
-                layoutId="viewModeIndicator"
-                className="absolute inset-0 bg-background shadow-sm rounded-md"
-                transition={{ type: 'spring', bounce: 0.15, duration: 0.4 }}
-              />
-            )}
-            <List className="relative z-10 h-4 w-4" />
-          </button>
-        </div>
-      </div>
-
-      {/* Legend */}
-      <div className="flex flex-wrap items-center gap-4 text-xs">
-        {legendBuckets.map(({ bucket, count }) => (
-          <div key={bucket} className="flex items-center gap-1.5">
-            <div className={`w-3 h-3 rounded-sm ${BUCKET_COLORS[bucket]}`} />
-            <span className="text-muted-foreground">
-              {BUCKET_LABELS[bucket]} ({count})
-            </span>
-          </div>
-        ))}
-      </div>
-
-      {/* Content */}
-      {viewMode === 'grid' ? (
-        <Card>
-          <CardContent className="pt-6">
-            <TooltipProvider delayDuration={150}>
-              <div className="space-y-4">
-                {monthGroups.map((group, gi) => (
-                  <div key={`${group.month}-${group.year}`} className="space-y-2">
-                    {/* Month label */}
-                    <div className="text-xs font-medium text-muted-foreground">
-                      {group.month} {group.year}
+        {/* Calendar View */}
+        {viewMode === 'calendar' && (
+          <Card>
+            <CardContent className="pt-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                {monthsData.map((month) => (
+                  <div key={month.name} className="space-y-2">
+                    {/* Month Header */}
+                    <div className="text-sm font-semibold text-center text-primary">
+                      {month.name}
                     </div>
-                    {/* Week blocks */}
-                    <div className="flex flex-wrap gap-1">
-                      {group.weeks.map((week, wi) => (
-                        <Tooltip key={week.dateKey}>
-                          <TooltipTrigger asChild>
-                            <motion.div
-                              initial={false}
-                              whileHover={{ scale: 1.2 }}
-                              className={`
-                                w-4 h-4 rounded-sm cursor-default
-                                ${getStatusColor(week.status)}
-                              `}
-                            />
-                          </TooltipTrigger>
-                          <TooltipContent side="top" className="text-xs max-w-[200px]">
-                            <div className="font-medium">Week {week.weekNumber}</div>
-                            <div className="text-muted-foreground">
-                              {formatDateDisplay(week.date)}
-                            </div>
-                            <div className={week.status ? 'font-medium mt-1' : 'text-muted-foreground mt-1'}>
-                              {week.status || 'No data'}
-                            </div>
-                            {week.notes && (
-                              <div className="text-muted-foreground mt-1 border-t border-border/50 pt-1">
-                                {week.notes}
+
+                    {/* Calendar Grid */}
+                    <div className="text-[10px]">
+                      {/* Day headers */}
+                      <div className="grid grid-cols-8 gap-px mb-1">
+                        <div className="text-muted-foreground text-center font-medium">Wk</div>
+                        {DAY_NAMES.map(day => (
+                          <div key={day} className="text-muted-foreground text-center font-medium">
+                            {day}
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Week rows */}
+                      {month.weeks.map((week, weekIndex) => {
+                        // Future weeks should show no color (even if they have inherited status)
+                        const effectiveStatus = week.isFuture ? null : (week.status || week.inheritedStatus)
+                        const isInherited = !week.hasData && !week.isFuture && week.inheritedStatus
+
+                        return (
+                          <Tooltip key={weekIndex}>
+                            <TooltipTrigger asChild>
+                              <div className="grid grid-cols-8 gap-px rounded-sm cursor-default">
+                                {/* Week number - darkest */}
+                                <div className={`
+                                  text-center py-0.5 rounded-l-sm font-medium
+                                  ${isInherited
+                                    ? `${getStatusColorFaded(effectiveStatus)} text-foreground/60`
+                                    : effectiveStatus
+                                      ? `${getStatusColorFull(effectiveStatus)} text-white`
+                                      : 'text-muted-foreground'
+                                  }
+                                `}>
+                                  {week.weekNumber}
+                                </div>
+
+                                {/* Days - lighter */}
+                                {week.days.map((day, dayIndex) => {
+                                  // Determine day styling based on month membership and status
+                                  let dayClass = ''
+                                  if (!day.isCurrentMonth) {
+                                    // Days outside current month - show faint status color if week has status
+                                    if (effectiveStatus) {
+                                      dayClass = `${getStatusColorOutside(effectiveStatus)} text-foreground/30`
+                                    } else {
+                                      dayClass = 'text-muted-foreground/30'
+                                    }
+                                  } else if (isInherited) {
+                                    // Current month, inherited status
+                                    dayClass = `${getStatusColorFadedLight(effectiveStatus)} text-foreground/70`
+                                  } else if (effectiveStatus) {
+                                    // Current month, actual status
+                                    dayClass = `${getStatusColorLight(effectiveStatus)} text-white`
+                                  }
+
+                                  return (
+                                    <div
+                                      key={dayIndex}
+                                      className={`
+                                        text-center py-0.5
+                                        ${dayIndex === 6 ? 'rounded-r-sm' : ''}
+                                        ${day.isToday ? 'font-bold ring-1 ring-primary ring-inset rounded-sm' : ''}
+                                        ${dayClass}
+                                      `}
+                                    >
+                                      {day.day}
+                                    </div>
+                                  )
+                                })}
                               </div>
-                            )}
-                          </TooltipContent>
-                        </Tooltip>
-                      ))}
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="text-xs max-w-[200px]">
+                              <div className="font-medium">Week {week.weekNumber}</div>
+                              {week.mondayDate && (
+                                <div className="text-muted-foreground">
+                                  {week.mondayDate.toLocaleDateString('en-US', {
+                                    month: 'short',
+                                    day: 'numeric',
+                                    year: 'numeric',
+                                  })}
+                                </div>
+                              )}
+                              <div className={week.status ? 'font-medium mt-1' : 'text-muted-foreground mt-1'}>
+                                {week.isFuture
+                                  ? 'Future'
+                                  : week.status || (isInherited ? `No data (was: ${week.inheritedStatus})` : 'No data')
+                                }
+                              </div>
+                              {week.notes && (
+                                <div className="text-muted-foreground mt-1 border-t border-border/50 pt-1">
+                                  {week.notes}
+                                </div>
+                              )}
+                            </TooltipContent>
+                          </Tooltip>
+                        )
+                      })}
                     </div>
                   </div>
                 ))}
               </div>
-            </TooltipProvider>
-          </CardContent>
-        </Card>
-      ) : (
-        <Card>
-          <CardContent className="pt-0">
-            <div className="divide-y divide-border/60">
-              {/* Reverse to show most recent first in list view */}
-              {[...weeks].reverse().map(week => (
-                <div
-                  key={week.dateKey}
-                  className="flex items-center gap-3 py-3 first:pt-6"
-                >
-                  {/* Color indicator */}
-                  <div className={`w-2 h-8 rounded-sm shrink-0 ${getStatusColor(week.status)}`} />
+            </CardContent>
+          </Card>
+        )}
 
-                  {/* Date */}
-                  <div className="w-32 shrink-0">
-                    <div className="text-sm font-medium">Week {week.weekNumber}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {formatDateDisplay(week.date)}
-                    </div>
-                  </div>
+        {/* List View */}
+        {viewMode === 'list' && (
+          <Card>
+            <CardContent className="pt-0">
+              <div className="divide-y divide-border/60">
+                {listData.map(week => {
+                  // Future weeks show no color
+                  const effectiveStatus = week.isFuture ? null : (week.status || week.inheritedStatus)
+                  const isInherited = !week.hasData && !week.isFuture && week.inheritedStatus
 
-                  {/* Status */}
-                  <div className="flex-1 min-w-0">
-                    <div className={`text-sm ${week.status ? '' : 'text-muted-foreground'}`}>
-                      {week.status || 'No data'}
-                    </div>
-                    {week.notes && (
-                      <div className="text-xs text-muted-foreground truncate">
-                        {week.notes}
+                  return (
+                    <div
+                      key={week.date.toISOString()}
+                      className="flex items-center gap-3 py-3 first:pt-6"
+                    >
+                      <div className={`w-2 h-8 rounded-sm shrink-0 ${
+                        isInherited
+                          ? getStatusColorFaded(effectiveStatus)
+                          : getStatusColorFull(effectiveStatus)
+                      }`} />
+                      <div className="w-32 shrink-0">
+                        <div className="text-sm font-medium">Week {week.weekNumber}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {week.date.toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric',
+                          })}
+                        </div>
                       </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+                      <div className="flex-1 min-w-0">
+                        <div className={`text-sm ${week.status ? '' : 'text-muted-foreground'}`}>
+                          {week.isFuture
+                            ? 'Future'
+                            : week.status || (isInherited ? `(was: ${week.inheritedStatus})` : 'No data')
+                          }
+                        </div>
+                        {week.notes && (
+                          <div className="text-xs text-muted-foreground truncate">
+                            {week.notes}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
-      {/* Summary */}
-      <div className="text-xs text-muted-foreground text-center">
-        Showing {weeks.length} weeks
-        {timeRange === 'ytd' && ` (${new Date().getFullYear()} year to date)`}
+        {/* Summary */}
+        <div className="text-xs text-muted-foreground text-center">
+          {year} Calendar • {listData.filter(w => w.hasData).length} weeks with data
+        </div>
       </div>
-    </div>
+    </TooltipProvider>
   )
 }
