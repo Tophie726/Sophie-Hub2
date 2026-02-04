@@ -215,8 +215,8 @@ export function HealthHeatmap({ statusFilter = [], search = '' }: HealthHeatmapP
     !(heatmapCache.filterKey === filterKey && heatmapCache.partners)
   )
   const [error, setError] = useState<string | null>(null)
-  const [_total, _setTotal] = useState(0)
-  void _total; void _setTotal // reserved for pagination
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [total, setTotal] = useState(0)
   const [sortBy, setSortByState] = useState<SortOption>(() =>
     (heatmapCache.sortBy as SortOption) || 'name'
   )
