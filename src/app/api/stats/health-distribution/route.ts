@@ -1,12 +1,42 @@
 import { requireAuth } from '@/lib/auth/api-auth'
 import { getAdminClient } from '@/lib/supabase/admin'
-import { apiSuccess, apiError, ApiErrors } from '@/lib/api/response'
-import { BUCKET_COLORS, BUCKET_LABELS, type StatusColorBucket } from '@/lib/status-colors'
+import { apiSuccess, apiError } from '@/lib/api/response'
+import { BUCKET_COLORS, BUCKET_LABELS, STATUS_BUCKETS, type StatusColorBucket } from '@/lib/status-colors'
 
 interface StatusMapping {
   status_pattern: string
   bucket: string
   priority: number
+}
+
+/**
+ * Get fallback mappings from hardcoded STATUS_BUCKETS
+ * Used when database table doesn't exist
+ */
+function getFallbackMappings(): StatusMapping[] {
+  const priorityMap: Record<string, number> = {
+    churned: 100,
+    offboarding: 90,
+    warning: 80,
+    paused: 70,
+    onboarding: 60,
+    healthy: 50,
+  }
+
+  const mappings: StatusMapping[] = []
+  for (const [bucket, keywords] of Object.entries(STATUS_BUCKETS)) {
+    for (const pattern of keywords) {
+      mappings.push({
+        status_pattern: pattern,
+        bucket,
+        priority: priorityMap[bucket] || 50,
+      })
+    }
+  }
+
+  // Sort by priority descending
+  mappings.sort((a, b) => b.priority - a.priority)
+  return mappings
 }
 
 /**
@@ -92,14 +122,19 @@ export async function GET() {
     const supabase = getAdminClient()
 
     // Get all active status mappings, sorted by priority
-    const { data: mappings, error: mappingsError } = await supabase
+    // Falls back to hardcoded mappings if table doesn't exist
+    let mappings: StatusMapping[] = []
+    const { data: dbMappings, error: mappingsError } = await supabase
       .from('status_color_mappings')
       .select('status_pattern, bucket, priority')
       .eq('is_active', true)
       .order('priority', { ascending: false })
 
     if (mappingsError) {
-      return ApiErrors.database(mappingsError.message)
+      console.warn('status_color_mappings table not available, using fallback:', mappingsError.message)
+      mappings = getFallbackMappings()
+    } else {
+      mappings = dbMappings || getFallbackMappings()
     }
 
     // Get all partners with source_data and status
