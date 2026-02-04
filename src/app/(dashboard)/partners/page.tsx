@@ -12,6 +12,7 @@ import { EntityListToolbar } from '@/components/entities/entity-list-toolbar'
 import { StatusBadge } from '@/components/entities/status-badge'
 import { TierBadge } from '@/components/entities/tier-badge'
 import { WeeklyStatusPreview } from '@/components/partners/weekly-status-preview'
+import { HealthBarCompact } from '@/components/partners/health-bar-compact'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -373,10 +374,13 @@ export default function PartnersPage() {
         title="Partners"
         description={total > 0 ? `${total} partner brands` : 'View and manage all partner brands'}
       >
-        <Button className="gap-2">
-          <Plus className="h-4 w-4" />
-          <span className="hidden sm:inline">Add Partner</span>
-        </Button>
+        <div className="flex items-center gap-4">
+          <HealthBarCompact />
+          <Button className="gap-2">
+            <Plus className="h-4 w-4" />
+            <span className="hidden sm:inline">Add Partner</span>
+          </Button>
+        </div>
       </PageHeader>
 
       <EntityListToolbar
