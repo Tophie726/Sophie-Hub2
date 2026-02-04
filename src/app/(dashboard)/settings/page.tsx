@@ -20,7 +20,9 @@ import {
   User,
   Palette,
   ExternalLink,
+  Paintbrush,
 } from 'lucide-react'
+import { StatusMappingSettings } from '@/components/settings/status-mapping-settings'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
@@ -386,6 +388,26 @@ export default function SettingsPage() {
             <p className="text-xs text-muted-foreground mt-3 px-1">
               API keys are encrypted at rest. Only administrators can access this section.
             </p>
+          </section>
+        )}
+
+        {/* Admin: Status Mappings Section */}
+        {isAdmin && (
+          <section>
+            <div className="flex items-center gap-2 mb-4">
+              <Paintbrush className="h-4 w-4 text-orange-500" />
+              <h2 className="text-sm font-medium text-orange-600 dark:text-orange-400 uppercase tracking-wide">Status Color Mappings</h2>
+              <span className="text-[10px] uppercase tracking-wider bg-orange-100 dark:bg-orange-950 text-orange-600 dark:text-orange-400 px-1.5 py-0.5 rounded font-medium">Admin</span>
+            </div>
+            <div className="rounded-xl bg-card border border-orange-200/50 dark:border-orange-900/30 shadow-sm p-6">
+              <div className="mb-4">
+                <h3 className="text-sm font-medium">Partner Status Colors</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Configure which status text patterns map to which color buckets in the weekly status view.
+                </p>
+              </div>
+              <StatusMappingSettings />
+            </div>
           </section>
         )}
       </div>

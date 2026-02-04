@@ -183,3 +183,120 @@ export function findUnmappedStatuses(statuses: (string | null)[]): string[] {
 
   return Array.from(unmapped).sort()
 }
+
+// =============================================================================
+// Database-backed async functions (for server-side use)
+// =============================================================================
+
+import { getAdminClient } from '@/lib/supabase/admin'
+import {
+  getCachedMappings,
+  setCachedMappings,
+  type StatusMapping,
+} from '@/lib/status-colors/cache'
+
+export type { StatusMapping }
+
+/**
+ * Fetch status mappings from database with caching
+ * Server-side only - uses admin client
+ */
+export async function getStatusMappings(): Promise<StatusMapping[]> {
+  // Check cache first
+  const cached = getCachedMappings()
+  if (cached) return cached
+
+  // Fetch from database
+  const supabase = getAdminClient()
+  const { data: mappings, error } = await supabase
+    .from('status_color_mappings')
+    .select('id, status_pattern, bucket, priority, is_system_default, is_active')
+    .eq('is_active', true)
+    .order('priority', { ascending: false })
+
+  if (error) {
+    console.error('Failed to fetch status mappings:', error)
+    // Fallback to hardcoded mappings converted to StatusMapping format
+    return convertHardcodedMappings()
+  }
+
+  const result = mappings || []
+  setCachedMappings(result)
+  return result
+}
+
+/**
+ * Convert hardcoded STATUS_BUCKETS to StatusMapping[] format
+ * Used as fallback when database is unavailable
+ */
+function convertHardcodedMappings(): StatusMapping[] {
+  const priorityMap: Record<string, number> = {
+    churned: 100,
+    offboarding: 90,
+    warning: 80,
+    paused: 70,
+    onboarding: 60,
+    healthy: 50,
+  }
+
+  const mappings: StatusMapping[] = []
+  let id = 0
+
+  for (const [bucket, keywords] of Object.entries(STATUS_BUCKETS)) {
+    for (const pattern of keywords) {
+      mappings.push({
+        id: `fallback-${id++}`,
+        status_pattern: pattern,
+        bucket,
+        priority: priorityMap[bucket] || 50,
+        is_system_default: true,
+        is_active: true,
+      })
+    }
+  }
+
+  // Sort by priority descending
+  mappings.sort((a, b) => b.priority - a.priority)
+  return mappings
+}
+
+/**
+ * Get the color bucket for a status string using database mappings
+ * Server-side only - async function
+ */
+export async function getStatusBucketAsync(status: string | null): Promise<StatusColorBucket> {
+  if (!status || !status.trim()) return 'no-data'
+
+  const s = status.toLowerCase().trim()
+  const mappings = await getStatusMappings()
+
+  // Mappings are sorted by priority DESC
+  for (const mapping of mappings) {
+    if (s.includes(mapping.status_pattern)) {
+      return mapping.bucket as StatusColorBucket
+    }
+  }
+
+  return 'unknown'
+}
+
+/**
+ * Get the color bucket using pre-fetched mappings (no DB call)
+ * Use when you've already fetched mappings and need to bucket multiple statuses
+ */
+export function getStatusBucketWithMappings(
+  status: string | null,
+  mappings: StatusMapping[]
+): StatusColorBucket {
+  if (!status || !status.trim()) return 'no-data'
+
+  const s = status.toLowerCase().trim()
+
+  for (const mapping of mappings) {
+    if (s.includes(mapping.status_pattern)) {
+      return mapping.bucket as StatusColorBucket
+    }
+  }
+
+  return 'unknown'
+}

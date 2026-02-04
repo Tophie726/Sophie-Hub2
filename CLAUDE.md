@@ -312,6 +312,13 @@ Many Google Sheets have headers on rows other than row 0 (e.g., Master Client Da
 - ✅ **Upsert logic** - Uses ON CONFLICT for graceful duplicate handling
 - ✅ **Duplicate cleanup** - Removed 1100+ duplicate records
 - ✅ **Node 20** - Added .nvmrc, removed Supabase deprecation warning
+- ✅ **Partner Health Dashboard** - Health distribution card on dashboard with stacked bar
+- ✅ **Status Color Mappings** - Admin-configurable status→bucket mappings in Settings
+  - Database table: `status_color_mappings` with seed defaults
+  - API routes: CRUD at `/api/admin/status-mappings`, unmapped discovery
+  - Settings UI: Table with add/edit/delete, quick-map for unmapped statuses
+  - Auto-discovery of unmapped statuses from partner source_data
+  - Weekly status tab refactored to use centralized bucket-based colors
 
 **Pending:**
 - ⚠️ Apply unique constraint migration (run SQL in Supabase Dashboard)

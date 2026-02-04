@@ -14,6 +14,7 @@ import {
   Loader2,
 } from 'lucide-react'
 import Link from 'next/link'
+import { HealthDistributionCard } from '@/components/dashboard/health-distribution-card'
 
 interface TableStats {
   partners: { count: number; fields: string[] }
@@ -158,6 +159,11 @@ export default function DashboardPage() {
               </Card>
             </Link>
           </div>
+
+          {/* Partner Health Distribution */}
+          {(stats?.partners.count ?? 0) > 0 && (
+            <HealthDistributionCard />
+          )}
 
           {/* Data Enrichment Progress */}
           {dataSources.length > 0 && (

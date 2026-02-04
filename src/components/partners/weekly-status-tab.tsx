@@ -39,131 +39,100 @@ const MONTH_NAMES = [
 
 const DAY_NAMES = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
 
-// Status color classes - full opacity for Wk column
-const STATUS_COLORS_FULL: Record<string, string> = {
-  // Healthy (green)
-  'on track': 'bg-green-500',
-  'healthy': 'bg-green-500',
-  'active': 'bg-green-500',
-  'good': 'bg-green-500',
-  'high performing': 'bg-green-500',
-  // Onboarding (blue)
-  'onboarding': 'bg-blue-500',
-  'new': 'bg-blue-500',
-  'ramping': 'bg-blue-500',
-  'subscribed': 'bg-blue-500',
-  'waiting to be onboarded': 'bg-blue-500',
-  // Warning (amber)
-  'needs attention': 'bg-amber-500',
-  'warning': 'bg-amber-500',
-  'at risk': 'bg-amber-500',
-  'attention': 'bg-amber-500',
-  'under-performing': 'bg-amber-500',
-  'underperforming': 'bg-amber-500',
-  'under performing': 'bg-amber-500',
-  'on track - unhappy': 'bg-amber-500',
-  // Paused (gray)
-  'paused': 'bg-gray-400',
-  'on hold': 'bg-gray-400',
-  'inactive': 'bg-gray-400',
-  // Offboarding (orange)
-  'offboarding': 'bg-orange-500',
-  'churning': 'bg-orange-500',
-  // Churned (red)
-  'churn': 'bg-red-500',
-  'churned': 'bg-red-500',
-  'cancelled': 'bg-red-500',
-  'lost': 'bg-red-500',
+// =============================================================================
+// Centralized bucket-based color variants
+// Uses getStatusBucket() for consistent mapping, then applies visual variants
+// =============================================================================
+
+type ColorVariant = 'full' | 'light' | 'faded' | 'fadedLight' | 'outside'
+
+// Color classes for each bucket at different intensity levels
+const BUCKET_COLOR_VARIANTS: Record<StatusColorBucket, Record<ColorVariant, string>> = {
+  healthy: {
+    full: 'bg-green-500',
+    light: 'bg-green-400',
+    faded: 'bg-green-400/60',
+    fadedLight: 'bg-green-300/50',
+    outside: 'bg-green-200/40',
+  },
+  onboarding: {
+    full: 'bg-blue-500',
+    light: 'bg-blue-400',
+    faded: 'bg-blue-400/60',
+    fadedLight: 'bg-blue-300/50',
+    outside: 'bg-blue-200/40',
+  },
+  warning: {
+    full: 'bg-amber-500',
+    light: 'bg-amber-400',
+    faded: 'bg-amber-400/60',
+    fadedLight: 'bg-amber-300/50',
+    outside: 'bg-amber-200/40',
+  },
+  paused: {
+    full: 'bg-gray-400',
+    light: 'bg-gray-300',
+    faded: 'bg-gray-300/60',
+    fadedLight: 'bg-gray-200/50',
+    outside: 'bg-gray-100/40',
+  },
+  offboarding: {
+    full: 'bg-orange-500',
+    light: 'bg-orange-400',
+    faded: 'bg-orange-400/60',
+    fadedLight: 'bg-orange-300/50',
+    outside: 'bg-orange-200/40',
+  },
+  churned: {
+    full: 'bg-red-500',
+    light: 'bg-red-400',
+    faded: 'bg-red-400/60',
+    fadedLight: 'bg-red-300/50',
+    outside: 'bg-red-200/40',
+  },
+  unknown: {
+    full: 'bg-purple-500',
+    light: 'bg-purple-400',
+    faded: 'bg-purple-400/60',
+    fadedLight: 'bg-purple-300/50',
+    outside: 'bg-purple-200/40',
+  },
+  'no-data': {
+    full: 'bg-muted',
+    light: '',
+    faded: 'bg-muted/30',
+    fadedLight: '',
+    outside: '',
+  },
 }
 
-// Lighter versions for day cells (still visible, just slightly lighter than Wk)
-const STATUS_COLORS_LIGHT: Record<string, string> = {
-  'on track': 'bg-green-400', 'healthy': 'bg-green-400', 'active': 'bg-green-400',
-  'good': 'bg-green-400', 'high performing': 'bg-green-400',
-  'onboarding': 'bg-blue-400', 'new': 'bg-blue-400', 'ramping': 'bg-blue-400',
-  'subscribed': 'bg-blue-400', 'waiting to be onboarded': 'bg-blue-400',
-  'needs attention': 'bg-amber-400', 'warning': 'bg-amber-400', 'at risk': 'bg-amber-400',
-  'attention': 'bg-amber-400', 'under-performing': 'bg-amber-400',
-  'underperforming': 'bg-amber-400', 'under performing': 'bg-amber-400',
-  'on track - unhappy': 'bg-amber-400',
-  'paused': 'bg-gray-300', 'on hold': 'bg-gray-300', 'inactive': 'bg-gray-300',
-  'offboarding': 'bg-orange-400', 'churning': 'bg-orange-400',
-  'churn': 'bg-red-400', 'churned': 'bg-red-400', 'cancelled': 'bg-red-400', 'lost': 'bg-red-400',
+/**
+ * Get color class for a status using bucket-based lookup
+ */
+function getStatusColor(status: string | null, variant: ColorVariant): string {
+  const bucket = getStatusBucket(status)
+  return BUCKET_COLOR_VARIANTS[bucket][variant]
 }
 
-// Faded versions for inherited (no data) weeks - Wk column (more visible)
-const STATUS_COLORS_FADED: Record<string, string> = {
-  'on track': 'bg-green-400/60', 'healthy': 'bg-green-400/60', 'active': 'bg-green-400/60',
-  'good': 'bg-green-400/60', 'high performing': 'bg-green-400/60',
-  'onboarding': 'bg-blue-400/60', 'new': 'bg-blue-400/60', 'ramping': 'bg-blue-400/60',
-  'subscribed': 'bg-blue-400/60', 'waiting to be onboarded': 'bg-blue-400/60',
-  'needs attention': 'bg-amber-400/60', 'warning': 'bg-amber-400/60', 'at risk': 'bg-amber-400/60',
-  'attention': 'bg-amber-400/60', 'under-performing': 'bg-amber-400/60',
-  'underperforming': 'bg-amber-400/60', 'under performing': 'bg-amber-400/60',
-  'on track - unhappy': 'bg-amber-400/60',
-  'paused': 'bg-gray-300/60', 'on hold': 'bg-gray-300/60', 'inactive': 'bg-gray-300/60',
-  'offboarding': 'bg-orange-400/60', 'churning': 'bg-orange-400/60',
-  'churn': 'bg-red-400/60', 'churned': 'bg-red-400/60', 'cancelled': 'bg-red-400/60', 'lost': 'bg-red-400/60',
-}
-
-// Faded for inherited days (still visible)
-const STATUS_COLORS_FADED_LIGHT: Record<string, string> = {
-  'on track': 'bg-green-300/50', 'healthy': 'bg-green-300/50', 'active': 'bg-green-300/50',
-  'good': 'bg-green-300/50', 'high performing': 'bg-green-300/50',
-  'onboarding': 'bg-blue-300/50', 'new': 'bg-blue-300/50', 'ramping': 'bg-blue-300/50',
-  'subscribed': 'bg-blue-300/50', 'waiting to be onboarded': 'bg-blue-300/50',
-  'needs attention': 'bg-amber-300/50', 'warning': 'bg-amber-300/50', 'at risk': 'bg-amber-300/50',
-  'attention': 'bg-amber-300/50', 'under-performing': 'bg-amber-300/50',
-  'underperforming': 'bg-amber-300/50', 'under performing': 'bg-amber-300/50',
-  'on track - unhappy': 'bg-amber-300/50',
-  'paused': 'bg-gray-200/50', 'on hold': 'bg-gray-200/50', 'inactive': 'bg-gray-200/50',
-  'offboarding': 'bg-orange-300/50', 'churning': 'bg-orange-300/50',
-  'churn': 'bg-red-300/50', 'churned': 'bg-red-300/50', 'cancelled': 'bg-red-300/50', 'lost': 'bg-red-300/50',
-}
-
-// Colors for days outside current month but still in colored week
-const STATUS_COLORS_OUTSIDE: Record<string, string> = {
-  'on track': 'bg-green-200/40', 'healthy': 'bg-green-200/40', 'active': 'bg-green-200/40',
-  'good': 'bg-green-200/40', 'high performing': 'bg-green-200/40',
-  'onboarding': 'bg-blue-200/40', 'new': 'bg-blue-200/40', 'ramping': 'bg-blue-200/40',
-  'subscribed': 'bg-blue-200/40', 'waiting to be onboarded': 'bg-blue-200/40',
-  'needs attention': 'bg-amber-200/40', 'warning': 'bg-amber-200/40', 'at risk': 'bg-amber-200/40',
-  'attention': 'bg-amber-200/40', 'under-performing': 'bg-amber-200/40',
-  'underperforming': 'bg-amber-200/40', 'under performing': 'bg-amber-200/40',
-  'on track - unhappy': 'bg-amber-200/40',
-  'paused': 'bg-gray-100/40', 'on hold': 'bg-gray-100/40', 'inactive': 'bg-gray-100/40',
-  'offboarding': 'bg-orange-200/40', 'churning': 'bg-orange-200/40',
-  'churn': 'bg-red-200/40', 'churned': 'bg-red-200/40', 'cancelled': 'bg-red-200/40', 'lost': 'bg-red-200/40',
-}
-
+// Convenience wrappers for different visual contexts
 function getStatusColorFull(status: string | null): string {
-  if (!status) return 'bg-muted'
-  const key = status.toLowerCase().trim()
-  return STATUS_COLORS_FULL[key] || 'bg-purple-500'
+  return getStatusColor(status, 'full')
 }
 
 function getStatusColorLight(status: string | null): string {
-  if (!status) return ''
-  const key = status.toLowerCase().trim()
-  return STATUS_COLORS_LIGHT[key] || 'bg-purple-400/70'
+  return getStatusColor(status, 'light')
 }
 
 function getStatusColorFaded(status: string | null): string {
-  if (!status) return 'bg-muted/30'
-  const key = status.toLowerCase().trim()
-  return STATUS_COLORS_FADED[key] || 'bg-purple-300/50'
+  return getStatusColor(status, 'faded')
 }
 
 function getStatusColorFadedLight(status: string | null): string {
-  if (!status) return ''
-  const key = status.toLowerCase().trim()
-  return STATUS_COLORS_FADED_LIGHT[key] || 'bg-purple-300/50'
+  return getStatusColor(status, 'fadedLight')
 }
 
 function getStatusColorOutside(status: string | null): string {
-  if (!status) return ''
-  const key = status.toLowerCase().trim()
-  return STATUS_COLORS_OUTSIDE[key] || 'bg-purple-200/40'
+  return getStatusColor(status, 'outside')
 }
 
 // Format date as M/D/YY for lookup
