@@ -11,12 +11,10 @@ import { NextResponse } from 'next/server'
 import { bigQueryConnector } from '@/lib/connectors/bigquery'
 import { requireRole } from '@/lib/auth/api-auth'
 import { apiSuccess, ApiErrors } from '@/lib/api/response'
-
-// Server-side in-memory cache for client names
-// BigQuery queries are expensive (~15s), cache for 10 minutes
-const CACHE_TTL = 10 * 60 * 1000 // 10 minutes
-let cachedClientNames: string[] | null = null
-let cacheTimestamp = 0
+import {
+  getCachedClientNames,
+  setCachedClientNames,
+} from '@/lib/connectors/bigquery-cache'
 
 export async function GET() {
   try {
@@ -26,13 +24,13 @@ export async function GET() {
       return authResult
     }
 
-    // Check server-side cache first
-    const now = Date.now()
-    if (cachedClientNames && (now - cacheTimestamp) < CACHE_TTL) {
+    // Check shared server-side cache first
+    const cached = getCachedClientNames()
+    if (cached) {
       console.log('[BigQuery client-names] Serving from cache')
       const response = apiSuccess({
-        clientNames: cachedClientNames,
-        count: cachedClientNames.length,
+        clientNames: cached,
+        count: cached.length,
         cached: true
       })
       response.headers.set('Cache-Control', 'private, max-age=300')
@@ -48,9 +46,8 @@ export async function GET() {
 
     const clientNames = await bigQueryConnector.getClientNames(config)
 
-    // Update server cache
-    cachedClientNames = clientNames
-    cacheTimestamp = now
+    // Update shared cache
+    setCachedClientNames(clientNames)
     console.log(`[BigQuery client-names] Cached ${clientNames.length} names`)
 
     // Add Cache-Control header for browser caching too

@@ -26,6 +26,7 @@ import { TierBadge } from '@/components/entities/tier-badge'
 import { FieldGroupSection } from '@/components/entities/field-group-section'
 import { StaffAssignmentCard } from '@/components/entities/staff-assignment-card'
 import { WeeklyStatusTab } from '@/components/partners/weekly-status-tab'
+import { BigQueryDataPanel } from '@/components/data-enrichment/bigquery/bigquery-data-panel'
 import type { PartnerDetail } from '@/types/entities'
 import type { FieldLineageMap } from '@/types/lineage'
 
@@ -330,6 +331,9 @@ export default function PartnerDetailPage() {
                   )}
                 </CardContent>
               </Card>
+
+              {/* BigQuery Data */}
+              <BigQueryDataPanel partnerId={id} />
             </div>
           )}
 
