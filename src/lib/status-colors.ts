@@ -1,3 +1,7 @@
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('status-colors')
+
 /**
  * Weekly Status Color Configuration
  *
@@ -222,7 +226,7 @@ export async function getStatusMappings(): Promise<StatusMapping[]> {
     .order('priority', { ascending: false })
 
   if (error) {
-    console.error('Failed to fetch status mappings:', error)
+    log.error('Failed to fetch status mappings', error)
     // Fallback to hardcoded mappings converted to StatusMapping format
     return convertHardcodedMappings()
   }

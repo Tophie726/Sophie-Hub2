@@ -1,6 +1,9 @@
 import { NextAuthOptions } from 'next-auth'
 import { JWT } from 'next-auth/jwt'
 import GoogleProvider from 'next-auth/providers/google'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('auth')
 
 // Helper to refresh the access token
 async function refreshAccessToken(token: JWT) {
@@ -33,7 +36,7 @@ async function refreshAccessToken(token: JWT) {
       refreshToken: refreshedTokens.refresh_token ?? token.refreshToken,
     }
   } catch (error) {
-    console.error('Error refreshing access token:', error)
+    log.error('Error refreshing access token', error)
     return {
       ...token,
       error: 'RefreshAccessTokenError',

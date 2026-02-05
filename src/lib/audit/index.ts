@@ -6,6 +6,10 @@
  */
 
 import { getAdminClient } from '@/lib/supabase/admin'
+import { createLogger } from '@/lib/logger'
+import { API } from '@/lib/constants'
+
+const log = createLogger('audit')
 
 // =============================================================================
 // Types
@@ -95,13 +99,13 @@ class AuditService {
 
       if (error) {
         // Log to console but don't throw - audit failures shouldn't break operations
-        console.error('Audit log error:', error)
+        log.error('Audit log error', error)
         return null
       }
 
       return data.id
     } catch (error) {
-      console.error('Audit log exception:', error)
+      log.error('Audit log exception', error)
       return null
     }
   }
@@ -175,7 +179,7 @@ class AuditService {
    * Get recent audit logs
    */
   async getRecent(
-    limit: number = 50,
+    limit: number = API.AUDIT_LOG_LIMIT,
     filters?: {
       action?: AuditAction
       resourceType?: AuditResourceType
@@ -205,7 +209,7 @@ class AuditService {
     const { data, error } = await query
 
     if (error) {
-      console.error('Error fetching audit logs:', error)
+      log.error('Error fetching audit logs', error)
       return []
     }
 
@@ -218,7 +222,7 @@ class AuditService {
   async getForResource(
     resourceType: AuditResourceType,
     resourceId: string,
-    limit: number = 20
+    limit: number = API.RESOURCE_AUDIT_LIMIT
   ) {
     return this.getRecent(limit, { resourceType, resourceId })
   }

@@ -2,17 +2,14 @@ import { exec } from 'child_process'
 import { promisify } from 'util'
 import * as fs from 'fs/promises'
 import * as path from 'path'
+import { createLogger } from '@/lib/logger'
+import { AI } from '@/lib/constants'
 
 const execAsync = promisify(exec)
+const log = createLogger('codebase-context')
 
 // Project root - adjust if needed
 const PROJECT_ROOT = process.cwd()
-
-// Max file size to include (avoid huge files)
-const MAX_FILE_SIZE = 50000 // 50KB
-
-// Max total context size
-const MAX_TOTAL_CONTEXT = 100000 // 100KB
 
 interface FileContext {
   path: string
@@ -69,7 +66,7 @@ export async function getProjectStructure(): Promise<string> {
 
     return lines.join('\n')
   } catch (error) {
-    console.error('Failed to get project structure:', error)
+    log.error('Failed to get project structure', error)
     return 'Unable to fetch project structure'
   }
 }
@@ -98,8 +95,8 @@ async function readSourceFile(filePath: string): Promise<FileContext | null> {
     let content = await fs.readFile(fullPath, 'utf-8')
     let truncated = false
 
-    if (content.length > MAX_FILE_SIZE) {
-      content = content.slice(0, MAX_FILE_SIZE) + '\n\n... [truncated]'
+    if (content.length > AI.MAX_FILE_SIZE) {
+      content = content.slice(0, AI.MAX_FILE_SIZE) + '\n\n... [truncated]'
       truncated = true
     }
 
@@ -109,7 +106,7 @@ async function readSourceFile(filePath: string): Promise<FileContext | null> {
       truncated,
     }
   } catch (error) {
-    console.error(`Failed to read file ${filePath}:`, error)
+    log.error(`Failed to read file ${filePath}`, error)
     return null
   }
 }
@@ -117,7 +114,7 @@ async function readSourceFile(filePath: string): Promise<FileContext | null> {
 /**
  * Search for files matching a pattern using grep (fallback from git grep)
  */
-async function searchFiles(pattern: string, limit = 5): Promise<string[]> {
+async function searchFiles(pattern: string, limit: number = AI.SEARCH_FILE_LIMIT): Promise<string[]> {
   try {
     // First try git grep, then fall back to grep
     const { stdout } = await execAsync(
@@ -178,7 +175,7 @@ export async function getCodebaseContextForBug(options: {
 
   const filesToRead = new Set<string>()
 
-  console.log('[codebase-context] Getting context for bug:', {
+  log.info('Getting context for bug', {
     hasPageUrl: !!pageUrl,
     hasErrorStack: !!errorStack,
     descriptionLength: description?.length || 0,
@@ -220,7 +217,7 @@ export async function getCodebaseContextForBug(options: {
           filesToRead.add(file)
         }
       } catch (error) {
-        console.error(`[codebase-context] Search failed for ${keyword}:`, error)
+        log.error(`Search failed for ${keyword}`, error)
       }
     }
   }
@@ -230,10 +227,10 @@ export async function getCodebaseContextForBug(options: {
   let totalSize = 0
   const filesToReadArray = Array.from(filesToRead)
 
-  console.log('[codebase-context] Files to read:', filesToReadArray.length)
+  log.debug(`Files to read: ${filesToReadArray.length}`)
 
   for (const filePath of filesToReadArray) {
-    if (totalSize >= MAX_TOTAL_CONTEXT) break
+    if (totalSize >= AI.MAX_TOTAL_CONTEXT) break
 
     try {
       const fileContext = await readSourceFile(filePath)
@@ -242,7 +239,7 @@ export async function getCodebaseContextForBug(options: {
         totalSize += fileContext.content.length
       }
     } catch (error) {
-      console.error(`[codebase-context] Failed to read ${filePath}:`, error)
+      log.error(`Failed to read ${filePath}`, error)
     }
   }
 
@@ -251,11 +248,11 @@ export async function getCodebaseContextForBug(options: {
   try {
     projectStructure = await getProjectStructure()
   } catch (error) {
-    console.error('[codebase-context] Failed to get project structure:', error)
+    log.error('Failed to get project structure', error)
     projectStructure = 'Unable to fetch project structure'
   }
 
-  console.log('[codebase-context] Context ready:', files.length, 'files,', totalSize, 'bytes')
+  log.info('Context ready', { fileCount: files.length, totalSize })
 
   return {
     files,
@@ -331,7 +328,7 @@ export async function getCodebaseContextForFeature(options: {
   const filesToReadArray = Array.from(filesToRead)
 
   for (const filePath of filesToReadArray) {
-    if (totalSize >= MAX_TOTAL_CONTEXT) break
+    if (totalSize >= AI.MAX_TOTAL_CONTEXT) break
 
     const fileContext = await readSourceFile(filePath)
     if (fileContext) {

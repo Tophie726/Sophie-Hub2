@@ -9,6 +9,9 @@ import Anthropic from '@anthropic-ai/sdk'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { getAnthropicApiKey } from '@/lib/settings'
 import { getSchemaDescription } from '@/lib/entity-fields'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('ai:mapping')
 
 // =============================================================================
 // Types
@@ -207,7 +210,7 @@ export class MappingAssistantSDK {
         const suggestion = await this.suggestColumnMapping(column, siblingNames)
         suggestions.set(column.position, suggestion)
       } catch (error) {
-        console.error(`AI suggestion failed for column ${column.name}:`, error)
+        log.error(`AI suggestion failed for column ${column.name}`, error)
         // Continue with other columns
       }
 

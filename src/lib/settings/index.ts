@@ -1,5 +1,8 @@
 import { getAdminClient } from '@/lib/supabase/admin'
 import { decrypt } from '@/lib/encryption'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('settings')
 
 /**
  * Get a system setting value by key.
@@ -21,7 +24,7 @@ export async function getSystemSetting(key: string): Promise<string | null> {
         // Not found
         return null
       }
-      console.error(`Failed to fetch setting ${key}:`, error)
+      log.error(`Failed to fetch setting ${key}`, error)
       return null
     }
 
@@ -34,14 +37,14 @@ export async function getSystemSetting(key: string): Promise<string | null> {
       try {
         return decrypt(data.value)
       } catch (decryptError) {
-        console.error(`Failed to decrypt setting ${key}:`, decryptError)
+        log.error(`Failed to decrypt setting ${key}`, decryptError)
         return null
       }
     }
 
     return data.value
   } catch (error) {
-    console.error(`Error fetching setting ${key}:`, error)
+    log.error(`Error fetching setting ${key}`, error)
     return null
   }
 }

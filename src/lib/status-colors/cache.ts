@@ -6,8 +6,9 @@
  * cleared on page refresh.
  */
 
-// Cache TTL: 5 minutes
-const CACHE_TTL = 5 * 60 * 1000
+import { CACHE } from '@/lib/constants'
+
+const CACHE_TTL = CACHE.STATUS_COLORS_TTL
 
 export interface StatusMapping {
   id: string

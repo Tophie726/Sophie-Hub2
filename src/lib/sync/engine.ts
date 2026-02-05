@@ -8,6 +8,8 @@
 import { getAdminClient } from '@/lib/supabase/admin'
 import { getConnector, type GoogleSheetConnectorConfig } from '@/lib/connectors'
 import { audit } from '@/lib/audit'
+import { createLogger } from '@/lib/logger'
+import { SYNC } from '@/lib/constants'
 import { applyTransform } from './transforms'
 import type {
   SyncOptions,
@@ -21,6 +23,8 @@ import type {
 } from './types'
 import type { EntityType } from '@/types/entities'
 import { matchesPattern, type ColumnPatternMatchConfig } from '@/types/enrichment'
+
+const log = createLogger('sync-engine')
 
 // =============================================================================
 // Sync Engine Class
@@ -49,7 +53,7 @@ export class SyncEngine {
 
     if (runningSync) {
       const startedAt = new Date(runningSync.started_at).toLocaleTimeString()
-      console.log(`[SyncEngine] Sync already running for tab ${tabMappingId} (started ${startedAt})`)
+      log.warn(`Sync already running for tab ${tabMappingId}`, { startedAt })
       return {
         success: false,
         syncRunId: runningSync.id,
@@ -209,7 +213,7 @@ export class SyncEngine {
         results.push(result)
       } catch (error) {
         // Log error but continue with other tabs
-        console.error(`Sync failed for tab ${tab.id}:`, error)
+        log.error(`Sync failed for tab ${tab.id}`, error)
         results.push({
           success: false,
           syncRunId: '',
@@ -323,7 +327,7 @@ export class SyncEngine {
       ? sourceData.rows.slice(0, options.rowLimit)
       : sourceData.rows
 
-    console.log(`[SyncEngine] Processing ${rowsToProcess.length} rows...`)
+    log.info(`Processing ${rowsToProcess.length} rows`)
 
     // OPTIMIZATION: Batch lookup - fetch all existing records in one query
     // instead of querying per-row (N queries → 1 query)
@@ -331,21 +335,21 @@ export class SyncEngine {
       .map(row => row[keyColumnIndex]?.trim())
       .filter(Boolean)
 
-    console.log(`[SyncEngine] Batch lookup: fetching ${allKeyValues.length} existing records...`)
+    log.info(`Batch lookup: fetching ${allKeyValues.length} existing records`)
     const existingMap = await this.batchFindExisting(
       config.tabMapping.primary_entity,
       keyMapping.target_field,
       allKeyValues
     )
-    console.log(`[SyncEngine] Found ${existingMap.size} existing records`)
+    log.info(`Found ${existingMap.size} existing records`)
 
     for (let i = 0; i < rowsToProcess.length; i++) {
       const row = rowsToProcess[i]
       const rowNumber = i + 2 // 1-indexed + header row
 
       // Progress logging every 500 rows (faster now, so less frequent)
-      if (i > 0 && i % 500 === 0) {
-        console.log(`[SyncEngine] Processed ${i}/${rowsToProcess.length} rows...`)
+      if (i > 0 && i % SYNC.PROGRESS_LOG_INTERVAL === 0) {
+        log.debug(`Processed ${i}/${rowsToProcess.length} rows`)
       }
 
       try {
@@ -531,9 +535,8 @@ export class SyncEngine {
 
     try {
       // Supabase has a limit on query size, so batch in chunks of 500
-      const chunkSize = 500
-      for (let i = 0; i < keyValues.length; i += chunkSize) {
-        const chunk = keyValues.slice(i, i + chunkSize)
+      for (let i = 0; i < keyValues.length; i += SYNC.LOOKUP_CHUNK_SIZE) {
+        const chunk = keyValues.slice(i, i + SYNC.LOOKUP_CHUNK_SIZE)
 
         // Use 'in' filter for batch lookup
         const { data, error } = await this.supabase
@@ -542,7 +545,7 @@ export class SyncEngine {
           .in(keyField, chunk)
 
         if (error) {
-          console.error(`[SyncEngine] batchFindExisting error:`, error.message)
+          log.error('batchFindExisting error', error.message)
           continue
         }
 
@@ -556,7 +559,7 @@ export class SyncEngine {
         }
       }
     } catch (err) {
-      console.error(`[SyncEngine] batchFindExisting exception:`, err)
+      log.error('batchFindExisting exception', err)
     }
 
     return resultMap
@@ -575,13 +578,13 @@ export class SyncEngine {
         .maybeSingle() // Use maybeSingle instead of single to avoid error on no match
 
       if (error) {
-        console.error(`[SyncEngine] findExisting error for ${keyValue}:`, error.message)
+        log.error(`findExisting error for ${keyValue}`, error.message)
         return null
       }
 
       return data
     } catch (err) {
-      console.error(`[SyncEngine] findExisting exception for ${keyValue}:`, err)
+      log.error(`findExisting exception for ${keyValue}`, err)
       return null
     }
   }
@@ -615,15 +618,14 @@ export class SyncEngine {
       }))
 
       const keyField = creates[0].keyField
-      const totalBatches = Math.ceil(createRecords.length / 50)
+      const totalBatches = Math.ceil(createRecords.length / SYNC.UPSERT_BATCH_SIZE)
 
-      console.log(`[SyncEngine] Creating ${creates.length} records in ${totalBatches} batches`)
+      log.info(`Creating ${creates.length} records in ${totalBatches} batches`)
 
-      // Insert in batches of 50, capturing returned IDs
-      for (let i = 0; i < createRecords.length; i += 50) {
-        const batch = createRecords.slice(i, i + 50)
-        const batchChanges = creates.slice(i, i + 50)
-        const batchNum = Math.floor(i/50) + 1
+      for (let i = 0; i < createRecords.length; i += SYNC.UPSERT_BATCH_SIZE) {
+        const batch = createRecords.slice(i, i + SYNC.UPSERT_BATCH_SIZE)
+        const batchChanges = creates.slice(i, i + SYNC.UPSERT_BATCH_SIZE)
+        const batchNum = Math.floor(i / SYNC.UPSERT_BATCH_SIZE) + 1
 
         // Use upsert to handle duplicates gracefully (update if exists, insert if not)
         const { data: inserted, error } = await this.supabase
@@ -635,18 +637,18 @@ export class SyncEngine {
           .select('*')
 
         if (batchNum === 1 || error) {
-          console.log(`[SyncEngine] Batch ${batchNum} result - data: ${inserted?.length ?? 'null'}, error: ${error ? error.message : 'null'}`)
+          log.info(`Batch ${batchNum} result`, { insertedCount: inserted?.length ?? null, error: error?.message ?? null })
         }
 
         if (error) {
-          console.error('[SyncEngine] Batch insert error:', error)
+          log.error('Batch insert error', error)
           // Mark failed batch changes as skipped
           for (const change of batchChanges) {
             change.type = 'skip'
             change.skipReason = `Insert failed: ${error.message}`
           }
         } else if (inserted && inserted.length > 0) {
-          console.log(`[SyncEngine] Successfully inserted ${inserted.length} records`)
+          log.info(`Successfully inserted ${inserted.length} records`)
           // Map returned IDs back to EntityChange objects for lineage
           for (const record of inserted as Record<string, unknown>[]) {
             const keyValue = String(record[keyField] || '')
@@ -657,8 +659,8 @@ export class SyncEngine {
           }
         } else {
           // RLS might have blocked the insert - empty array means nothing was written
-          console.error(`[SyncEngine] Insert returned empty array (RLS block?) - batch of ${batch.length} records not inserted`)
-          console.error(`[SyncEngine] First record in failed batch:`, JSON.stringify(batch[0], null, 2))
+          log.error(`Insert returned empty array (RLS block?) - batch of ${batch.length} records not inserted`)
+          log.error('First record in failed batch', batch[0])
           // Mark failed batch changes as skipped
           for (const change of batchChanges) {
             change.type = 'skip'
@@ -689,7 +691,7 @@ export class SyncEngine {
         .ilike(update.keyField, update.keyValue)
 
       if (error) {
-        console.error('Update error:', error)
+        log.error('Update error', error)
       }
     }
 

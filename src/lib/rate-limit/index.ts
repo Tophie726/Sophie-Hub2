@@ -8,6 +8,8 @@
  * For production with multiple servers, consider Redis-based implementation.
  */
 
+import { CACHE } from '@/lib/constants'
+
 // =============================================================================
 // Types
 // =============================================================================
@@ -171,7 +173,7 @@ class RateLimiter {
    */
   private cleanup(): void {
     const now = Date.now()
-    const maxAge = 10 * 60 * 1000 // 10 minutes
+    const maxAge = CACHE.RATE_LIMIT_CLEANUP
 
     // Convert to array to avoid iterator issues
     const entries = Array.from(this.store.entries())

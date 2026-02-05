@@ -1,4 +1,7 @@
 import { google } from 'googleapis'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('google:sheets')
 
 export interface GoogleSheet {
   id: string
@@ -88,7 +91,7 @@ export async function getSheetPreview(
       spreadsheetId,
       range: 'A1:Z6',
     }).catch((error) => {
-      console.error('Error fetching preview data:', error)
+      log.error('Error fetching preview data', error)
       return null
     }),
   ])

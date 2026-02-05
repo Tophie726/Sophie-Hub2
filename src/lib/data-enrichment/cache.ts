@@ -7,8 +7,9 @@
  * Pattern: Similar to SmartMapper's rawDataCache, but for sources/previews.
  */
 
-// Default TTL: 5 minutes
-const DEFAULT_TTL = 5 * 60 * 1000
+import { CACHE } from '@/lib/constants'
+
+const DEFAULT_TTL = CACHE.DEFAULT_TTL
 
 interface CacheEntry<T> {
   data: T
