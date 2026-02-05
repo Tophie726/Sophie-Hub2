@@ -676,7 +676,7 @@ export function HealthHeatmap({ statusFilter = [], search = '' }: HealthHeatmapP
                         )}
                         style={{ width: count * (cellSize + cellGap) }}
                       >
-                        Q{quarter} '{String(year).slice(-2)}
+                        Q{quarter} &apos;{String(year).slice(-2)}
                       </div>
                     )
                   })}

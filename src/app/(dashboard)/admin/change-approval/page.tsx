@@ -1,7 +1,6 @@
 'use client'
 
 import { Suspense, useState, useEffect, useCallback } from 'react'
-import Link from 'next/link'
 import { PageHeader } from '@/components/layout/page-header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -11,13 +10,10 @@ import {
   CheckCircle2,
   XCircle,
   Database,
-  ArrowRight,
   Loader2,
-  RefreshCw,
   Users,
   Package,
   ChevronDown,
-  AlertCircle,
   HelpCircle,
 } from 'lucide-react'
 import { WorkflowCard } from '@/components/help'
@@ -206,7 +202,6 @@ function ChangeApprovalContent() {
             entitiesLoading={entitiesLoading}
             syncingEntities={syncingEntities}
             onSyncEntity={handleSyncEntity}
-            onRefresh={fetchEntities}
             showHelp={showHelp}
             onCloseHelp={() => toggleHelp(false)}
           />
@@ -222,7 +217,6 @@ interface ApprovalHubProps {
   entitiesLoading: boolean
   syncingEntities: Set<string>
   onSyncEntity: (entity: SyncableEntity) => void
-  onRefresh: () => void
   showHelp: boolean
   onCloseHelp: () => void
 }
@@ -233,7 +227,6 @@ function ApprovalHub({
   entitiesLoading,
   syncingEntities,
   onSyncEntity,
-  onRefresh,
   showHelp,
   onCloseHelp,
 }: ApprovalHubProps) {
@@ -296,7 +289,7 @@ function ApprovalHub({
           <h3 className="text-lg font-medium mb-2">No Changes Pending</h3>
           <p className="text-sm text-muted-foreground text-center max-w-md">
             All synced data has been reviewed. When new changes are detected from
-            your data sources, they'll appear here for approval.
+            your data sources, they&apos;ll appear here for approval.
           </p>
         </CardContent>
       </Card>
