@@ -1184,6 +1184,39 @@ interface HelpDocContent {
 
 ---
 
+## Feedback & Error Tracking
+
+Sophie Hub has an integrated feedback system for bug reports, feature requests, and error tracking.
+
+**Full documentation:** See `docs/FEEDBACK-SYSTEM.md`
+
+### Quick Overview
+
+| Component | Purpose |
+|-----------|---------|
+| PostHog | Session replay, error tracking, analytics |
+| Feedback Button | In-app bug/feature reporting |
+| `/admin/feedback` | Admin dashboard for triage |
+| Error Logs | Auto-captured JS errors |
+
+### PostHog MCP Integration
+
+PostHog has an official MCP server for Claude Code:
+
+```bash
+# Add PostHog MCP to Claude Code
+npx @anthropic-ai/claude-code mcp add posthog
+```
+
+This allows debugging errors directly in Claude Code with session context.
+
+### Separation of Concerns
+
+- **ClickUp** = Team project management, sprint planning
+- **Sophie Hub Feedback** = User-reported bugs, feature requests, error logs
+
+---
+
 ## Commands
 
 ```bash
