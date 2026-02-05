@@ -355,7 +355,7 @@ function RowsView() {
           const c = colors[product.color]
           const Icon = product.icon
           return (
-            <div key={product.id} className="flex items-center gap-4 px-5 py-3.5 hover:bg-muted/30 transition-colors">
+            <div key={product.id} className="flex items-center gap-3 md:gap-4 px-4 md:px-5 py-4 md:py-3.5 hover:bg-muted/30 transition-colors">
               <div className={cn('flex h-9 w-9 items-center justify-center rounded-lg shrink-0', c.bg)}>
                 <Icon className={cn('h-4 w-4', c.text)} />
               </div>
@@ -670,7 +670,7 @@ export default function ProductsPage() {
                   type="button"
                   onClick={() => setView(v.id)}
                   className={cn(
-                    'relative px-3 py-1.5 text-xs font-medium rounded-md transition-colors',
+                    'relative px-3 py-2 md:py-1.5 text-xs font-medium rounded-md transition-colors',
                     active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
                   )}
                 >
@@ -692,7 +692,7 @@ export default function ProductsPage() {
         </LayoutGroup>
       </PageHeader>
 
-      <div className="p-6 md:p-8">
+      <div className="p-4 md:p-8">
         <div className={cn(
           view === 'composition' ? 'max-w-5xl' : 'max-w-3xl',
           'mx-auto'

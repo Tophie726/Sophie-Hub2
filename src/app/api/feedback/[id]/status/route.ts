@@ -1,6 +1,6 @@
 import { getAdminClient } from '@/lib/supabase/admin'
 import { requireRole } from '@/lib/auth/api-auth'
-import { apiSuccess, ApiErrors } from '@/lib/api/response'
+import { apiSuccess, apiValidationError, ApiErrors } from '@/lib/api/response'
 import { ROLES } from '@/lib/auth/roles'
 import { z } from 'zod'
 
@@ -28,7 +28,7 @@ export async function PATCH(
     const validation = StatusUpdateSchema.safeParse(body)
 
     if (!validation.success) {
-      return ApiErrors.validation(validation.error.errors.map(e => e.message).join(', '))
+      return apiValidationError(validation.error)
     }
 
     const { status } = validation.data

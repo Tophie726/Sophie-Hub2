@@ -554,9 +554,11 @@ export function HealthHeatmap({ statusFilter = [], search = '' }: HealthHeatmapP
     })
   }, [heatmapData, weeks])
 
-  const cellSize = 12 // pixels
+  // Responsive sizing - larger on mobile for touch targets
+  const isMobile = weeksToShow === WEEKS_MOBILE
+  const cellSize = isMobile ? 14 : 12 // pixels
   const cellGap = 2
-  const nameColWidth = 180
+  const nameColWidth = isMobile ? 120 : 180
 
   if (isLoading) {
     return <HeatmapShimmer />
@@ -576,16 +578,17 @@ export function HealthHeatmap({ statusFilter = [], search = '' }: HealthHeatmapP
   return (
     <TooltipProvider delayDuration={0}>
       {/* Header with controls */}
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-muted-foreground">
-            {partners.length} partners • {weeksToShow} weeks
+      <div className="flex items-center justify-between mb-3 gap-2">
+        <div className="flex items-center gap-2 md:gap-3 min-w-0">
+          <span className="text-xs md:text-sm text-muted-foreground truncate">
+            {partners.length} partners
+            <span className="hidden sm:inline"> • {weeksToShow} weeks</span>
           </span>
           <div className="flex items-center gap-1">
             <Button
               variant="outline"
               size="sm"
-              className="h-7 w-7 p-0"
+              className="h-9 w-9 md:h-8 md:w-8 p-0"
               onClick={scrollLeft}
               title="Scroll to earlier weeks"
             >
@@ -594,7 +597,7 @@ export function HealthHeatmap({ statusFilter = [], search = '' }: HealthHeatmapP
             <Button
               variant="outline"
               size="sm"
-              className="h-7 w-7 p-0"
+              className="h-9 w-9 md:h-8 md:w-8 p-0"
               onClick={scrollRight}
               title="Scroll to recent weeks"
             >
@@ -602,12 +605,12 @@ export function HealthHeatmap({ statusFilter = [], search = '' }: HealthHeatmapP
             </Button>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 md:gap-2 shrink-0">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="gap-1.5 h-8">
-                <ArrowUpDown className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">{SORT_OPTIONS.find(o => o.value === sortBy)?.label}</span>
+              <Button variant="outline" size="sm" className="h-9 md:h-8 gap-1.5 px-2 md:px-3">
+                <ArrowUpDown className="h-4 w-4 md:h-3.5 md:w-3.5" />
+                <span className="hidden sm:inline text-xs md:text-sm">{SORT_OPTIONS.find(o => o.value === sortBy)?.label}</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
@@ -626,10 +629,10 @@ export function HealthHeatmap({ statusFilter = [], search = '' }: HealthHeatmapP
                 <Button
                   variant="outline"
                   size="sm"
-                  className="h-8 w-8 p-0"
+                  className="h-9 w-9 md:h-8 md:w-8 p-0"
                   onClick={() => setSettingsOpen(true)}
                 >
-                  <Settings className="h-3.5 w-3.5" />
+                  <Settings className="h-4 w-4 md:h-3.5 md:w-3.5" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent>Color Settings</TooltipContent>
@@ -645,7 +648,8 @@ export function HealthHeatmap({ statusFilter = [], search = '' }: HealthHeatmapP
           className="overflow-auto overscroll-contain"
           style={{
             scrollbarWidth: 'thin',
-            maxHeight: 'calc(100vh - 280px)',
+            // More height on mobile since we hide some chrome
+            maxHeight: isMobile ? 'calc(100vh - 320px)' : 'calc(100vh - 280px)',
             willChange: 'scroll-position',
           }}
         >
@@ -957,10 +961,10 @@ export function HealthHeatmap({ statusFilter = [], search = '' }: HealthHeatmapP
         )}
 
         {/* Legend - outside scrollable area */}
-        <div className="flex flex-wrap items-center gap-4 px-4 py-3 border-t border-border bg-card">
+        <div className="flex flex-wrap items-center gap-2 md:gap-4 px-3 md:px-4 py-2 md:py-3 border-t border-border bg-card">
           {(['healthy', 'onboarding', 'warning', 'paused', 'offboarding', 'churned', 'no-data'] as StatusColorBucket[]).map(bucket => (
-            <div key={bucket} className="flex items-center gap-1.5 text-xs">
-              <div className={cn('w-3 h-3 rounded-[2px]', BUCKET_COLORS[bucket])} />
+            <div key={bucket} className="flex items-center gap-1 md:gap-1.5 text-[10px] md:text-xs">
+              <div className={cn('w-2.5 h-2.5 md:w-3 md:h-3 rounded-[2px]', BUCKET_COLORS[bucket])} />
               <span className="text-muted-foreground">{BUCKET_LABELS[bucket]}</span>
             </div>
           ))}
@@ -969,7 +973,7 @@ export function HealthHeatmap({ statusFilter = [], search = '' }: HealthHeatmapP
 
       {/* Status Color Settings Dialog */}
       <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-[95vw] md:max-w-3xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Status Color Mappings</DialogTitle>
             <DialogDescription>

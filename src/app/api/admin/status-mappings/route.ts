@@ -86,6 +86,10 @@ export async function POST(request: Request) {
       return apiError('DUPLICATE', `Pattern "${status_pattern}" already exists`, 409)
     }
 
+    // Only set created_by if user has a valid UUID (not temp-email format)
+    const userId = authResult.user?.id
+    const validUserId = userId && !userId.startsWith('temp-') ? userId : null
+
     const { data: mapping, error } = await supabase
       .from('status_color_mappings')
       .insert({
@@ -94,7 +98,7 @@ export async function POST(request: Request) {
         priority,
         is_system_default: false,
         is_active: true,
-        created_by: authResult.user?.id || null,
+        created_by: validUserId,
       })
       .select()
       .single()

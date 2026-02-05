@@ -75,3 +75,24 @@ export async function getAnthropicApiKey(): Promise<string> {
     'Anthropic API key not configured. Add it in Admin Settings → API Keys.'
   )
 }
+
+/**
+ * Get the PostHog Personal API key from database.
+ * This is needed for server-side API calls (fetching session data, errors, etc.)
+ * Returns null if not configured (PostHog analysis will be unavailable).
+ */
+export async function getPostHogApiKey(): Promise<string | null> {
+  // Check database
+  const dbKey = await getSystemSetting('posthog_api_key')
+  if (dbKey) {
+    return dbKey
+  }
+
+  // Fallback to env
+  const envKey = process.env.POSTHOG_PERSONAL_API_KEY
+  if (envKey) {
+    return envKey
+  }
+
+  return null
+}

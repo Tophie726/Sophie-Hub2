@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
-import { Bug, Lightbulb, HelpCircle, Loader2, X } from 'lucide-react'
+import { useState, useRef, useEffect } from 'react'
+import { Loader2, Camera, Upload, X, Edit2 } from 'lucide-react'
+import { AnimatedBugIcon, AnimatedLightbulbIcon, AnimatedQuestionIcon } from './animated-icons'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Input } from '@/components/ui/input'
@@ -15,25 +16,123 @@ import {
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { getPostHogSessionId } from '@/components/providers/posthog-provider'
+import { ScreenshotEditor } from './screenshot-editor'
 
 type FeedbackType = 'bug' | 'feature' | 'question'
 
 interface FeedbackModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
+  /** Pre-captured screenshot URL (captured before modal opens) */
+  preScreenshot?: string | null
 }
 
 const FEEDBACK_TYPES = [
-  { value: 'bug' as const, label: 'Bug Report', icon: Bug, color: 'text-red-500' },
-  { value: 'feature' as const, label: 'Feature Request', icon: Lightbulb, color: 'text-amber-500' },
-  { value: 'question' as const, label: 'Question', icon: HelpCircle, color: 'text-blue-500' },
+  { value: 'bug' as const, label: 'Bug Report', AnimatedIcon: AnimatedBugIcon, color: 'text-red-500' },
+  { value: 'feature' as const, label: 'Feature Request', AnimatedIcon: AnimatedLightbulbIcon, color: 'text-amber-500' },
+  { value: 'question' as const, label: 'Question', AnimatedIcon: AnimatedQuestionIcon, color: 'text-blue-500' },
 ]
 
-export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
+export function FeedbackModal({ open, onOpenChange, preScreenshot }: FeedbackModalProps) {
   const [type, setType] = useState<FeedbackType>('bug')
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [screenshot, setScreenshot] = useState<string | null>(null)
+  const [capturingScreenshot, setCapturingScreenshot] = useState(false)
+  const [showEditor, setShowEditor] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Set pre-captured screenshot when modal opens
+  useEffect(() => {
+    if (open && preScreenshot) {
+      setScreenshot(preScreenshot)
+    }
+  }, [open, preScreenshot])
+
+  const captureScreenshot = async () => {
+    setCapturingScreenshot(true)
+    try {
+      // Dynamically import html2canvas to avoid SSR issues
+      const html2canvas = (await import('html2canvas')).default
+
+      // Hide ONLY the feedback modal, not other overlays/dropdowns
+      // This preserves the user's current state (open dropdowns, etc.)
+      const feedbackModal = document.querySelector('[data-feedback-modal="true"]') as HTMLElement
+      const feedbackOverlay = feedbackModal?.previousElementSibling as HTMLElement
+
+      if (feedbackModal) feedbackModal.style.visibility = 'hidden'
+      if (feedbackOverlay && feedbackOverlay.getAttribute('data-state') === 'open') {
+        feedbackOverlay.style.visibility = 'hidden'
+      }
+
+      // Small delay to ensure modal is hidden
+      await new Promise(resolve => setTimeout(resolve, 100))
+
+      // Capture the page - including any open dropdowns/popovers
+      // Using scale 1.0 for better quality when annotating
+      const canvas = await html2canvas(document.body, {
+        useCORS: true,
+        allowTaint: true,
+        scale: 1, // Full resolution for annotation
+        logging: false,
+        ignoreElements: (element) => {
+          // Only ignore the feedback modal itself
+          return element.getAttribute('data-feedback-modal') === 'true' ||
+                 element.getAttribute('data-feedback-overlay') === 'true'
+        },
+      })
+
+      // Show modal again
+      if (feedbackModal) feedbackModal.style.visibility = ''
+      if (feedbackOverlay) feedbackOverlay.style.visibility = ''
+
+      // Convert to base64
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.7)
+      setScreenshot(dataUrl)
+      toast.success('Screenshot captured')
+    } catch (error) {
+      console.error('Failed to capture screenshot:', error)
+      toast.error('Failed to capture screenshot')
+    } finally {
+      setCapturingScreenshot(false)
+    }
+  }
+
+  const handleEditorSave = (editedImageUrl: string) => {
+    setScreenshot(editedImageUrl)
+    setShowEditor(false)
+    toast.success('Screenshot saved')
+  }
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please upload an image file')
+      return
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image must be less than 5MB')
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      setScreenshot(event.target?.result as string)
+      toast.success('Screenshot uploaded')
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const removeScreenshot = () => {
+    setScreenshot(null)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -55,6 +154,7 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
           description: description.trim(),
           page_url: window.location.href,
           posthog_session_id: getPostHogSessionId(),
+          screenshot_data: screenshot, // base64 image data
           browser_info: {
             userAgent: navigator.userAgent,
             language: navigator.language,
@@ -76,6 +176,7 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
       setType('bug')
       setTitle('')
       setDescription('')
+      setScreenshot(null)
       onOpenChange(false)
     } catch (error) {
       console.error('Failed to submit feedback:', error)
@@ -89,18 +190,31 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent
+        className={cn(
+          'sm:max-w-[500px]',
+          showEditor && 'sm:max-w-[95vw] md:max-w-[1200px] h-[90vh]'
+        )}
+        data-feedback-modal="true"
+      >
         <DialogHeader>
           <DialogTitle>Send Feedback</DialogTitle>
         </DialogHeader>
 
+        {showEditor && screenshot ? (
+          <ScreenshotEditor
+            imageUrl={screenshot}
+            onSave={handleEditorSave}
+            onCancel={() => setShowEditor(false)}
+          />
+        ) : (
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Type Selection */}
           <div className="space-y-2">
             <Label>What type of feedback?</Label>
             <div className="grid grid-cols-3 gap-2">
               {FEEDBACK_TYPES.map((ft) => {
-                const Icon = ft.icon
+                const AnimatedIcon = ft.AnimatedIcon
                 const isSelected = type === ft.value
                 return (
                   <button
@@ -115,7 +229,7 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
                         : 'border-border'
                     )}
                   >
-                    <Icon className={cn('h-5 w-5', isSelected ? ft.color : 'text-muted-foreground')} />
+                    <AnimatedIcon className={cn(isSelected ? ft.color : 'text-muted-foreground')} />
                     <span className={cn(
                       'text-xs font-medium',
                       isSelected ? 'text-foreground' : 'text-muted-foreground'
@@ -164,6 +278,83 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
             />
           </div>
 
+          {/* Screenshot */}
+          <div className="space-y-2">
+            <Label>Screenshot <span className="text-muted-foreground text-xs">(optional - helps us understand the issue)</span></Label>
+
+            {screenshot ? (
+              <div className="relative rounded-lg border bg-muted/30 p-2 group">
+                {/* Larger preview with scroll */}
+                <div className="overflow-auto max-h-64 rounded">
+                  <img
+                    src={screenshot}
+                    alt="Screenshot preview"
+                    className="w-full object-contain rounded cursor-pointer hover:opacity-90 transition-opacity"
+                    onClick={() => setShowEditor(true)}
+                    title="Click to annotate"
+                  />
+                </div>
+                {/* Action buttons */}
+                <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button
+                    type="button"
+                    onClick={() => setShowEditor(true)}
+                    className="p-1.5 rounded-full bg-background/90 hover:bg-background border shadow-sm"
+                    title="Annotate screenshot"
+                  >
+                    <Edit2 className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={removeScreenshot}
+                    className="p-1.5 rounded-full bg-background/90 hover:bg-background border shadow-sm"
+                    title="Remove screenshot"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                <p className="text-xs text-muted-foreground mt-2 text-center">
+                  Click image to annotate with highlights, circles, or text
+                </p>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={captureScreenshot}
+                  disabled={capturingScreenshot}
+                  className="flex-1"
+                >
+                  {capturingScreenshot ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Camera className="h-4 w-4 mr-2" />
+                  )}
+                  Snapshot Page
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex-1"
+                >
+                  <Upload className="h-4 w-4 mr-2" />
+                  Upload Image
+                </Button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                />
+              </div>
+            )}
+          </div>
+
           {/* Context info */}
           <p className="text-xs text-muted-foreground">
             We&apos;ll automatically include the current page URL and session data to help us investigate.
@@ -185,6 +376,7 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
             </Button>
           </div>
         </form>
+        )}
       </DialogContent>
     </Dialog>
   )

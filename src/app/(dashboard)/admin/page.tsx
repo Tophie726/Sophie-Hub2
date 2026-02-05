@@ -24,11 +24,11 @@ function AdminCard({ title, description, href, icon, iconBg, badge }: AdminCardP
         whileHover={{ y: -4, scale: 1.01 }}
         whileTap={{ scale: 0.99 }}
         transition={{ duration: 0.2, ease: easeOut }}
-        className="group relative bg-card border rounded-xl p-6 hover:border-primary/30 hover:shadow-lg transition-all cursor-pointer"
+        className="group relative bg-card border rounded-xl p-4 md:p-6 hover:border-primary/30 hover:shadow-lg transition-all cursor-pointer"
       >
-        <div className="flex items-start gap-4">
+        <div className="flex items-start gap-3 md:gap-4">
           <div className={cn(
-            'flex h-12 w-12 items-center justify-center rounded-xl transition-transform group-hover:scale-110',
+            'flex h-10 w-10 md:h-12 md:w-12 items-center justify-center rounded-xl transition-transform group-hover:scale-110 shrink-0',
             iconBg
           )}>
             {icon}
@@ -58,8 +58,8 @@ export default function AdminPage() {
         description="System configuration and data management"
       />
 
-      <div className="p-8">
-        <div className="max-w-3xl mx-auto space-y-4">
+      <div className="p-4 md:p-8">
+        <div className="max-w-3xl mx-auto space-y-3 md:space-y-4">
           <AdminCard
             title="Data Enrichment"
             description="Connect external data sources, map fields to your database, and manage data flow"

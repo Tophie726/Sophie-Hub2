@@ -1,14 +1,17 @@
 /**
  * Weekly Status Color Configuration
  *
- * This is the single source of truth for mapping partner weekly statuses to colors.
- * Statuses are matched using partial, case-insensitive matching.
+ * Two-tier matching system:
+ * 1. DATABASE MAPPINGS (Primary) - Exact status text → bucket mappings stored in
+ *    `status_color_mappings` table. Managed via UI at /partners?view=heatmap (gear icon).
+ * 2. FALLBACK PATTERNS (Secondary) - Pattern-based matching below for unmapped statuses.
+ *
+ * The UI at /partners?view=heatmap shows ALL real status values from partner data,
+ * categorized as "has color" vs "needs color". Click any status chip to assign a color.
+ * This follows the "real data philosophy" - only showing actual values from the database.
  *
  * IMPORTANT: Gray-700 is reserved for null/empty (no data).
- * Every actual status value should map to a meaningful color.
- *
- * To add a new status: find the appropriate bucket and add the keyword.
- * If unsure which bucket, add to UNKNOWN and it will show purple for review.
+ * Unknown/unmapped statuses show as purple until assigned a color.
  */
 
 export type StatusColorBucket =
@@ -22,9 +25,13 @@ export type StatusColorBucket =
   | 'no-data'      // Gray-700 - no status recorded
 
 /**
- * Status keywords grouped by color bucket.
+ * FALLBACK status keywords grouped by color bucket.
+ * Used when no exact match exists in the database `status_color_mappings` table.
  * Matching is partial and case-insensitive.
  * Order matters - first match wins, so put more specific terms first.
+ *
+ * NOTE: Prefer adding status mappings via the UI (/partners?view=heatmap → gear icon)
+ * rather than editing these patterns. UI mappings are exact matches and take priority.
  */
 export const STATUS_BUCKETS: Record<Exclude<StatusColorBucket, 'no-data' | 'unknown'>, string[]> = {
   // Red: They've left

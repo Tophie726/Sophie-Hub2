@@ -1,2 +1,7 @@
 export { FeedbackButton } from './feedback-button'
 export { FeedbackModal } from './feedback-modal'
+export { VoteButton } from './vote-button'
+export { IdeaCard } from './idea-card'
+export { IdeasList } from './ideas-list'
+export { RoadmapBoard } from './roadmap-board'
+export { RoadmapCard } from './roadmap-card'

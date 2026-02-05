@@ -31,13 +31,6 @@ if (typeof window !== 'undefined' && process.env.NEXT_PUBLIC_POSTHOG_KEY) {
     },
     // Error tracking
     autocapture: true,
-    // Disable in development if needed
-    loaded: (posthog) => {
-      if (process.env.NODE_ENV === 'development') {
-        // Uncomment to disable in dev:
-        // posthog.opt_out_capturing()
-      }
-    },
   })
 }
 

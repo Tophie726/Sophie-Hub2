@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { PageHeader } from '@/components/layout/page-header'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -15,9 +15,20 @@ import {
   CheckCircle2,
   AlertCircle,
   Eye,
-  X,
   ExternalLink,
+  ArrowUpRight,
+  Sparkles,
+  ChevronDown,
+  ChevronUp,
+  Wand2,
+  Wrench,
+  ImageIcon,
+  LayoutList,
+  Kanban,
 } from 'lucide-react'
+import Link from 'next/link'
+import { Switch } from '@/components/ui/switch'
+import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import {
@@ -34,6 +45,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { FeedbackKanban } from '@/components/feedback/feedback-kanban'
 
 type FeedbackType = 'bug' | 'feature' | 'question'
 type FeedbackStatus = 'new' | 'reviewed' | 'in_progress' | 'resolved' | 'wont_fix'
@@ -46,9 +58,16 @@ interface FeedbackItem {
   description: string
   page_url: string | null
   posthog_session_id: string | null
+  screenshot_url: string | null
   browser_info: Record<string, unknown> | null
   submitted_by_email: string
   created_at: string
+  // AI fields
+  ai_summary: string | null
+  ai_summary_at: string | null
+  ai_analysis: AIAnalysis | null
+  ai_analysis_at: string | null
+  content_updated_at: string | null
 }
 
 const TYPE_CONFIG: Record<FeedbackType, { icon: typeof Bug; label: string; color: string }> = {
@@ -65,12 +84,111 @@ const STATUS_CONFIG: Record<FeedbackStatus, { label: string; color: string }> = 
   wont_fix: { label: "Won't Fix", color: 'bg-muted text-muted-foreground border-muted' },
 }
 
+// AI result types
+interface AISummary {
+  summary: string
+}
+
+interface AIAnalysis {
+  summary: string
+  likelyCause: string
+  suggestedFix: string
+  affectedFiles: string[]
+  confidence: 'low' | 'medium' | 'high'
+}
+
 export default function FeedbackAdminPage() {
   const [feedback, setFeedback] = useState<FeedbackItem[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<FeedbackType | 'all'>('all')
   const [statusFilter, setStatusFilter] = useState<FeedbackStatus | 'all'>('all')
   const [selectedItem, setSelectedItem] = useState<FeedbackItem | null>(null)
+  const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list')
+
+  // AI state
+  const [aiEnabled, setAiEnabled] = useState(false)
+  const [summarizing, setSummarizing] = useState<Record<string, boolean>>({})
+  const [analyzing, setAnalyzing] = useState<Record<string, boolean>>({})
+  const [summaries, setSummaries] = useState<Record<string, AISummary>>({})
+  const [analyses, setAnalyses] = useState<Record<string, AIAnalysis>>({})
+
+  const handleSummarize = async (id: string) => {
+    setSummarizing(prev => ({ ...prev, [id]: true }))
+    try {
+      const res = await fetch('/api/ai/summarize-feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ feedbackId: id }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error?.message || 'Failed')
+      setSummaries(prev => ({ ...prev, [id]: { summary: json.data?.summary } }))
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to summarize')
+    } finally {
+      setSummarizing(prev => ({ ...prev, [id]: false }))
+    }
+  }
+
+  const handleAnalyze = async (id: string, type: FeedbackType) => {
+    setAnalyzing(prev => ({ ...prev, [id]: true }))
+    try {
+      const endpoint = type === 'bug' ? '/api/ai/analyze-bug' : '/api/ai/suggest-implementation'
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ feedbackId: id }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error?.message || 'Failed')
+
+      if (type === 'bug') {
+        setAnalyses(prev => ({ ...prev, [id]: json.data?.analysis }))
+      } else {
+        // For features, store suggestion as analysis-like format
+        const suggestion = json.data?.suggestion
+        setAnalyses(prev => ({
+          ...prev,
+          [id]: {
+            summary: suggestion?.summary || '',
+            likelyCause: suggestion?.approach || '',
+            suggestedFix: suggestion?.steps?.map((s: { step: number; description: string }) =>
+              `Step ${s.step}: ${s.description}`
+            ).join('\n') || '',
+            affectedFiles: [...(suggestion?.filesToCreate || []), ...(suggestion?.filesToModify || [])],
+            confidence: suggestion?.complexity === 'low' ? 'high' : suggestion?.complexity === 'high' ? 'low' : 'medium',
+          }
+        }))
+      }
+      toast.success('Analysis complete')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to analyze')
+    } finally {
+      setAnalyzing(prev => ({ ...prev, [id]: false }))
+    }
+  }
+
+  const handleStatusChange = async (id: string, newStatus: FeedbackStatus) => {
+    // Optimistically update the UI
+    setFeedback(prev => prev.map(item =>
+      item.id === id ? { ...item, status: newStatus } : item
+    ))
+
+    try {
+      const res = await fetch(`/api/feedback/${id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      })
+
+      if (!res.ok) throw new Error('Failed to update status')
+      toast.success('Status updated')
+    } catch {
+      // Revert on error
+      toast.error('Failed to update status')
+      fetchFeedback()
+    }
+  }
 
   const fetchFeedback = useCallback(async () => {
     setLoading(true)
@@ -82,7 +200,22 @@ export default function FeedbackAdminPage() {
       const res = await fetch(`/api/feedback?${params}`)
       if (!res.ok) throw new Error('Failed to fetch feedback')
       const json = await res.json()
-      setFeedback(json.data?.feedback || [])
+      const items = json.data?.feedback || []
+      setFeedback(items)
+
+      // Initialize AI state from cached data
+      const cachedSummaries: Record<string, AISummary> = {}
+      const cachedAnalyses: Record<string, AIAnalysis> = {}
+      for (const item of items) {
+        if (item.ai_summary) {
+          cachedSummaries[item.id] = { summary: item.ai_summary }
+        }
+        if (item.ai_analysis) {
+          cachedAnalyses[item.id] = item.ai_analysis
+        }
+      }
+      setSummaries(cachedSummaries)
+      setAnalyses(cachedAnalyses)
     } catch (error) {
       console.error('Failed to fetch feedback:', error)
       toast.error('Failed to load feedback')
@@ -105,23 +238,51 @@ export default function FeedbackAdminPage() {
   return (
     <div className="min-h-screen">
       <PageHeader
-        title="Feedback"
-        description="Review bug reports, feature requests, and questions from users"
+        title="Feedback Triage"
+        description="Admin view for managing and triaging user feedback"
       >
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={fetchFeedback}
-          disabled={loading}
-        >
-          <RefreshCw className={cn('h-4 w-4 mr-1.5', loading && 'animate-spin')} />
-          Refresh
-        </Button>
+        <div className="flex items-center gap-2 md:gap-4">
+          {/* AI Toggle */}
+          <div className="flex items-center gap-2 px-2 md:px-3 py-1.5 rounded-lg bg-purple-500/10 border border-purple-500/20">
+            <Sparkles className="h-4 w-4 text-purple-500" />
+            <Label htmlFor="ai-toggle" className="text-sm font-medium text-purple-700 dark:text-purple-300 cursor-pointer hidden md:inline">
+              AI
+            </Label>
+            <Switch
+              id="ai-toggle"
+              checked={aiEnabled}
+              onCheckedChange={setAiEnabled}
+              className="data-[state=checked]:bg-purple-500"
+            />
+          </div>
+
+          <Button
+            variant="outline"
+            size="sm"
+            asChild
+            className="h-10 md:h-9 hidden md:flex"
+          >
+            <Link href="/feedback">
+              Feedback Center
+              <ArrowUpRight className="h-3.5 w-3.5 ml-1.5" />
+            </Link>
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={fetchFeedback}
+            disabled={loading}
+            className="h-10 md:h-9"
+          >
+            <RefreshCw className={cn('h-4 w-4 md:mr-1.5', loading && 'animate-spin')} />
+            <span className="hidden md:inline">Refresh</span>
+          </Button>
+        </div>
       </PageHeader>
 
       <div className="p-4 md:p-8 max-w-6xl">
         {/* Stats Cards */}
-        <div className="grid gap-4 md:grid-cols-4 mb-8">
+        <div className="grid grid-cols-2 gap-3 md:gap-4 md:grid-cols-4 mb-6 md:mb-8">
           <StatCard
             icon={AlertCircle}
             label="New"
@@ -153,8 +314,8 @@ export default function FeedbackAdminPage() {
         </div>
 
         {/* Filters */}
-        <div className="flex flex-wrap items-center gap-3 mb-6">
-          <div className="flex items-center gap-1 bg-muted/50 rounded-lg p-1">
+        <div className="flex flex-wrap items-center gap-2 md:gap-3 mb-4 md:mb-6">
+          <div className="flex items-center gap-0.5 md:gap-1 bg-muted/50 rounded-lg p-1 overflow-x-auto">
             <FilterTab
               label="All"
               active={filter === 'all'}
@@ -184,7 +345,7 @@ export default function FeedbackAdminPage() {
             value={statusFilter}
             onValueChange={(v) => setStatusFilter(v as FeedbackStatus | 'all')}
           >
-            <SelectTrigger className="w-[140px] h-9">
+            <SelectTrigger className="w-[120px] md:w-[140px] h-10 md:h-9">
               <SelectValue placeholder="Status" />
             </SelectTrigger>
             <SelectContent>
@@ -196,9 +357,37 @@ export default function FeedbackAdminPage() {
               <SelectItem value="wont_fix">Won&apos;t Fix</SelectItem>
             </SelectContent>
           </Select>
+
+          {/* View Toggle */}
+          <div className="flex items-center gap-0.5 bg-muted/50 rounded-lg p-1 ml-auto">
+            <button
+              onClick={() => setViewMode('list')}
+              className={cn(
+                'p-2 rounded-md transition-colors',
+                viewMode === 'list'
+                  ? 'bg-background shadow-sm text-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              )}
+              title="List view"
+            >
+              <LayoutList className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setViewMode('kanban')}
+              className={cn(
+                'p-2 rounded-md transition-colors',
+                viewMode === 'kanban'
+                  ? 'bg-background shadow-sm text-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              )}
+              title="Kanban view"
+            >
+              <Kanban className="h-4 w-4" />
+            </button>
+          </div>
         </div>
 
-        {/* Feedback List */}
+        {/* Feedback List/Kanban */}
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -207,14 +396,41 @@ export default function FeedbackAdminPage() {
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-16">
               <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center mb-4">
-                <Bug className="h-8 w-8 text-muted-foreground" />
+                {filter === 'feature' ? (
+                  <Lightbulb className="h-8 w-8 text-muted-foreground" />
+                ) : filter === 'question' ? (
+                  <HelpCircle className="h-8 w-8 text-muted-foreground" />
+                ) : (
+                  <Bug className="h-8 w-8 text-muted-foreground" />
+                )}
               </div>
-              <h3 className="text-lg font-medium mb-2">No Feedback Yet</h3>
+              <h3 className="text-lg font-medium mb-2">
+                {filter === 'feature' ? 'No Feature Requests' :
+                 filter === 'question' ? 'No Questions' :
+                 filter === 'bug' ? 'No Bugs Reported' :
+                 'No Feedback Yet'}
+              </h3>
               <p className="text-sm text-muted-foreground text-center max-w-md">
-                When users submit feedback, it will appear here for review.
+                {filter === 'feature' ? 'Feature requests from users will appear here.' :
+                 filter === 'question' ? 'Questions from users will appear here.' :
+                 filter === 'bug' ? 'Bug reports from users will appear here.' :
+                 'When users submit feedback, it will appear here for review.'}
               </p>
             </CardContent>
           </Card>
+        ) : viewMode === 'kanban' ? (
+          <FeedbackKanban
+            feedback={feedback}
+            onView={setSelectedItem}
+            onStatusChange={handleStatusChange}
+            aiEnabled={aiEnabled}
+            summaries={summaries}
+            analyses={analyses}
+            summarizing={summarizing}
+            analyzing={analyzing}
+            onSummarize={handleSummarize}
+            onAnalyze={handleAnalyze}
+          />
         ) : (
           <div className="space-y-3">
             {feedback.map((item) => (
@@ -222,6 +438,13 @@ export default function FeedbackAdminPage() {
                 key={item.id}
                 item={item}
                 onView={() => setSelectedItem(item)}
+                aiEnabled={aiEnabled}
+                summary={summaries[item.id]}
+                analysis={analyses[item.id]}
+                isSummarizing={summarizing[item.id]}
+                isAnalyzing={analyzing[item.id]}
+                onSummarize={() => handleSummarize(item.id)}
+                onAnalyze={() => handleAnalyze(item.id, item.type)}
               />
             ))}
           </div>
@@ -241,13 +464,28 @@ export default function FeedbackAdminPage() {
 function FeedbackCard({
   item,
   onView,
+  aiEnabled,
+  summary,
+  analysis,
+  isSummarizing,
+  isAnalyzing,
+  onSummarize,
+  onAnalyze,
 }: {
   item: FeedbackItem
   onView: () => void
+  aiEnabled: boolean
+  summary?: AISummary
+  analysis?: AIAnalysis
+  isSummarizing?: boolean
+  isAnalyzing?: boolean
+  onSummarize: () => void
+  onAnalyze: () => void
 }) {
   const typeConfig = TYPE_CONFIG[item.type]
   const statusConfig = STATUS_CONFIG[item.status]
   const Icon = typeConfig.icon
+  const [showFullAnalysis, setShowFullAnalysis] = useState(false)
 
   return (
     <Card className="hover:shadow-md transition-shadow">
@@ -279,19 +517,177 @@ function FeedbackCard({
                 <Clock className="h-3 w-3" />
                 {new Date(item.created_at).toLocaleDateString()}
               </span>
+              {item.screenshot_url && (
+                <span className="flex items-center gap-1 text-green-500">
+                  <ImageIcon className="h-3 w-3" />
+                  Screenshot
+                </span>
+              )}
               {item.posthog_session_id && (
                 <span className="text-purple-500">Has session replay</span>
               )}
             </div>
+
+            {/* AI Summary */}
+            {summary && (
+              <div className="mt-3 p-2.5 rounded-lg bg-purple-500/5 border border-purple-500/20">
+                <div className="flex items-start gap-2">
+                  <Sparkles className="h-3.5 w-3.5 text-purple-500 mt-0.5 shrink-0" />
+                  <p className="text-sm text-purple-700 dark:text-purple-300 flex-1">{summary.summary}</p>
+                  {/* Out of date indicator */}
+                  {item.ai_summary_at && item.content_updated_at &&
+                    new Date(item.content_updated_at) > new Date(item.ai_summary_at) && (
+                    <Badge variant="outline" className="text-[10px] border-orange-500/50 text-orange-600 shrink-0">
+                      outdated
+                    </Badge>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* AI Analysis */}
+            {analysis && (
+              <div className="mt-3 p-2.5 rounded-lg bg-amber-500/5 border border-amber-500/20">
+                <button
+                  onClick={() => setShowFullAnalysis(!showFullAnalysis)}
+                  className="flex items-center gap-2 w-full text-left"
+                >
+                  <Wrench className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                  <span className="text-sm font-medium text-amber-700 dark:text-amber-300 flex-1">
+                    {item.type === 'bug' ? 'Solution Found' : 'Implementation Plan'}
+                  </span>
+                  {/* Out of date indicator */}
+                  {item.ai_analysis_at && item.content_updated_at &&
+                    new Date(item.content_updated_at) > new Date(item.ai_analysis_at) && (
+                    <Badge variant="outline" className="text-[10px] border-orange-500/50 text-orange-600">
+                      outdated
+                    </Badge>
+                  )}
+                  <Badge variant="outline" className={cn(
+                    'text-[10px]',
+                    analysis.confidence === 'high' && 'border-green-500/50 text-green-600',
+                    analysis.confidence === 'medium' && 'border-amber-500/50 text-amber-600',
+                    analysis.confidence === 'low' && 'border-red-500/50 text-red-600'
+                  )}>
+                    {analysis.confidence}
+                  </Badge>
+                  {showFullAnalysis ? (
+                    <ChevronUp className="h-4 w-4 text-amber-500" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 text-amber-500" />
+                  )}
+                </button>
+
+                {showFullAnalysis && (
+                  <div className="mt-2 pt-2 border-t border-amber-500/20 space-y-2 text-sm">
+                    <div>
+                      <span className="font-medium text-foreground">Summary: </span>
+                      <span className="text-muted-foreground">{analysis.summary}</span>
+                    </div>
+                    <div>
+                      <span className="font-medium text-foreground">
+                        {item.type === 'bug' ? 'Cause: ' : 'Approach: '}
+                      </span>
+                      <span className="text-muted-foreground">{analysis.likelyCause}</span>
+                    </div>
+                    <div>
+                      <span className="font-medium text-foreground">
+                        {item.type === 'bug' ? 'Fix: ' : 'Steps: '}
+                      </span>
+                      <pre className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap">{analysis.suggestedFix}</pre>
+                    </div>
+                    {analysis.affectedFiles.length > 0 && (
+                      <div>
+                        <span className="font-medium text-foreground">Files: </span>
+                        <span className="text-muted-foreground font-mono text-xs">
+                          {analysis.affectedFiles.join(', ')}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* AI Controls */}
+            {aiEnabled && (
+              <div className="flex flex-wrap items-center gap-2 mt-3">
+                {(() => {
+                  const summaryOutdated = summary && item.ai_summary_at && item.content_updated_at &&
+                    new Date(item.content_updated_at) > new Date(item.ai_summary_at)
+                  const analysisOutdated = analysis && item.ai_analysis_at && item.content_updated_at &&
+                    new Date(item.content_updated_at) > new Date(item.ai_analysis_at)
+
+                  return (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={(e) => { e.stopPropagation(); onSummarize(); }}
+                        disabled={isSummarizing || (!!summary && !summaryOutdated)}
+                        className="h-8 md:h-7 text-xs"
+                      >
+                        {isSummarizing ? (
+                          <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                        ) : (
+                          <Wand2 className="h-3 w-3 mr-1" />
+                        )}
+                        {summaryOutdated ? 'Re-summarize' : summary ? 'Summarized' : 'Summarize'}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={(e) => { e.stopPropagation(); onAnalyze(); }}
+                        disabled={isAnalyzing || (!!analysis && !analysisOutdated)}
+                        className="h-8 md:h-7 text-xs"
+                      >
+                        {isAnalyzing ? (
+                          <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                        ) : (
+                          <Wrench className="h-3 w-3 mr-1" />
+                        )}
+                        {analysisOutdated ? 'Re-analyze' : analysis ? 'Analyzed' : item.type === 'bug' ? 'Find Solution' : 'Suggest Implementation'}
+                      </Button>
+                    </>
+                  )
+                })()}
+              </div>
+            )}
           </div>
 
-          <Button variant="ghost" size="sm" onClick={onView}>
+          <Button variant="ghost" size="sm" onClick={onView} className="h-9 w-9 md:h-8 md:w-8 p-0">
             <Eye className="h-4 w-4" />
           </Button>
         </div>
       </CardContent>
     </Card>
   )
+}
+
+interface BugAnalysis {
+  summary: string
+  likelyCause: string
+  suggestedFix: string
+  affectedFiles: string[]
+  confidence: 'low' | 'medium' | 'high'
+  additionalNotes?: string
+}
+
+interface ImplementationSuggestion {
+  summary: string
+  approach: string
+  steps: Array<{
+    step: number
+    description: string
+    files: string[]
+  }>
+  filesToCreate: string[]
+  filesToModify: string[]
+  databaseChanges?: string
+  complexity: 'low' | 'medium' | 'high'
+  estimatedScope: string
+  risks?: string
+  alternatives?: string
 }
 
 function FeedbackDetailDialog({
@@ -305,9 +701,17 @@ function FeedbackDetailDialog({
 }) {
   const [status, setStatus] = useState<FeedbackStatus | ''>('')
   const [updating, setUpdating] = useState(false)
+  const [analyzing, setAnalyzing] = useState(false)
+  const [analysis, setAnalysis] = useState<BugAnalysis | null>(null)
+  const [suggestion, setSuggestion] = useState<ImplementationSuggestion | null>(null)
+  const [showAnalysis, setShowAnalysis] = useState(true)
 
   useEffect(() => {
-    if (item) setStatus(item.status)
+    if (item) {
+      setStatus(item.status)
+      setAnalysis(null)
+      setSuggestion(null)
+    }
   }, [item])
 
   const handleStatusUpdate = async () => {
@@ -334,6 +738,45 @@ function FeedbackDetailDialog({
     }
   }
 
+  const handleAnalyze = async () => {
+    if (!item) return
+
+    setAnalyzing(true)
+    setAnalysis(null)
+    setSuggestion(null)
+
+    try {
+      const endpoint = item.type === 'bug'
+        ? '/api/ai/analyze-bug'
+        : '/api/ai/suggest-implementation'
+
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ feedbackId: item.id }),
+      })
+
+      const json = await res.json()
+
+      if (!res.ok) {
+        throw new Error(json.error?.message || 'Failed to analyze')
+      }
+
+      if (item.type === 'bug') {
+        setAnalysis(json.data?.analysis || null)
+      } else {
+        setSuggestion(json.data?.suggestion || null)
+      }
+
+      toast.success('AI analysis complete')
+    } catch (error) {
+      console.error('AI analysis failed:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to analyze')
+    } finally {
+      setAnalyzing(false)
+    }
+  }
+
   if (!item) return null
 
   const typeConfig = TYPE_CONFIG[item.type]
@@ -346,7 +789,7 @@ function FeedbackDetailDialog({
 
   return (
     <Dialog open={!!item} onOpenChange={() => onClose()}>
-      <DialogContent className="sm:max-w-[600px]">
+      <DialogContent className="max-w-[95vw] md:max-w-[700px] max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <div className="flex items-center gap-3">
             <div className={cn('h-10 w-10 rounded-lg flex items-center justify-center', typeConfig.color)}>
@@ -411,13 +854,228 @@ function FeedbackDetailDialog({
             </div>
           )}
 
+          {/* Screenshot */}
+          {item.screenshot_url && (
+            <div>
+              <h4 className="text-sm font-medium mb-1">Screenshot</h4>
+              <div className="relative rounded-lg border bg-muted/30 overflow-hidden">
+                <img
+                  src={item.screenshot_url}
+                  alt="Bug screenshot"
+                  className="w-full max-h-[300px] object-contain cursor-pointer hover:opacity-90 transition-opacity"
+                  onClick={() => {
+                    // Open image in new tab for full view
+                    const win = window.open()
+                    if (win) {
+                      win.document.write(`<img src="${item.screenshot_url}" style="max-width: 100%;">`)
+                    }
+                  }}
+                />
+                <p className="text-xs text-muted-foreground text-center py-1 bg-muted/50">
+                  Click to view full size
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* AI Analysis Section */}
+          <div className="pt-4 border-t">
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="text-sm font-medium flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-purple-500" />
+                AI Analysis
+              </h4>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleAnalyze}
+                disabled={analyzing}
+              >
+                {analyzing ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                    Analyzing...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="h-3.5 w-3.5 mr-1.5" />
+                    {item.type === 'bug' ? 'Analyze Bug' : 'Suggest Implementation'}
+                  </>
+                )}
+              </Button>
+            </div>
+
+            {/* Bug Analysis Results */}
+            {analysis && (
+              <div className="space-y-3 bg-purple-500/5 border border-purple-500/20 rounded-lg p-3">
+                <button
+                  onClick={() => setShowAnalysis(!showAnalysis)}
+                  className="flex items-center justify-between w-full text-left"
+                >
+                  <span className="text-sm font-medium text-purple-700 dark:text-purple-300">
+                    Bug Analysis Results
+                  </span>
+                  {showAnalysis ? (
+                    <ChevronUp className="h-4 w-4 text-purple-500" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 text-purple-500" />
+                  )}
+                </button>
+
+                {showAnalysis && (
+                  <div className="space-y-3 text-sm">
+                    <div>
+                      <span className="font-medium">Summary:</span>
+                      <p className="text-muted-foreground mt-0.5">{analysis.summary}</p>
+                    </div>
+
+                    <div>
+                      <span className="font-medium">Likely Cause:</span>
+                      <p className="text-muted-foreground mt-0.5">{analysis.likelyCause}</p>
+                    </div>
+
+                    <div>
+                      <span className="font-medium">Suggested Fix:</span>
+                      <pre className="text-xs text-muted-foreground mt-1 bg-muted/50 rounded p-2 overflow-x-auto whitespace-pre-wrap">
+                        {analysis.suggestedFix}
+                      </pre>
+                    </div>
+
+                    {analysis.affectedFiles.length > 0 && (
+                      <div>
+                        <span className="font-medium">Affected Files:</span>
+                        <ul className="text-muted-foreground mt-0.5 list-disc list-inside">
+                          {analysis.affectedFiles.map((file, i) => (
+                            <li key={i} className="font-mono text-xs">{file}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">Confidence:</span>
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          analysis.confidence === 'high' && 'border-green-500/50 text-green-600',
+                          analysis.confidence === 'medium' && 'border-amber-500/50 text-amber-600',
+                          analysis.confidence === 'low' && 'border-red-500/50 text-red-600'
+                        )}
+                      >
+                        {analysis.confidence}
+                      </Badge>
+                    </div>
+
+                    {analysis.additionalNotes && (
+                      <div>
+                        <span className="font-medium">Additional Notes:</span>
+                        <p className="text-muted-foreground mt-0.5">{analysis.additionalNotes}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Feature Implementation Suggestion Results */}
+            {suggestion && (
+              <div className="space-y-3 bg-amber-500/5 border border-amber-500/20 rounded-lg p-3">
+                <button
+                  onClick={() => setShowAnalysis(!showAnalysis)}
+                  className="flex items-center justify-between w-full text-left"
+                >
+                  <span className="text-sm font-medium text-amber-700 dark:text-amber-300">
+                    Implementation Suggestion
+                  </span>
+                  {showAnalysis ? (
+                    <ChevronUp className="h-4 w-4 text-amber-500" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 text-amber-500" />
+                  )}
+                </button>
+
+                {showAnalysis && (
+                  <div className="space-y-3 text-sm">
+                    <div>
+                      <span className="font-medium">Summary:</span>
+                      <p className="text-muted-foreground mt-0.5">{suggestion.summary}</p>
+                    </div>
+
+                    <div>
+                      <span className="font-medium">Approach:</span>
+                      <p className="text-muted-foreground mt-0.5">{suggestion.approach}</p>
+                    </div>
+
+                    {suggestion.steps.length > 0 && (
+                      <div>
+                        <span className="font-medium">Implementation Steps:</span>
+                        <ol className="text-muted-foreground mt-1 space-y-2">
+                          {suggestion.steps.map((step) => (
+                            <li key={step.step} className="pl-4 border-l-2 border-amber-500/30">
+                              <span className="font-medium text-foreground">Step {step.step}:</span>{' '}
+                              {step.description}
+                              {step.files.length > 0 && (
+                                <ul className="mt-1 text-xs font-mono">
+                                  {step.files.map((f, i) => (
+                                    <li key={i} className="text-amber-600 dark:text-amber-400">• {f}</li>
+                                  ))}
+                                </ul>
+                              )}
+                            </li>
+                          ))}
+                        </ol>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <span className="font-medium">Complexity:</span>
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            'ml-2',
+                            suggestion.complexity === 'low' && 'border-green-500/50 text-green-600',
+                            suggestion.complexity === 'medium' && 'border-amber-500/50 text-amber-600',
+                            suggestion.complexity === 'high' && 'border-red-500/50 text-red-600'
+                          )}
+                        >
+                          {suggestion.complexity}
+                        </Badge>
+                      </div>
+                      <div>
+                        <span className="font-medium">Scope:</span>
+                        <span className="text-muted-foreground ml-2">{suggestion.estimatedScope}</span>
+                      </div>
+                    </div>
+
+                    {suggestion.databaseChanges && (
+                      <div>
+                        <span className="font-medium">Database Changes:</span>
+                        <pre className="text-xs text-muted-foreground mt-1 bg-muted/50 rounded p-2 overflow-x-auto">
+                          {suggestion.databaseChanges}
+                        </pre>
+                      </div>
+                    )}
+
+                    {suggestion.risks && (
+                      <div>
+                        <span className="font-medium">Risks:</span>
+                        <p className="text-muted-foreground mt-0.5">{suggestion.risks}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Status Update */}
-          <div className="flex items-center gap-3 pt-4 border-t">
+          <div className="flex flex-wrap items-center gap-2 md:gap-3 pt-4 border-t">
             <Select
               value={status}
               onValueChange={(v) => setStatus(v as FeedbackStatus)}
             >
-              <SelectTrigger className="w-[160px]">
+              <SelectTrigger className="w-full md:w-[160px] h-10 md:h-9">
                 <SelectValue placeholder="Update status" />
               </SelectTrigger>
               <SelectContent>
@@ -432,12 +1090,13 @@ function FeedbackDetailDialog({
             <Button
               onClick={handleStatusUpdate}
               disabled={updating || status === item.status}
+              className="h-10 md:h-9 flex-1 md:flex-none"
             >
               {updating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               Update Status
             </Button>
 
-            <Button variant="ghost" onClick={onClose}>
+            <Button variant="ghost" onClick={onClose} className="h-10 md:h-9">
               Close
             </Button>
           </div>
@@ -492,14 +1151,15 @@ function FilterTab({
     <button
       onClick={onClick}
       className={cn(
-        'flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-md transition-colors',
+        'flex items-center gap-1.5 px-2.5 md:px-3 py-2.5 md:py-2 text-sm font-medium rounded-md transition-colors',
         active
           ? 'bg-background shadow-sm text-foreground'
           : 'text-muted-foreground hover:text-foreground'
       )}
     >
       {Icon && <Icon className="h-3.5 w-3.5" />}
-      {label}
+      <span className="hidden md:inline">{label}</span>
+      {!Icon && <span className="md:hidden">{label}</span>}
     </button>
   )
 }

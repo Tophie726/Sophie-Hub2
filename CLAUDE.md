@@ -361,12 +361,14 @@ The actual sync was unaffected (data integrity preserved), but it was confusing 
 - ✅ **Duplicate cleanup** - Removed 1100+ duplicate records
 - ✅ **Node 20** - Added .nvmrc, removed Supabase deprecation warning
 - ✅ **Partner Health Dashboard** - Health distribution card on dashboard + compact bar in Partners header
-- ✅ **Status Color Mappings** - Admin-configurable status→bucket mappings in Settings
-  - Database table: `status_color_mappings` with seed defaults (37 patterns)
-  - API routes: CRUD at `/api/admin/status-mappings`, unmapped discovery
-  - Settings UI: Table with add/edit/delete, quick-map for unmapped statuses
-  - Auto-discovery of unmapped statuses from partner source_data
-  - Weekly status tab refactored to use centralized bucket-based colors
+- ✅ **Status Color Mappings** - Data-driven status→color assignment from real weekly data
+  - Database table: `status_color_mappings` stores exact status text → color bucket
+  - API routes: CRUD at `/api/admin/status-mappings`, discovery at `/all-statuses`
+  - **Data-driven UI**: Shows ONLY real status values from partner `source_data`
+  - Categorized vs Uncategorized sections (purple = needs color assignment)
+  - Click any status chip to assign/change color via popover
+  - Accessed via gear icon in Heatmap view (admin only)
+  - `src/components/settings/status-mapping-settings.tsx` - Rewritten for real data philosophy
 - ✅ **Weekly Status Year Calendar** - Full year view with 12 months grid
   - ISO week numbering (Week 1 can start in late December)
   - Color inheritance for past weeks with no data (faded previous status)
@@ -378,6 +380,7 @@ The actual sync was unaffected (data integrity preserved), but it was confusing 
   - Sorting: Currently At Risk, Most Turbulent, Healthiest, Most Data
   - Event delegation for 88k+ cells (optimized scroll performance)
   - Module-level caching for view state persistence
+  - Settings gear icon (admin only) opens Status Color Mappings dialog
 - ✅ **Computed Partner Status** - Calculate status from latest weekly data
   - `src/lib/partners/computed-status.ts` - Status computation logic
   - Extracts latest weekly status from `source_data` JSONB
@@ -919,10 +922,60 @@ Sophie Hub is fully responsive with mobile-first considerations.
 - Sidebar auto-closes on navigation on mobile
 - Body scroll locked when drawer is open
 
-### Touch Targets
-- Minimum 44px touch targets on all interactive elements
-- Full-width dropdowns on mobile for easier selection
-- Larger button heights on mobile (h-9 vs h-7)
+### Touch Target Pattern
+
+Use **larger on mobile, smaller on desktop** pattern for touch targets:
+
+```tsx
+// Standard button - 40px (h-10) on mobile, 36px (h-9) on desktop
+<Button className="h-10 md:h-9">Action</Button>
+
+// Icon-only button - 36px on mobile, 32px on desktop
+<Button className="h-9 w-9 md:h-8 md:w-8 p-0">
+  <Icon className="h-4 w-4" />
+</Button>
+
+// Inline buttons in cards/lists
+<button className="py-2 md:py-1.5 px-3 text-sm">Label</button>
+```
+
+### Responsive Spacing Pattern
+
+```tsx
+// Page padding - more compact on mobile
+<div className="p-4 md:p-8">
+
+// Gaps - tighter on mobile
+<div className="flex items-center gap-2 md:gap-4">
+<div className="space-y-3 md:space-y-4">
+
+// Stats grids - 2 columns on mobile, 4 on desktop
+<div className="grid grid-cols-2 gap-3 md:gap-4 md:grid-cols-4">
+```
+
+### Responsive Widths Pattern
+
+```tsx
+// Popovers - narrower on mobile
+<PopoverContent className="w-48 md:w-56">
+
+// Dialogs - viewport-aware on mobile
+<DialogContent className="max-w-[95vw] md:max-w-[700px]">
+
+// Select triggers
+<SelectTrigger className="w-[120px] md:w-[160px] h-10 md:h-9">
+```
+
+### Mobile-Only Labels
+
+Hide labels on mobile, show only icons with larger touch targets:
+
+```tsx
+<Button className="h-10 md:h-9">
+  <RefreshCw className="h-4 w-4 md:mr-1.5" />
+  <span className="hidden md:inline">Refresh</span>
+</Button>
+```
 
 ### Data Enrichment Mobile
 - Column classification uses card layout on mobile (`MobileColumnCard`)
@@ -1186,34 +1239,104 @@ interface HelpDocContent {
 
 ## Feedback & Error Tracking
 
-Sophie Hub has an integrated feedback system for bug reports, feature requests, and error tracking.
+Sophie Hub has an integrated feedback system for bug reports, feature requests, and error tracking. It follows a **Frill-style** approach where all staff can see feedback, vote on features, and view the roadmap.
 
 **Full documentation:** See `docs/FEEDBACK-SYSTEM.md`
+
+### Architecture Overview
+
+| Route | Audience | Purpose |
+|-------|----------|---------|
+| `/feedback` | All staff | Ideas + Roadmap (Frill-style public view) |
+| `/admin/feedback` | Admin only | Feedback Triage + Error logs |
 
 ### Quick Overview
 
 | Component | Purpose |
 |-----------|---------|
-| PostHog | Session replay, error tracking, analytics |
-| Feedback Button | In-app bug/feature reporting |
-| `/admin/feedback` | Admin dashboard for triage |
-| Error Logs | Auto-captured JS errors |
+| PostHog | Session replay, error tracking, analytics (Project ID: 306226) |
+| Feedback Button | In-app bug/feature reporting (sidebar) |
+| `/feedback` | Browse ideas, vote, view roadmap |
+| `/admin/feedback` | Admin triage dashboard |
+| Custom 404 | Bug report option on not-found pages |
 
-### PostHog MCP Integration
+### Key Components
 
-PostHog has an official MCP server for Claude Code:
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| `FeedbackButton` | `src/components/feedback/feedback-button.tsx` | Sidebar trigger |
+| `FeedbackModal` | `src/components/feedback/feedback-modal.tsx` | Bug/feature submission |
+| `IdeasList` | `src/components/feedback/ideas-list.tsx` | Filterable ideas with voting |
+| `IdeaCard` | `src/components/feedback/idea-card.tsx` | Single idea with vote button |
+| `VoteButton` | `src/components/feedback/vote-button.tsx` | Upvote toggle (optimistic) |
+| `RoadmapBoard` | `src/components/feedback/roadmap-board.tsx` | Kanban columns |
+| `RoadmapCard` | `src/components/feedback/roadmap-card.tsx` | Compact roadmap item |
+
+### Voting System
+
+- Database: `feature_votes` table with unique constraint per user/feedback
+- Denormalized: `feedback.vote_count` updated via database trigger
+- API: `POST/DELETE /api/feedback/[id]/vote`
+- UI: Optimistic updates with rollback on error
+
+### AI-Assisted Triage
+
+Two-tier AI approach to minimize token costs:
+
+| Operation | Model | Purpose |
+|-----------|-------|---------|
+| Summarize | Haiku | Quick one-line summary (~$0.001) |
+| Analyze Bug | Sonnet | Root cause + suggested fix (~$0.05) |
+| Suggest Implementation | Sonnet | Feature implementation plan (~$0.05) |
+
+**Features:**
+- AI toggle on triage page (disabled by default)
+- Per-item "Summarize" and "Find Solution" buttons
+- Results cached to database with timestamps
+- "Outdated" badge when content updated after analysis
+- PostHog session data included in analysis (if API key configured)
+
+**API Routes:**
+- `POST /api/ai/summarize-feedback` - Quick summary
+- `POST /api/ai/analyze-bug` - Full bug analysis
+- `POST /api/ai/suggest-implementation` - Feature implementation plan
+- `GET/POST /api/feedback/[id]/comments` - Add context via comments
+
+### Screenshot Capture
+
+Users can attach screenshots to bug reports:
+- **Snapshot Page** - html2canvas captures current page (modal hides during capture)
+- **Upload Image** - Manual upload, 5MB limit
+- Stored as base64 in `screenshot_url` column
+- Displayed in admin feedback detail dialog
+
+### Status Mapping (Frill-style)
+
+| DB Status | Display | Roadmap Column |
+|-----------|---------|----------------|
+| `new` | Under Review | (hidden) |
+| `reviewed` | Planned | Planned |
+| `in_progress` | In Progress | In Progress |
+| `resolved` | Shipped | Shipped |
+| `wont_fix` | Not Planned | (hidden) |
+
+### PostHog Integration
 
 ```bash
-# Add PostHog MCP to Claude Code
+# Environment variables (already configured)
+NEXT_PUBLIC_POSTHOG_KEY=phc_yg2P72DWBUYePWThsKDS6e8DuYgP4zozWo8TWelHA4M
+NEXT_PUBLIC_POSTHOG_HOST=https://us.i.posthog.com
+
+# Add PostHog MCP to Claude Code for debugging
 npx @anthropic-ai/claude-code mcp add posthog
 ```
 
-This allows debugging errors directly in Claude Code with session context.
+**Note:** Enable Session Replay in PostHog Project Settings for replay links to work.
 
 ### Separation of Concerns
 
 - **ClickUp** = Team project management, sprint planning
-- **Sophie Hub Feedback** = User-reported bugs, feature requests, error logs
+- **Sophie Hub Feedback** = User-reported bugs, feature requests, error logs, roadmap visibility
 
 ---
 

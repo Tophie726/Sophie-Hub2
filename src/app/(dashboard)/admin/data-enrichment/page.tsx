@@ -125,7 +125,7 @@ function DataEnrichmentContent() {
             variant="outline"
             size="sm"
             onClick={() => setBrowserView('flow-map')}
-            className="gap-2 text-muted-foreground hover:text-foreground"
+            className="h-10 md:h-9 gap-2 text-muted-foreground hover:text-foreground"
           >
             <Network className="h-4 w-4" />
             <span className="hidden sm:inline">Data Flow</span>
@@ -162,9 +162,9 @@ function DataEnrichmentContent() {
 
         {/* Forms View - Coming Soon */}
         {browserView === 'forms' && (
-          <div className="p-8 text-center">
+          <div className="p-4 md:p-8 text-center">
             <p className="text-muted-foreground">Forms integration coming soon</p>
-            <Button variant="outline" onClick={() => setBrowserView('hub')} className="mt-4">
+            <Button variant="outline" onClick={() => setBrowserView('hub')} className="mt-4 h-10 md:h-9">
               Back to Hub
             </Button>
           </div>
@@ -172,9 +172,9 @@ function DataEnrichmentContent() {
 
         {/* Docs View - Coming Soon */}
         {browserView === 'docs' && (
-          <div className="p-8 text-center">
+          <div className="p-4 md:p-8 text-center">
             <p className="text-muted-foreground">Documents integration coming soon</p>
-            <Button variant="outline" onClick={() => setBrowserView('hub')} className="mt-4">
+            <Button variant="outline" onClick={() => setBrowserView('hub')} className="mt-4 h-10 md:h-9">
               Back to Hub
             </Button>
           </div>

@@ -4,7 +4,8 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import Link from 'next/link'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { format, parseISO } from 'date-fns'
-import { Building2, Plus, Database, ChevronRight, ChevronUp, ChevronDown, Loader2, Settings2, Activity, RefreshCw, FileSpreadsheet, MoreHorizontal, Sparkles } from 'lucide-react'
+import { Building2, Plus, Database, ChevronRight, ChevronUp, ChevronDown, Loader2, Settings2, Activity, RefreshCw, FileSpreadsheet, MoreHorizontal, Sparkles, GripVertical } from 'lucide-react'
+import { Reorder, useDragControls } from 'framer-motion'
 import { toast } from 'sonner'
 import { PageHeader } from '@/components/layout/page-header'
 import { Button } from '@/components/ui/button'
@@ -25,6 +26,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { useDebounce } from '@/lib/hooks/use-debounce'
 
 
@@ -291,47 +298,44 @@ const sortOptions = [
   { value: 'created_at', label: 'Date Added', defaultOrder: 'desc' as const },
 ]
 
-// Column dropdown item - clean, minimal design with hover-reveal reorder
-function ColumnDropdownItem({
+// Draggable column item with grip handle
+function DraggableColumnItem({
   col,
   isVisible,
+  fieldLineage,
   onToggle,
-  onMoveUp,
-  onMoveDown,
-  canMoveUp,
-  canMoveDown,
 }: {
   col: ColumnDef
   isVisible: boolean
   fieldLineage: Record<string, { sourceColumn: string; tabName: string; sheetName: string }>
   onToggle: () => void
-  onMoveUp?: () => void
-  onMoveDown?: () => void
-  canMoveUp?: boolean
-  canMoveDown?: boolean
 }) {
+  const dragControls = useDragControls()
+  const lineage = fieldLineage[col.key]
+
   return (
-    <div className="group flex items-center gap-2 px-2 py-1.5 text-sm hover:bg-muted/50 rounded-md transition-colors">
-      {/* Reorder buttons - visible on hover */}
-      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-        <button
-          onClick={(e) => { e.stopPropagation(); onMoveUp?.() }}
-          disabled={!canMoveUp}
-          className="p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-20 disabled:cursor-not-allowed rounded hover:bg-muted"
-        >
-          <ChevronUp className="h-3.5 w-3.5" />
-        </button>
-        <button
-          onClick={(e) => { e.stopPropagation(); onMoveDown?.() }}
-          disabled={!canMoveDown}
-          className="p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-20 disabled:cursor-not-allowed rounded hover:bg-muted"
-        >
-          <ChevronDown className="h-3.5 w-3.5" />
-        </button>
+    <Reorder.Item
+      value={col.key}
+      dragListener={false}
+      dragControls={dragControls}
+      className="flex items-center gap-1.5 px-1 py-1.5 text-sm bg-card rounded-md select-none"
+      whileDrag={{
+        scale: 1.02,
+        boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+        zIndex: 50,
+      }}
+      transition={{ duration: 0.15 }}
+    >
+      {/* Drag handle */}
+      <div
+        onPointerDown={(e) => dragControls.start(e)}
+        className="cursor-grab active:cursor-grabbing p-0.5 text-muted-foreground/40 hover:text-muted-foreground touch-none"
+      >
+        <GripVertical className="h-3.5 w-3.5" />
       </div>
 
       {/* Checkbox + Label */}
-      <label className="flex items-center gap-2.5 flex-1 cursor-pointer select-none">
+      <label className="flex items-center gap-2 flex-1 cursor-pointer">
         <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
           isVisible
             ? 'bg-primary border-primary text-primary-foreground'
@@ -349,18 +353,68 @@ function ColumnDropdownItem({
         </span>
       </label>
 
-      {/* Source indicator - subtle */}
+      {/* Source indicator with tooltip */}
       {col.sourceType === 'computed' && (
-        <span className="text-purple-500/60 shrink-0" title="Computed">
-          <Sparkles className="h-3.5 w-3.5" />
-        </span>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="text-purple-500/70 shrink-0 cursor-help">
+              <Sparkles className="h-3.5 w-3.5" />
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="left" className="text-xs max-w-[200px]">
+            <div className="font-medium">Computed by App</div>
+            <div className="text-muted-foreground">Calculated from source data</div>
+          </TooltipContent>
+        </Tooltip>
       )}
       {col.sourceType === 'sheet' && (
-        <span className="text-green-500/60 shrink-0" title="From Sheet">
-          <FileSpreadsheet className="h-3.5 w-3.5" />
-        </span>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="text-green-500/70 shrink-0 cursor-help">
+              <FileSpreadsheet className="h-3.5 w-3.5" />
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="left" className="text-xs max-w-[220px]">
+            {col.key === 'weekly' ? (
+              <div className="space-y-0.5">
+                <div className="font-medium">Weekly Status Columns</div>
+                <div className="text-muted-foreground">Pattern-matched from sheet</div>
+              </div>
+            ) : col.source === 'source_data' && col.sourceTab ? (
+              <div className="space-y-0.5">
+                <div className="font-medium">From Google Sheet</div>
+                <div className="text-muted-foreground">
+                  Tab: <span className="text-foreground">{col.sourceTab}</span>
+                </div>
+                <div className="text-muted-foreground">
+                  Column: <span className="text-foreground">{col.sourceKey}</span>
+                </div>
+              </div>
+            ) : lineage ? (
+              <div className="space-y-0.5">
+                <div className="font-medium">{lineage.sheetName || 'Google Sheet'}</div>
+                {lineage.tabName ? (
+                  <div className="text-muted-foreground">
+                    Tab: <span className="text-foreground">{lineage.tabName}</span>
+                  </div>
+                ) : (
+                  <div className="text-amber-500 text-[10px]">Tab info missing</div>
+                )}
+                {lineage.sourceColumn ? (
+                  <div className="text-muted-foreground">
+                    Column: <span className="text-foreground">{lineage.sourceColumn}</span>
+                  </div>
+                ) : (
+                  <div className="text-amber-500 text-[10px]">Column info missing</div>
+                )}
+              </div>
+            ) : (
+              <div className="text-muted-foreground">From connected sheet</div>
+            )}
+          </TooltipContent>
+        </Tooltip>
       )}
-    </div>
+    </Reorder.Item>
   )
 }
 
@@ -624,16 +678,6 @@ export default function PartnersPage() {
     })
   }
 
-  // Move column in the order
-  const moveColumn = (fromIndex: number, toIndex: number) => {
-    setColumnOrder(prev => {
-      const next = [...prev]
-      const [moved] = next.splice(fromIndex, 1)
-      next.splice(toIndex, 0, moved)
-      return next
-    })
-  }
-
   const fetchPartners = useCallback(async (append = false, currentOffset = 0) => {
     if (append) {
       setLoadingMore(true)
@@ -758,7 +802,7 @@ export default function PartnersPage() {
             size="sm"
             onClick={handleRefresh}
             disabled={isRefreshing || loading}
-            className="h-8 w-8 p-0"
+            className="h-10 w-10 md:h-9 md:w-9 p-0"
             title="Refresh partner data"
           >
             <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
@@ -767,15 +811,17 @@ export default function PartnersPage() {
             variant={showHeatmap ? 'default' : 'outline'}
             size="sm"
             onClick={() => setShowHeatmap(!showHeatmap)}
-            className="gap-1.5"
+            className="h-10 md:h-9 gap-1.5 px-3"
           >
-            <Activity className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">{showHeatmap ? 'Show List' : 'Health Overview'}</span>
+            <Activity className="h-4 w-4" />
+            <span className="hidden sm:inline">{showHeatmap ? 'List' : 'Heatmap'}</span>
           </Button>
-          <HealthBarCompact />
-          <Button className="gap-2">
+          <div className="hidden sm:block">
+            <HealthBarCompact />
+          </div>
+          <Button className="h-10 md:h-9 gap-2 px-3">
             <Plus className="h-4 w-4" />
-            <span className="hidden sm:inline">Add Partner</span>
+            <span className="hidden sm:inline">Add</span>
           </Button>
         </div>
       </PageHeader>
@@ -926,25 +972,25 @@ export default function PartnersPage() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-64 max-h-[420px] overflow-y-auto z-50 p-1.5">
-                          {/* Column list */}
-                          <div className="space-y-0.5">
-                            {orderedColumns.map((col) => {
-                              const orderIndex = columnOrder.indexOf(col.key)
-                              return (
-                                <ColumnDropdownItem
+                          <TooltipProvider delayDuration={300}>
+                            {/* Draggable column list */}
+                            <Reorder.Group
+                              axis="y"
+                              values={columnOrder}
+                              onReorder={setColumnOrder}
+                              className="space-y-0.5"
+                            >
+                              {orderedColumns.map((col) => (
+                                <DraggableColumnItem
                                   key={col.key}
                                   col={col}
                                   isVisible={visibleColumns.has(col.key)}
                                   fieldLineage={fieldLineage}
                                   onToggle={() => toggleColumn(col.key)}
-                                  onMoveUp={() => moveColumn(orderIndex, orderIndex - 1)}
-                                  onMoveDown={() => moveColumn(orderIndex, orderIndex + 1)}
-                                  canMoveUp={orderIndex > 0}
-                                  canMoveDown={orderIndex < columnOrder.length - 1}
                                 />
-                              )
-                            })}
-                          </div>
+                              ))}
+                            </Reorder.Group>
+                          </TooltipProvider>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </div>

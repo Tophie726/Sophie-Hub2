@@ -101,10 +101,12 @@ npx @anthropic-ai/claude-code mcp add posthog
 NEXT_PUBLIC_POSTHOG_KEY=phc_yg2P72DWBUYePWThsKDS6e8DuYgP4zozWo8TWelHA4M
 NEXT_PUBLIC_POSTHOG_HOST=https://us.i.posthog.com
 
-# For MCP integration (in Claude Code config) - get from PostHog settings
+# For MCP integration (in Claude Code config)
 POSTHOG_API_KEY=phx_xxx  # Personal API key from PostHog
-POSTHOG_PROJECT_ID=12345  # Your project ID
+POSTHOG_PROJECT_ID=306226  # Sophie Hub project ID
 ```
+
+**Note:** Enable Session Replay in PostHog Project Settings → Session Replay for replay links to work.
 
 ### Current Status
 
@@ -112,10 +114,36 @@ POSTHOG_PROJECT_ID=12345  # Your project ID
 - [x] PostHog provider created (`src/components/providers/posthog-provider.tsx`)
 - [x] Provider added to root layout
 - [x] Environment variables configured
-- [ ] Feedback button component
-- [ ] Feedback modal
-- [ ] Admin dashboard
-- [ ] MCP integration for Claude Code
+- [x] Feedback button component (`src/components/feedback/feedback-button.tsx`)
+- [x] Feedback modal (`src/components/feedback/feedback-modal.tsx`)
+- [x] Feedback API (`src/app/api/feedback/route.ts`)
+- [x] Admin dashboard (`src/app/(dashboard)/admin/feedback/page.tsx`)
+- [x] Status update API (`src/app/api/feedback/[id]/status/route.ts`)
+- [x] Feedback button in sidebar
+- [x] Database migration (`supabase/migrations/20260205_feedback_table.sql`)
+- [x] **Frill-style Feedback Center** (`/feedback`) - Ideas + Roadmap
+- [x] **Voting system** - Upvote features, sort by votes
+- [x] **Custom 404 page** with bug report option
+- [x] **Navigation updated** - Feedback in Core section for all staff
+- [x] **Screenshot capture** - "Snapshot Page" button + manual upload in feedback modal
+- [x] **AI-assisted bug fix suggestions** - Two-tier approach (Haiku summaries, Sonnet analysis)
+- [x] **AI-assisted feature implementation suggestions** - Implementation plans with file lists
+- [x] **Comments on feedback** - User comments API for adding context
+- [x] **AI result caching** - Results cached to database with "outdated" detection
+- [ ] MCP integration for Claude Code (PostHog MCP available)
+- [ ] Screenshot display in AI analysis (multimodal)
+- [ ] Comments UI in feedback modal/detail dialog
+
+### Setup Required
+
+Before voting works, run the voting migration in Supabase:
+
+```bash
+# File: supabase/migrations/20260205_feedback_voting.sql
+# Run this SQL in Supabase SQL Editor
+```
+
+Also enable **Session Replay** in PostHog Project Settings → Session Replay for replay links to work in feedback triage.
 
 ---
 
@@ -236,28 +264,31 @@ create index error_logs_occurred_at_idx on error_logs(occurred_at desc);
 
 ## Implementation Phases
 
-### Phase 1: Foundation (Current Priority)
+### Phase 1: Foundation ✅ COMPLETE
 
 **Goal:** Basic feedback collection and admin view
 
-1. **PostHog Setup**
-   - Add PostHog script to `_app.tsx` or root layout
-   - Enable session replay and error tracking
-   - Set up MCP for Claude Code
+1. **PostHog Setup** ✅
+   - PostHog provider in root layout
+   - Session replay and error tracking enabled
+   - Page view tracking on route changes
+   - `getPostHogSessionId()` for linking feedback to sessions
 
-2. **Feedback Button Component**
-   - Floating button in sidebar or corner
-   - Modal with type selection, description, screenshot
-   - Auto-capture context (URL, user, session ID)
+2. **Feedback Button Component** ✅
+   - Button in sidebar footer (compact mode with tooltip)
+   - Modal with type selection (bug/feature/question)
+   - Auto-capture: URL, browser info, PostHog session ID
 
-3. **Database Tables**
-   - Create `feedback` table
-   - Basic RLS policies
+3. **Database Tables** ✅
+   - `feedback` table with RLS policies
+   - `feature_votes` table for roadmap upvoting
+   - Migration: `supabase/migrations/20260205_feedback_table.sql`
 
-4. **Admin Dashboard** (`/admin/feedback`)
-   - List view with filters (type, status)
-   - Detail view with session replay link
-   - Status updates
+4. **Admin Dashboard** (`/admin/feedback`) ✅
+   - List view with type/status filters
+   - Stats cards (New, Bugs, Features, Total)
+   - Detail dialog with PostHog session replay link
+   - Status updates (new → reviewed → in_progress → resolved)
 
 ### Phase 2: Enhanced Admin
 
@@ -295,7 +326,7 @@ create index error_logs_occurred_at_idx on error_logs(occurred_at desc);
 
 ---
 
-## File Structure
+## File Structure (Implemented)
 
 ```
 src/
@@ -303,29 +334,49 @@ src/
 │   ├── (dashboard)/
 │   │   ├── admin/
 │   │   │   └── feedback/
-│   │   │       ├── page.tsx          # Admin feedback dashboard
-│   │   │       └── [id]/
-│   │   │           └── page.tsx      # Feedback detail view
+│   │   │       └── page.tsx              # Admin feedback triage ✅
 │   │   └── feedback/
-│   │       └── mine/
-│   │           └── page.tsx          # Staff's own feedback
+│   │       └── page.tsx                  # Frill-style feedback center ✅
 │   └── api/
-│       └── feedback/
-│           ├── route.ts              # POST create, GET list
-│           ├── [id]/
-│           │   └── route.ts          # GET, PATCH, DELETE
-│           └── vote/
-│               └── route.ts          # POST vote
+│       ├── feedback/
+│       │   ├── route.ts                  # POST create, GET list ✅
+│       │   ├── roadmap/
+│       │   │   └── route.ts              # GET roadmap items ✅
+│       │   └── [id]/
+│       │       ├── route.ts              # GET single feedback ✅
+│       │       ├── status/
+│       │       │   └── route.ts          # PATCH status update ✅
+│       │       ├── vote/
+│       │       │   └── route.ts          # POST/DELETE vote ✅
+│       │       └── comments/
+│       │           └── route.ts          # GET/POST comments ✅
+│       └── ai/
+│           ├── summarize-feedback/
+│           │   └── route.ts              # Quick summary (Haiku) ✅
+│           ├── analyze-bug/
+│           │   └── route.ts              # Bug analysis (Sonnet) ✅
+│           └── suggest-implementation/
+│               └── route.ts              # Feature plan (Sonnet) ✅
 ├── components/
-│   └── feedback/
-│       ├── feedback-button.tsx       # Floating trigger button
-│       ├── feedback-modal.tsx        # Report modal
-│       ├── feedback-list.tsx         # Admin list view
-│       └── feedback-detail.tsx       # Detail with session link
-└── lib/
-    └── posthog/
-        ├── client.ts                 # PostHog client setup
-        └── hooks.ts                  # usePostHog, useSessionId
+│   ├── feedback/
+│   │   ├── index.ts                      # Exports ✅
+│   │   ├── feedback-button.tsx           # Sidebar trigger button ✅
+│   │   ├── feedback-modal.tsx            # Report modal + screenshot ✅
+│   │   ├── feedback-center.tsx           # Tabbed container ✅
+│   │   ├── ideas-list.tsx                # Filterable ideas ✅
+│   │   ├── idea-card.tsx                 # Single idea card ✅
+│   │   ├── vote-button.tsx               # Upvote toggle ✅
+│   │   ├── roadmap-board.tsx             # Kanban columns ✅
+│   │   ├── roadmap-card.tsx              # Roadmap item ✅
+│   │   └── submit-idea-modal.tsx         # Idea submission ✅
+│   └── providers/
+│       └── posthog-provider.tsx          # PostHog client setup ✅
+├── not-found.tsx                         # Custom 404 with bug report ✅
+└── supabase/
+    └── migrations/
+        ├── 20260205_feedback_table.sql       # Base schema ✅
+        ├── 20260205_feedback_voting.sql      # Voting system ✅
+        └── 20260205_feedback_ai_comments.sql # AI + comments ✅
 ```
 
 ---
@@ -439,6 +490,185 @@ const sessionReplayUrl = `https://app.posthog.com/replay/${posthogSessionId}`
 
 ---
 
+## AI-Assisted Bug Fixing & Feature Suggestions (IMPLEMENTED)
+
+### Overview
+
+Sophie Hub integrates Claude AI for analyzing bugs and suggesting feature implementations. Uses a **two-tier approach** to minimize token costs:
+
+1. **Quick Summary** (Haiku - cheap/fast) - One-line summary of the issue
+2. **Full Analysis** (Sonnet - expensive/detailed) - Root cause analysis, suggested fixes, affected files
+
+### Database Schema
+
+```sql
+-- AI caching columns on feedback table
+ai_summary TEXT,           -- Quick summary from Haiku
+ai_summary_at TIMESTAMPTZ, -- When summary was generated
+ai_analysis JSONB,         -- Full analysis from Sonnet
+ai_analysis_at TIMESTAMPTZ,-- When analysis was generated
+content_updated_at TIMESTAMPTZ -- Trigger-updated when content/comments change
+
+-- Comments table for adding context
+feedback_comments (
+  id UUID PRIMARY KEY,
+  feedback_id UUID REFERENCES feedback(id),
+  user_email TEXT,
+  content TEXT,
+  is_from_submitter BOOLEAN,
+  created_at TIMESTAMPTZ
+)
+```
+
+### API Routes
+
+| Route | Method | Purpose |
+|-------|--------|---------|
+| `/api/ai/summarize-feedback` | POST | Quick summary using Haiku (cached) |
+| `/api/ai/analyze-bug` | POST | Full bug analysis using Sonnet (cached) |
+| `/api/ai/suggest-implementation` | POST | Feature implementation plan using Sonnet |
+| `/api/feedback/[id]/comments` | GET/POST | Comments for adding context |
+
+### Bug Analysis Flow
+
+```
+1. Bug report submitted with PostHog session ID + optional screenshot
+   ↓
+2. Admin enables AI toggle on triage page
+   ↓
+3. Click "Summarize" → Haiku generates one-line summary (cached)
+   ↓
+4. Click "Find Solution" → Sonnet analyzes:
+   - Bug description and context
+   - PostHog session events (if API key configured)
+   - Error logs and stack traces from session
+   - Screenshot (if attached - TODO: multimodal)
+   ↓
+5. AI returns:
+   - Summary, likely cause, suggested fix
+   - Affected files list
+   - Confidence level (low/medium/high)
+   ↓
+6. Results cached to database - "outdated" badge shown if content updated
+```
+
+### Feature Implementation Flow
+
+```
+1. Feature request submitted
+   ↓
+2. Click "Suggest Implementation" → Sonnet analyzes:
+   - Feature description
+   - Existing codebase patterns
+   ↓
+3. AI returns:
+   - Summary and approach
+   - Implementation steps with file lists
+   - Files to create vs modify
+   - Database changes needed
+   - Complexity and scope estimate
+   - Risks and alternatives
+```
+
+### UI Implementation
+
+**Triage Page (`/admin/feedback`):**
+- AI toggle in page header (purple, with Sparkles icon)
+- Per-item "Summarize" and "Find Solution" / "Suggest Implementation" buttons
+- Inline summary display with outdated indicator
+- Collapsible analysis panel with confidence badge
+- "Re-summarize" / "Re-analyze" when content is outdated
+
+**Outdated Detection:**
+- `content_updated_at` column updated via trigger when:
+  - Description is modified
+  - Comments are added
+- UI shows "outdated" badge when `content_updated_at > ai_*_at`
+- Buttons change to "Re-summarize" / "Re-analyze" when outdated
+
+### PostHog Integration
+
+When PostHog Personal API Key is configured in Settings:
+- AI fetches session events for the bug's session ID
+- Extracts errors, exceptions, and stack traces from events
+- Includes console errors and navigation context
+- Provides richer context for bug analysis
+
+**Setup:**
+1. Go to PostHog → Settings → Personal API Keys
+2. Create key with: Query (read), Session recording (read), Error tracking (read)
+3. Add to Sophie Hub Settings → PostHog (Personal API Key)
+
+### Cost Optimization
+
+| Operation | Model | Approx Cost |
+|-----------|-------|-------------|
+| Quick Summary | Haiku | ~$0.001 |
+| Bug Analysis | Sonnet | ~$0.05 |
+| Implementation Plan | Sonnet | ~$0.05 |
+
+- Results cached to database - no re-running on page refresh
+- Manual triggers only - no automatic AI usage
+- Toggle to disable AI completely
+- Outdated detection prevents unnecessary re-runs
+
+---
+
+## Screenshot Capture (IMPLEMENTED)
+
+### How It Works
+
+Users can attach screenshots to bug reports via two methods:
+
+1. **"Snapshot Page" button** - Uses html2canvas to capture the current page
+   - Modal temporarily hides during capture
+   - Image captured at 50% scale, JPEG quality 0.7 (optimized for storage)
+   - Shows preview with remove button
+
+2. **"Upload Image" button** - Manual file upload
+   - Accepts image/* files
+   - 5MB size limit
+   - Converts to base64 for storage
+
+### Storage
+
+Screenshots are stored as base64 in `feedback.screenshot_url` column. This is a temporary solution - future enhancement could use Supabase Storage for larger files.
+
+### Components
+
+- `FeedbackModal` (`src/components/feedback/feedback-modal.tsx`)
+  - `captureScreenshot()` - Uses html2canvas to capture page
+  - `handleFileUpload()` - Handles manual uploads
+  - Preview display with remove button
+
+### Display
+
+Screenshots are shown in:
+- Feedback detail dialog (admin view)
+- Future: AI analysis context (multimodal)
+
+---
+
+## Pending Features
+
+### Comments UI
+- Backend API complete (`/api/feedback/[id]/comments`)
+- Need to add UI in feedback detail dialog
+- Show comment thread with submitter highlight
+- Input for adding new comments
+
+### Screenshot in AI Analysis
+- Include screenshot in Claude API call (multimodal)
+- Let AI see visual context for bugs
+- Requires updating analyze-bug route to send image
+
+### Test Fix on Dev Branch (Nice to Have)
+- Button to apply suggested fix on a new branch
+- Requires Git integration
+- Run tests automatically
+
+---
+
 ## Future Enhancements
 
 - [ ] Public changelog page
@@ -447,6 +677,8 @@ const sessionReplayUrl = `https://app.posthog.com/replay/${posthogSessionId}`
 - [ ] Automatic severity classification
 - [ ] Integration with GitHub Issues
 - [ ] SLA tracking for response times
+- [ ] Supabase Storage for screenshots (instead of base64)
+- [ ] Multimodal AI analysis with screenshots
 
 ---
 

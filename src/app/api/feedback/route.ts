@@ -1,6 +1,6 @@
 import { getAdminClient } from '@/lib/supabase/admin'
 import { requireAuth } from '@/lib/auth/api-auth'
-import { apiSuccess, ApiErrors } from '@/lib/api/response'
+import { apiSuccess, apiValidationError, ApiErrors } from '@/lib/api/response'
 import { z } from 'zod'
 
 const supabase = getAdminClient()
@@ -11,7 +11,8 @@ const FeedbackSchema = z.object({
   description: z.string().min(1, 'Description is required'),
   page_url: z.string().optional(),
   posthog_session_id: z.string().nullable().optional(),
-  browser_info: z.record(z.unknown()).optional(),
+  screenshot_data: z.string().nullable().optional(), // base64 image data
+  browser_info: z.record(z.string(), z.unknown()).optional(),
 })
 
 /**
@@ -27,10 +28,10 @@ export async function POST(request: Request) {
     const validation = FeedbackSchema.safeParse(body)
 
     if (!validation.success) {
-      return ApiErrors.validation(validation.error.errors.map(e => e.message).join(', '))
+      return apiValidationError(validation.error)
     }
 
-    const { type, title, description, page_url, posthog_session_id, browser_info } = validation.data
+    const { type, title, description, page_url, posthog_session_id, screenshot_data, browser_info } = validation.data
 
     const { data, error } = await supabase
       .from('feedback')
@@ -40,6 +41,7 @@ export async function POST(request: Request) {
         description,
         page_url,
         posthog_session_id,
+        screenshot_url: screenshot_data, // Store base64 directly for now
         browser_info,
         submitted_by_email: auth.user.email,
         status: 'new',
@@ -61,7 +63,14 @@ export async function POST(request: Request) {
 
 /**
  * GET /api/feedback
- * List feedback - admins see all, users see their own
+ * List feedback - all staff can see all feedback (Frill-style)
+ *
+ * Query params:
+ * - type: bug | feature | question
+ * - status: new | reviewed | in_progress | resolved | wont_fix
+ * - mine: true - show only current user's feedback
+ * - sort: votes | recent (default: recent)
+ * - roadmap: true - show only roadmap items (reviewed, in_progress, resolved)
  */
 export async function GET(request: Request) {
   const auth = await requireAuth()
@@ -71,12 +80,14 @@ export async function GET(request: Request) {
   const type = searchParams.get('type')
   const status = searchParams.get('status')
   const mine = searchParams.get('mine') === 'true'
+  const sort = searchParams.get('sort') || 'recent'
+  const roadmap = searchParams.get('roadmap') === 'true'
 
   try {
+    // Build query with vote_count included
     let query = supabase
       .from('feedback')
       .select('*')
-      .order('created_at', { ascending: false })
 
     // Filter by type if provided
     if (type && ['bug', 'feature', 'question'].includes(type)) {
@@ -88,20 +99,54 @@ export async function GET(request: Request) {
       query = query.eq('status', status)
     }
 
-    // If not admin, only show user's own feedback
-    const isAdmin = auth.user.role === 'admin'
-    if (mine || !isAdmin) {
+    // Roadmap mode: only show items on the roadmap
+    if (roadmap) {
+      query = query.in('status', ['reviewed', 'in_progress', 'resolved'])
+    }
+
+    // Filter to user's own feedback if requested
+    if (mine) {
       query = query.eq('submitted_by_email', auth.user.email)
     }
 
-    const { data, error } = await query.limit(100)
+    // Sort by votes or recent
+    if (sort === 'votes') {
+      query = query.order('vote_count', { ascending: false })
+        .order('created_at', { ascending: false })
+    } else {
+      query = query.order('created_at', { ascending: false })
+    }
+
+    const { data: feedback, error } = await query.limit(100)
 
     if (error) {
       console.error('Error fetching feedback:', error)
       return ApiErrors.database(error.message)
     }
 
-    return apiSuccess({ feedback: data || [] })
+    // Get current user's votes to mark which items they've voted on
+    const feedbackIds = (feedback || []).map(f => f.id)
+    let userVotes: Set<string> = new Set()
+
+    if (feedbackIds.length > 0) {
+      const { data: votes } = await supabase
+        .from('feature_votes')
+        .select('feedback_id')
+        .eq('user_email', auth.user.email)
+        .in('feedback_id', feedbackIds)
+
+      if (votes) {
+        userVotes = new Set(votes.map(v => v.feedback_id))
+      }
+    }
+
+    // Add has_voted flag to each feedback item
+    const feedbackWithVotes = (feedback || []).map(f => ({
+      ...f,
+      has_voted: userVotes.has(f.id),
+    }))
+
+    return apiSuccess({ feedback: feedbackWithVotes })
   } catch (error) {
     console.error('Error in GET /api/feedback:', error)
     return ApiErrors.internal()

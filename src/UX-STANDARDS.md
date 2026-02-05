@@ -739,6 +739,9 @@ const modKey = isMac ? '⌘' : 'Ctrl';
 // Stack mobile, grid desktop
 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
 
+// Stats grid - 2 columns on mobile, 4 on desktop
+<div className="grid grid-cols-2 gap-3 md:gap-4 md:grid-cols-4">
+
 // Hide/show
 <div className="hidden md:block">  {/* Desktop only */}
 <div className="md:hidden">        {/* Mobile only */}
@@ -746,6 +749,65 @@ const modKey = isMac ? '⌘' : 'Ctrl';
 // Horizontal scroll
 <div className="overflow-x-auto scrollbar-hide">
   <div className="flex gap-2 min-w-max">
+```
+
+### Touch Target Patterns
+
+Buttons should be larger on mobile (44px min) and can be smaller on desktop:
+
+```tsx
+// Standard button - taller on mobile, smaller on desktop
+<Button className="h-10 md:h-9">Action</Button>
+
+// Icon-only button
+<Button className="h-9 w-9 md:h-8 md:w-8 p-0">
+  <Icon className="h-4 w-4" />
+</Button>
+
+// Inline buttons (in cards, lists)
+<button className="py-2 md:py-1.5 px-3 text-sm">Label</button>
+
+// Filter tabs
+<button className="px-3 py-2.5 md:py-2 text-sm">Tab</button>
+```
+
+### Responsive Spacing
+
+```tsx
+// Page padding
+<div className="p-4 md:p-8">
+
+// Section gaps
+<div className="space-y-3 md:space-y-4">
+
+// Inline gaps
+<div className="flex items-center gap-2 md:gap-4">
+```
+
+### Responsive Widths
+
+```tsx
+// Popover widths - narrower on mobile
+<PopoverContent className="w-48 md:w-56">
+
+// Dialog widths - viewport-aware on mobile
+<DialogContent className="max-w-[95vw] md:max-w-[700px]">
+
+// Select triggers
+<SelectTrigger className="w-[120px] md:w-[160px] h-10 md:h-9">
+```
+
+### Responsive Text
+
+```tsx
+// Text sizes that scale
+<p className="text-xs md:text-sm">
+
+// Labels that hide on mobile (icon only)
+<Button>
+  <Icon className="h-4 w-4 md:mr-1.5" />
+  <span className="hidden md:inline">Label</span>
+</Button>
 ```
 
 ### Viewport-Aware Panels

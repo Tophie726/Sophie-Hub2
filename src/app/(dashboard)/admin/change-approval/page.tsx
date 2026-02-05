@@ -187,7 +187,7 @@ function ChangeApprovalContent() {
               variant="ghost"
               size="sm"
               onClick={() => toggleHelp(true)}
-              className="text-muted-foreground hover:text-foreground"
+              className="h-10 md:h-9 text-muted-foreground hover:text-foreground"
             >
               <HelpCircle className="h-4 w-4 mr-1.5" />
               <span className="text-xs">How it works</span>
@@ -197,13 +197,13 @@ function ChangeApprovalContent() {
           {/* Sync Dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" disabled={isSyncing || entitiesLoading}>
+              <Button variant="outline" size="sm" disabled={isSyncing || entitiesLoading} className="h-10 md:h-9">
                 <RefreshCw className={cn('h-4 w-4 mr-1.5', isSyncing && 'animate-spin')} />
                 Sync Data
                 <ChevronDown className="h-3 w-3 ml-1.5 opacity-50" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-72">
+            <DropdownMenuContent align="end" className="w-64 md:w-72">
               <div className="p-2">
                 <p className="text-xs text-muted-foreground mb-3">
                   Pull latest data from connected sources
@@ -281,7 +281,7 @@ function ApprovalHub({
       )}
 
       {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 md:gap-4 md:grid-cols-4">
         <StatCard
           icon={Clock}
           label="Pending Review"
@@ -342,9 +342,9 @@ function EntitySyncRow({
   const colors = ENTITY_COLORS[entity.entity] || { bg: 'bg-muted', text: 'text-muted-foreground' }
 
   return (
-    <div className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-muted/50 transition-colors">
+    <div className="flex items-center justify-between py-2.5 md:py-2 px-3 rounded-lg hover:bg-muted/50 transition-colors">
       <div className="flex items-center gap-3 min-w-0">
-        <div className={cn('h-8 w-8 rounded-lg flex items-center justify-center shrink-0', colors.bg)}>
+        <div className={cn('h-9 w-9 md:h-8 md:w-8 rounded-lg flex items-center justify-center shrink-0', colors.bg)}>
           <Icon className={cn('h-4 w-4', colors.text)} />
         </div>
         <div className="min-w-0">
@@ -361,7 +361,7 @@ function EntitySyncRow({
         showLabel={false}
         variant="ghost"
         size="sm"
-        className="h-8 w-8 p-0"
+        className="h-9 w-9 md:h-8 md:w-8 p-0"
       />
     </div>
   )
@@ -429,7 +429,7 @@ function FilterTab({
   return (
     <button
       className={cn(
-        'px-4 py-2 text-sm font-medium rounded-md transition-colors',
+        'px-3 md:px-4 py-2.5 md:py-2 text-sm font-medium rounded-md transition-colors',
         active
           ? 'bg-background shadow-sm text-foreground'
           : 'text-muted-foreground hover:text-foreground'
