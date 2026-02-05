@@ -45,7 +45,7 @@ export async function GET() {
 
     if (error) {
       console.error('Error fetching field lineage:', error)
-      return ApiErrors.database(error.message)
+      return ApiErrors.database()
     }
 
     // Transform to a clean structure, filtering for partners

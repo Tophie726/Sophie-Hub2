@@ -352,8 +352,8 @@ Respond with a JSON object matching this structure:
       if (error.message.includes('insufficient') || error.message.includes('credit')) {
         return apiError('AI_ERROR', 'Anthropic API credits exhausted. Please check your API account.', 402)
       }
-      // Include the actual error message for debugging
-      return apiError('AI_ERROR', `AI analysis failed: ${error.message}`, 500)
+      console.error('[analyze-bug] AI analysis failed:', error.message)
+      return apiError('AI_ERROR', 'AI analysis failed. Please try again.', 500)
     }
 
     return apiError('AI_ERROR', 'Failed to analyze bug report. Please try again.', 500)

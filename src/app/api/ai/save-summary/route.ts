@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
 
       if (error) {
         console.error('Error updating AI summary:', error)
-        return ApiErrors.database(error.message)
+        return ApiErrors.database()
       }
 
       return apiSuccess({ tabMapping: data })
@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       console.error('Error creating tab mapping with AI summary:', error)
-      return ApiErrors.database(error.message)
+      return ApiErrors.database()
     }
 
     return apiSuccess({ tabMapping: newMapping }, 201)
@@ -127,7 +127,7 @@ export async function GET(request: NextRequest) {
 
     if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
       console.error('Error loading AI summary:', error)
-      return ApiErrors.database(error.message)
+      return ApiErrors.database()
     }
 
     return apiSuccess({

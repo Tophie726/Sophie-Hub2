@@ -115,7 +115,7 @@ export async function GET(
           cell_reference: null,
         } satisfies SourceUrlResponse)
       }
-      return ApiErrors.database(tabError.message)
+      return ApiErrors.database()
     }
 
     const dataSource = tabMapping?.data_source as unknown as {

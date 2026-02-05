@@ -99,7 +99,7 @@ export async function GET(request: Request) {
 
     if (error) {
       console.error('Error fetching partners:', error)
-      return ApiErrors.database(error.message)
+      return ApiErrors.database()
     }
 
     // Compute status for each partner and apply status filter
@@ -221,7 +221,7 @@ export async function POST(request: Request) {
 
     if (error) {
       console.error('Failed to create partner:', error)
-      return ApiErrors.database(error.message)
+      return ApiErrors.database()
     }
 
     return apiSuccess({ partner }, 201)

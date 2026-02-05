@@ -65,7 +65,7 @@ export async function GET(
         return ApiErrors.notFound('Partner')
       }
       console.error('Error fetching partner:', partnerResult.error)
-      return ApiErrors.database(partnerResult.error.message)
+      return ApiErrors.database()
     }
 
     // Deduplicate lineage to get most recent per field

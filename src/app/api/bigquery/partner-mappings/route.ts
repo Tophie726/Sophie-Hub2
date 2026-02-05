@@ -9,6 +9,7 @@ import { createClient } from '@supabase/supabase-js'
 import { z } from 'zod'
 import { requireRole } from '@/lib/auth/api-auth'
 import { apiSuccess, apiError, apiValidationError, ApiErrors } from '@/lib/api/response'
+import { invalidateClientNamesCache } from '@/lib/connectors/bigquery-cache'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -49,7 +50,7 @@ export async function GET() {
 
     if (error) {
       console.error('Error fetching mappings:', error)
-      return ApiErrors.database(error.message)
+      return ApiErrors.database()
     }
 
     // Get partner names for the mapped IDs
@@ -146,8 +147,11 @@ export async function POST(request: NextRequest) {
         )
       }
       console.error('Error saving mapping:', error)
-      return ApiErrors.database(error.message)
+      return ApiErrors.database()
     }
+
+    // Invalidate client names cache so mapping status is fresh
+    invalidateClientNamesCache()
 
     return apiSuccess({
       mapping: {
@@ -189,8 +193,11 @@ export async function DELETE(request: NextRequest) {
 
     if (error) {
       console.error('Error deleting mapping:', error)
-      return ApiErrors.database(error.message)
+      return ApiErrors.database()
     }
+
+    // Invalidate client names cache so mapping status is fresh
+    invalidateClientNamesCache()
 
     return apiSuccess({ deleted: true })
   } catch (error) {

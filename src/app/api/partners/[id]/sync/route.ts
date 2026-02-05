@@ -83,7 +83,7 @@ export async function POST(
 
     if (tabError) {
       console.error('Error fetching tab mappings:', tabError)
-      return ApiErrors.database(tabError.message)
+      return ApiErrors.database()
     }
 
     if (!tabMappings || tabMappings.length === 0) {
@@ -298,7 +298,7 @@ export async function POST(
 
     if (updateError) {
       console.error('Error updating partner:', updateError)
-      return ApiErrors.database(updateError.message)
+      return ApiErrors.database()
     }
 
     const totalFieldsUpdated = Array.from(new Set(syncResults.flatMap(r => r.fieldsUpdated)))
