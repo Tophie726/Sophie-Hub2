@@ -139,9 +139,11 @@ export async function GET() {
     }
 
     // Get all partners with source_data and status
+    // Note: Supabase defaults to 1000 rows, explicitly set higher limit
     const { data: partners, error: partnersError } = await supabase
       .from('partners')
       .select('id, brand_name, status, source_data')
+      .limit(5000)
 
     if (partnersError) {
       return ApiErrors.database(partnersError.message)

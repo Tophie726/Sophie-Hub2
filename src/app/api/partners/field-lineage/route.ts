@@ -30,6 +30,7 @@ export async function GET() {
       .select(`
         target_field,
         source_column,
+        source_column_index,
         tab_mapping:tab_mapping_id (
           tab_name,
           primary_entity,
@@ -64,19 +65,29 @@ export async function GET() {
         data_source: { id: string; name: string } | null
       } | null
 
+      // Get source_column_index for fallback display
+      const sourceColumnIndex = (row as { source_column_index?: number }).source_column_index
+
       // Skip if join failed, not a partner mapping, or tab is inactive
       if (!tabMappingRaw) continue
       if (tabMappingRaw.primary_entity !== 'partners') continue
       if (!tabMappingRaw.is_active) continue // Only show active tab mappings
       if (!row.target_field) continue
 
+      // Use source_column if available, otherwise show column index as fallback
+      const sourceColumn = row.source_column && row.source_column.trim() !== ''
+        ? row.source_column
+        : sourceColumnIndex !== null && sourceColumnIndex !== undefined
+          ? `Column ${String.fromCharCode(65 + sourceColumnIndex)}` // A, B, C, etc.
+          : 'Unknown'
+
       // Debug: log each processed entry
-      console.log(`[field-lineage] ${row.target_field}: source_column="${row.source_column}", tab_name="${tabMappingRaw.tab_name}", sheet="${tabMappingRaw.data_source?.name}"`)
+      console.log(`[field-lineage] ${row.target_field}: source_column="${sourceColumn}", tab_name="${tabMappingRaw.tab_name}", sheet="${tabMappingRaw.data_source?.name}"`)
 
       lineage[row.target_field] = {
         targetField: row.target_field,
-        sourceColumn: row.source_column,
-        tabName: tabMappingRaw.tab_name,
+        sourceColumn,
+        tabName: tabMappingRaw.tab_name || 'Unknown Tab',
         sheetName: tabMappingRaw.data_source?.name || 'Unknown',
         dataSourceId: tabMappingRaw.data_source?.id || '',
       }

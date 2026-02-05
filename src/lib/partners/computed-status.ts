@@ -245,8 +245,14 @@ export function computePartnerStatus(
       : 'No Data'
   }
 
+  // For terminal statuses (churned, offboarding), keep the status even if stale
+  // Only mark non-terminal statuses as pending when data is stale
+  const effectiveComputedStatus = isTerminalStatus
+    ? computedStatus
+    : (weeksWithoutData > 2 ? null : computedStatus)
+
   return {
-    computedStatus: weeksWithoutData > 2 ? null : computedStatus, // null if stale
+    computedStatus: effectiveComputedStatus,
     bucket,
     latestWeeklyStatus: latest.status,
     latestWeekDate: latest.date,

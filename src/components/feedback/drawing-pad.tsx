@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useTheme } from 'next-themes'
 import { Button } from '@/components/ui/button'
 
@@ -38,6 +38,18 @@ export function DrawingPad({ open, onOpenChange, onSave, backgroundImage }: Draw
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [excalidrawAPI, setExcalidrawAPI] = useState<any>(null)
   const [exporting, setExporting] = useState(false)
+  const [mounted, setMounted] = useState(false)
+
+  // Wait for hydration to get correct theme
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  // Determine theme (default to light during SSR/hydration)
+  const isDark = mounted && resolvedTheme === 'dark'
+  const excalidrawTheme = isDark ? 'dark' : 'light'
+  const bgColor = isDark ? '#1e1e1e' : '#ffffff'
+  const strokeColor = isDark ? '#ffffff' : '#1e1e1e'
 
   const handleSave = useCallback(async () => {
     if (!excalidrawAPI) return
@@ -60,7 +72,7 @@ export function DrawingPad({ open, onOpenChange, onSave, backgroundImage }: Draw
         elements,
         appState: {
           ...appState,
-          exportWithDarkMode: resolvedTheme === 'dark',
+          exportWithDarkMode: isDark,
           exportBackground: true,
         },
         files,
@@ -81,7 +93,7 @@ export function DrawingPad({ open, onOpenChange, onSave, backgroundImage }: Draw
     } finally {
       setExporting(false)
     }
-  }, [excalidrawAPI, onSave, onOpenChange, resolvedTheme])
+  }, [excalidrawAPI, onSave, onOpenChange, isDark])
 
   const handleCancel = useCallback(() => {
     onOpenChange(false)
@@ -120,15 +132,16 @@ export function DrawingPad({ open, onOpenChange, onSave, backgroundImage }: Draw
 
         {/* Excalidraw Canvas */}
         <div className="flex-1 relative">
-          {open && (
+          {open && mounted && (
             <Excalidraw
+              key={excalidrawTheme} // Force re-render on theme change
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               excalidrawAPI={(api: any) => setExcalidrawAPI(api)}
-              theme={resolvedTheme === 'dark' ? 'dark' : 'light'}
+              theme={excalidrawTheme}
               initialData={{
                 appState: {
-                  viewBackgroundColor: resolvedTheme === 'dark' ? '#1e1e1e' : '#ffffff',
-                  currentItemStrokeColor: resolvedTheme === 'dark' ? '#ffffff' : '#000000',
+                  viewBackgroundColor: bgColor,
+                  currentItemStrokeColor: strokeColor,
                 },
               }}
               UIOptions={{

@@ -126,7 +126,11 @@ export function WeeklyStatusPreview({
           <Tooltip key={i}>
             <TooltipTrigger asChild>
               <div
-                className={`w-1 h-3 rounded-[1px] transition-colors ${getStatusColor(week.status)}`}
+                className={`w-1 h-3 rounded-[1px] transition-colors ${
+                  week.status
+                    ? getStatusColor(week.status)
+                    : 'bg-muted-foreground/20' // Subtle but visible empty state
+                }`}
               />
             </TooltipTrigger>
             <TooltipContent side="top" className="text-xs">

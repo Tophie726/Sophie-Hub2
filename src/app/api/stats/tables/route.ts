@@ -47,15 +47,23 @@ function getLatestWeeklyStatus(
 }
 
 /**
- * Check if a status maps to "healthy" (active) bucket
+ * Check if a status maps to an "active" bucket
+ * Includes: healthy, onboarding, warning (at risk), offboarding
+ * Excludes: churned, paused
  */
-function isHealthyStatus(status: string | null): boolean {
+function isActiveStatus(status: string | null): boolean {
   if (!status) return false
   const s = status.toLowerCase().trim()
 
-  // Check against healthy keywords
-  const healthyKeywords = STATUS_BUCKETS.healthy || []
-  return healthyKeywords.some(keyword => s.includes(keyword))
+  // Check against active bucket keywords (healthy, onboarding, warning, offboarding)
+  const activeBuckets = ['healthy', 'onboarding', 'warning', 'offboarding'] as const
+  for (const bucket of activeBuckets) {
+    const keywords = STATUS_BUCKETS[bucket] || []
+    if (keywords.some(keyword => s.includes(keyword))) {
+      return true
+    }
+  }
+  return false
 }
 
 export async function GET() {
@@ -64,12 +72,13 @@ export async function GET() {
 
   try {
     // Get all partners with source_data to calculate active count
+    // Note: Supabase defaults to 1000 rows, explicitly set higher limit
     const [partnersResult, staffResult] = await Promise.all([
-      supabase.from('partners').select('id, source_data'),
+      supabase.from('partners').select('id, source_data').limit(5000),
       supabase.from('staff').select('*', { count: 'exact', head: true }),
     ])
 
-    // Calculate active partners (those with "healthy" status)
+    // Calculate active partners (healthy, onboarding, at risk, offboarding - excludes churned/paused)
     let totalPartners = 0
     let activePartners = 0
 
@@ -80,7 +89,7 @@ export async function GET() {
         const sourceData = partner.source_data as Record<string, Record<string, Record<string, unknown>>> | null
         const latestStatus = getLatestWeeklyStatus(sourceData)
 
-        if (isHealthyStatus(latestStatus)) {
+        if (isActiveStatus(latestStatus)) {
           activePartners++
         }
       }

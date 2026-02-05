@@ -30,10 +30,19 @@ import {
   Clock,
   Filter,
   Terminal,
+  Ticket,
+  MessageCircle,
+  Image as ImageIcon,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { formatDistanceToNow } from 'date-fns'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 
 function getInitials(name?: string | null): string {
   if (!name) return '?'
@@ -64,6 +73,16 @@ interface FeedbackItem {
   status: string
   created_at: string
   vote_count: number
+  screenshot_url?: string | null
+  submitted_by_email?: string
+}
+
+interface TicketComment {
+  id: string
+  user_email: string
+  content: string
+  is_from_submitter: boolean
+  created_at: string
 }
 
 const TABS = [
@@ -115,6 +134,9 @@ export default function SettingsPage() {
   const [myTickets, setMyTickets] = useState<FeedbackItem[]>([])
   const [ticketsLoading, setTicketsLoading] = useState(false)
   const [ticketFilter, setTicketFilter] = useState<'all' | 'bug' | 'feature' | 'question'>('all')
+  const [selectedTicket, setSelectedTicket] = useState<FeedbackItem | null>(null)
+  const [ticketComments, setTicketComments] = useState<TicketComment[]>([])
+  const [commentsLoading, setCommentsLoading] = useState(false)
 
   // API Key state
   const [apiSettings, setApiSettings] = useState<ApiKeySetting[]>([
@@ -164,6 +186,29 @@ export default function SettingsPage() {
       setTicketsLoading(false)
     }
   }, [])
+
+  // Fetch comments for a ticket
+  const fetchTicketComments = useCallback(async (ticketId: string) => {
+    setCommentsLoading(true)
+    try {
+      const res = await fetch(`/api/feedback/${ticketId}/comments`)
+      if (res.ok) {
+        const json = await res.json()
+        setTicketComments(json.data?.comments || [])
+      }
+    } catch (error) {
+      console.error('Failed to fetch comments:', error)
+    } finally {
+      setCommentsLoading(false)
+    }
+  }, [])
+
+  // Handle ticket click
+  const handleTicketClick = useCallback((ticket: FeedbackItem) => {
+    setSelectedTicket(ticket)
+    setTicketComments([])
+    fetchTicketComments(ticket.id)
+  }, [fetchTicketComments])
 
   const initialize = useCallback(async () => {
     try {
@@ -388,7 +433,7 @@ export default function SettingsPage() {
               <section>
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
-                    <Bug className="h-4 w-4 text-muted-foreground" />
+                    <Ticket className="h-4 w-4 text-muted-foreground" />
                     <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">My Tickets</h2>
                     {myTickets.length > 0 && (
                       <span className="text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded">
@@ -443,10 +488,10 @@ export default function SettingsPage() {
                         const status = STATUS_LABELS[ticket.status] || STATUS_LABELS.new
 
                         return (
-                          <a
+                          <button
                             key={ticket.id}
-                            href={`/feedback?id=${ticket.id}`}
-                            className="flex items-center gap-4 p-4 hover:bg-muted/50 transition-colors group"
+                            onClick={() => handleTicketClick(ticket)}
+                            className="w-full flex items-center gap-4 p-4 hover:bg-muted/50 transition-colors group text-left"
                           >
                             <TypeIcon className={cn('h-5 w-5 shrink-0', TYPE_COLORS[ticket.type])} />
                             <div className="flex-1 min-w-0">
@@ -469,7 +514,7 @@ export default function SettingsPage() {
                               </div>
                             </div>
                             <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
-                          </a>
+                          </button>
                         )
                       })}
                     </div>
@@ -654,6 +699,142 @@ export default function SettingsPage() {
           )}
         </div>
       </div>
+
+      {/* Ticket Detail Dialog */}
+      <Dialog open={!!selectedTicket} onOpenChange={(open) => !open && setSelectedTicket(null)}>
+        <DialogContent className="sm:max-w-[600px] max-h-[85vh] flex flex-col">
+          {selectedTicket && (
+            <>
+              <DialogHeader className="space-y-3 pb-4 border-b">
+                <div className="flex items-center gap-3">
+                  {(() => {
+                    const TypeIcon = TYPE_ICONS[selectedTicket.type]
+                    return (
+                      <div className={cn(
+                        'h-10 w-10 rounded-lg flex items-center justify-center',
+                        selectedTicket.type === 'bug' && 'bg-red-500/10',
+                        selectedTicket.type === 'feature' && 'bg-amber-500/10',
+                        selectedTicket.type === 'question' && 'bg-blue-500/10'
+                      )}>
+                        <TypeIcon className={cn('h-5 w-5', TYPE_COLORS[selectedTicket.type])} />
+                      </div>
+                    )
+                  })()}
+                  <Badge
+                    variant="secondary"
+                    className={cn('text-xs', (STATUS_LABELS[selectedTicket.status] || STATUS_LABELS.new).color)}
+                  >
+                    {(STATUS_LABELS[selectedTicket.status] || STATUS_LABELS.new).label}
+                  </Badge>
+                </div>
+                <DialogTitle className="text-lg">
+                  {selectedTicket.title || selectedTicket.description.slice(0, 60)}
+                </DialogTitle>
+                <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                  <span className="flex items-center gap-1">
+                    <Clock className="h-3.5 w-3.5" />
+                    {formatDistanceToNow(new Date(selectedTicket.created_at), { addSuffix: true })}
+                  </span>
+                  {selectedTicket.vote_count > 0 && (
+                    <span>{selectedTicket.vote_count} vote{selectedTicket.vote_count !== 1 ? 's' : ''}</span>
+                  )}
+                </div>
+              </DialogHeader>
+
+              <div className="flex-1 overflow-y-auto py-4 space-y-4">
+                {/* Description */}
+                <div>
+                  <h4 className="text-sm font-medium mb-2">Description</h4>
+                  <div className="text-sm text-muted-foreground whitespace-pre-wrap bg-muted/30 rounded-lg p-3">
+                    {selectedTicket.description}
+                  </div>
+                </div>
+
+                {/* Screenshot */}
+                {selectedTicket.screenshot_url && (
+                  <div>
+                    <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
+                      <ImageIcon className="h-4 w-4" />
+                      Screenshot
+                    </h4>
+                    <div className="rounded-lg border overflow-hidden">
+                      <img
+                        src={selectedTicket.screenshot_url}
+                        alt="Screenshot"
+                        className="w-full max-h-64 object-contain bg-muted/30"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Comments */}
+                <div>
+                  <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
+                    <MessageCircle className="h-4 w-4" />
+                    Comments
+                    <Badge variant="secondary" className="text-xs">
+                      {ticketComments.length}
+                    </Badge>
+                  </h4>
+
+                  {commentsLoading ? (
+                    <div className="flex items-center justify-center py-6">
+                      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : ticketComments.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-4 bg-muted/30 rounded-lg">
+                      No comments yet
+                    </p>
+                  ) : (
+                    <div className="space-y-3">
+                      {ticketComments.map(comment => (
+                        <div
+                          key={comment.id}
+                          className={cn(
+                            'p-3 rounded-lg text-sm',
+                            comment.is_from_submitter
+                              ? 'bg-primary/5 border border-primary/20'
+                              : 'bg-muted/50'
+                          )}
+                        >
+                          <div className="flex items-center gap-2 mb-1.5">
+                            <span className="font-medium text-xs">
+                              {comment.user_email.split('@')[0]}
+                            </span>
+                            {comment.is_from_submitter && (
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                                You
+                              </Badge>
+                            )}
+                            <span className="text-xs text-muted-foreground ml-auto">
+                              {formatDistanceToNow(new Date(comment.created_at), { addSuffix: true })}
+                            </span>
+                          </div>
+                          <p className="whitespace-pre-wrap">{comment.content}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Footer with link to feedback page */}
+              <div className="pt-4 border-t flex justify-between items-center">
+                <a
+                  href={`/feedback?id=${selectedTicket.id}`}
+                  className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
+                >
+                  View on Feedback page
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+                <Button variant="outline" size="sm" onClick={() => setSelectedTicket(null)}>
+                  Close
+                </Button>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

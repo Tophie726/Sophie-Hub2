@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import Link from 'next/link'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { format, parseISO } from 'date-fns'
-import { Building2, Plus, Database, ChevronRight, ChevronUp, ChevronDown, Loader2, Settings2, Activity, RefreshCw, FileSpreadsheet, MoreHorizontal, Sparkles, GripVertical } from 'lucide-react'
+import { Building2, Plus, Database, ChevronRight, ChevronLeft, ChevronUp, ChevronDown, Loader2, Settings2, Activity, RefreshCw, FileSpreadsheet, MoreHorizontal, Sparkles, GripVertical } from 'lucide-react'
 import { Reorder, useDragControls } from 'framer-motion'
 import { toast } from 'sonner'
 import { PageHeader } from '@/components/layout/page-header'
@@ -33,6 +33,13 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { useDebounce } from '@/lib/hooks/use-debounce'
 import { usePartnerSearch } from '@/lib/hooks/use-partner-search'
 
@@ -108,7 +115,7 @@ const CORE_COLUMNS: ColumnDef[] = [
     source: 'db',
     sourceType: 'computed', // Computed from latest weekly status
     defaultVisible: true,
-    minWidth: 120,
+    minWidth: 160,
     flex: 0,
     render: (p) => (
       <ComputedStatusBadge
@@ -439,7 +446,7 @@ function PartnerRow({ partner, columns, visibleColumns, onSync, onWeeklyClick, o
   }
 
   return (
-    <div className="flex items-center py-3.5 hover:bg-muted/30 transition-colors group">
+    <div className="flex items-center py-3.5 hover:bg-muted/30 transition-colors group min-w-max">
       {/* Brand name - sticky left, clickable link */}
       <Link
         href={`/partners/${partner.id}`}
@@ -496,10 +503,13 @@ function PartnerRow({ partner, columns, visibleColumns, onSync, onWeeklyClick, o
           flex: col.flex ?? 1,
         }
 
+        // Don't truncate status column - badges need to display fully
+        const shouldTruncate = col.key !== 'status'
+
         return (
           <div
             key={col.key}
-            className={`hidden md:block text-sm ${col.align === 'right' ? 'text-right' : ''} text-muted-foreground truncate px-2`}
+            className={`hidden md:block text-sm ${col.align === 'right' ? 'text-right' : ''} text-muted-foreground ${shouldTruncate ? 'truncate' : ''} px-2`}
             style={colStyle}
           >
             {content}
@@ -557,8 +567,11 @@ export default function PartnersPage() {
   const [loading, setLoading] = useState(true)
   const [isFiltering, setIsFiltering] = useState(false) // Subtle indicator for filter changes
   const [isRefreshing, setIsRefreshing] = useState(false) // For manual refresh
-  const [loadingMore, setLoadingMore] = useState(false)
+  // const [loadingMore, setLoadingMore] = useState(false) // Reserved for future infinite scroll
   const initialLoadDone = useRef(false)
+  // Refs for scroll sync between header and content
+  const headerScrollRef = useRef<HTMLDivElement>(null)
+  const contentScrollRef = useRef<HTMLDivElement>(null)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string[]>(['active']) // Default to Active partners
 
@@ -577,7 +590,10 @@ export default function PartnersPage() {
   const [sort, setSort] = useState('onboarding_date')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const [total, setTotal] = useState(0)
-  const [hasMore, setHasMore] = useState(false)
+  // const [hasMore, setHasMore] = useState(false) // Reserved for future infinite scroll
+  // Pagination state
+  const [pageSize, setPageSize] = useState(50)
+  const [currentPage, setCurrentPage] = useState(1)
   const [visibleColumns, setVisibleColumns] = useState<Set<string>>(() => {
     // Try to restore from localStorage
     if (typeof window !== 'undefined') {
@@ -625,6 +641,19 @@ export default function PartnersPage() {
 
   // Use filtered results when searching locally, otherwise use all partners
   const displayedPartners = search.length >= 2 ? filteredPartners : partners
+
+  // Scroll sync handler - syncs header and content horizontal scroll
+  const handleContentScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    if (headerScrollRef.current) {
+      headerScrollRef.current.scrollLeft = e.currentTarget.scrollLeft
+    }
+  }, [])
+
+  const handleHeaderScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    if (contentScrollRef.current) {
+      contentScrollRef.current.scrollLeft = e.currentTarget.scrollLeft
+    }
+  }, [])
 
   // Discover additional columns from source_data
   const sourceDataColumns = useMemo(() => extractSourceDataColumns(partners), [partners])
@@ -694,10 +723,8 @@ export default function PartnersPage() {
     })
   }
 
-  const fetchPartners = useCallback(async (append = false, currentOffset = 0) => {
-    if (append) {
-      setLoadingMore(true)
-    } else if (!initialLoadDone.current) {
+  const fetchPartners = useCallback(async (page = currentPage, size = pageSize) => {
+    if (!initialLoadDone.current) {
       // Only show full shimmer on initial load
       setLoading(true)
     } else {
@@ -711,35 +738,31 @@ export default function PartnersPage() {
       if (statusFilter.length) params.set('status', statusFilter.join(','))
       params.set('sort', sort)
       params.set('order', sortOrder)
-      params.set('limit', '50')
-      params.set('offset', String(append ? currentOffset : 0))
+      params.set('limit', String(size))
+      params.set('offset', String((page - 1) * size))
 
       const res = await fetch(`/api/partners?${params}`)
       const json = await res.json()
       const data = json.data
 
       if (data) {
-        if (append) {
-          setPartners(prev => [...prev, ...data.partners])
-        } else {
-          setPartners(data.partners)
-        }
+        setPartners(data.partners)
         setTotal(data.total)
-        setHasMore(data.has_more)
+        // setHasMore(data.has_more) // Reserved for future infinite scroll
         initialLoadDone.current = true
       }
     } catch (error) {
       console.error('Failed to fetch partners:', error)
     } finally {
       setLoading(false)
-      setLoadingMore(false)
+      // setLoadingMore(false) // Reserved for future infinite scroll
       setIsFiltering(false)
     }
-  }, [debouncedSearch, statusFilter, sort, sortOrder])
+  }, [debouncedSearch, statusFilter, sort, sortOrder, currentPage, pageSize])
 
   // Fetch on filter/search/sort change
   useEffect(() => {
-    fetchPartners(false)
+    fetchPartners()
   }, [fetchPartners])
 
   // Fetch field lineage info (which sheet/tab/column each field came from)
@@ -765,8 +788,27 @@ export default function PartnersPage() {
     fetchFieldLineage()
   }, [fetchFieldLineage])
 
-  const handleLoadMore = () => {
-    fetchPartners(true, partners.length)
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [debouncedSearch, statusFilter, sort, sortOrder, pageSize])
+
+  // Pagination helpers
+  const totalPages = Math.ceil(total / pageSize)
+  const startItem = (currentPage - 1) * pageSize + 1
+  const endItem = Math.min(currentPage * pageSize, total)
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page)
+    fetchPartners(page, pageSize)
+    // Scroll to top of table
+    window.scrollTo({ top: 200, behavior: 'smooth' })
+  }
+
+  const handlePageSizeChange = (size: number) => {
+    setPageSize(size)
+    setCurrentPage(1)
+    fetchPartners(1, size)
   }
 
   // Manual refresh - clears cache and re-fetches
@@ -775,7 +817,7 @@ export default function PartnersPage() {
     // Clear the heatmap cache
     clearHeatmapCache()
     await Promise.all([
-      fetchPartners(false),
+      fetchPartners(),
       fetchFieldLineage(),
     ])
     setIsRefreshing(false)
@@ -796,7 +838,7 @@ export default function PartnersPage() {
       if (data?.synced) {
         toast.success(`${brandName} synced from sheet`)
         // Update the partner in our local state with fresh data
-        await fetchPartners(false)
+        await fetchPartners()
       } else {
         toast.warning(data?.message || 'Partner not found in source sheet')
       }
@@ -912,14 +954,11 @@ export default function PartnersPage() {
               {/* Sticky header - outside scroll container for proper vertical sticky */}
               <div className="sticky top-[113px] z-20 bg-card border-b border-border/60 rounded-t-xl overflow-hidden">
                 <div
+                  ref={headerScrollRef}
                   className="overflow-x-auto scrollbar-hide"
-                  onScroll={(e) => {
-                    // Sync scroll with content
-                    const content = e.currentTarget.parentElement?.nextElementSibling?.querySelector('.overflow-x-auto')
-                    if (content) content.scrollLeft = e.currentTarget.scrollLeft
-                  }}
+                  onScroll={handleHeaderScroll}
                 >
-                  <div className="hidden md:flex items-center py-2.5 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+                  <div className="hidden md:flex items-center py-2.5 text-[11px] font-medium text-muted-foreground uppercase tracking-wider min-w-max">
                     {/* Brand header - sticky left, sortable */}
                     <button
                       onClick={() => {
@@ -1020,14 +1059,11 @@ export default function PartnersPage() {
               </div>
               {/* Table content - separate scroll container synced with header */}
               <div
+                ref={contentScrollRef}
                 className="overflow-x-auto"
-                onScroll={(e) => {
-                  // Sync scroll with header
-                  const header = e.currentTarget.parentElement?.querySelector('.sticky .overflow-x-auto')
-                  if (header) header.scrollLeft = e.currentTarget.scrollLeft
-                }}
+                onScroll={handleContentScroll}
               >
-                <div className="divide-y divide-border/60 rounded-b-xl min-w-fit">
+                <div className="divide-y divide-border/60 rounded-b-xl min-w-max">
                   {displayedPartners.map(partner => (
                     <PartnerRow
                       key={partner.id}
@@ -1043,19 +1079,102 @@ export default function PartnersPage() {
               </div>
             </div>
 
-            {hasMore && (
-              <div className="flex justify-center mt-6">
-                <Button
-                  variant="outline"
-                  onClick={handleLoadMore}
-                  disabled={loadingMore}
-                  className="gap-2"
-                >
-                  {loadingMore ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : null}
-                  Load More
-                </Button>
+            {/* Pagination Controls */}
+            {total > 0 && (
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-6 px-2">
+                {/* Page size selector */}
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <span>Show</span>
+                  <Select value={String(pageSize)} onValueChange={(v) => handlePageSizeChange(Number(v))}>
+                    <SelectTrigger className="w-[70px] h-8">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="50">50</SelectItem>
+                      <SelectItem value="100">100</SelectItem>
+                      <SelectItem value="200">200</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <span>per page</span>
+                </div>
+
+                {/* Page info and navigation */}
+                <div className="flex items-center gap-4">
+                  <span className="text-sm text-muted-foreground">
+                    {startItem}-{endItem} of {total}
+                  </span>
+
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handlePageChange(currentPage - 1)}
+                      disabled={currentPage <= 1 || isFiltering}
+                      className="h-8 px-2"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+
+                    {/* Page numbers */}
+                    {(() => {
+                      const pages: (number | 'ellipsis')[] = []
+                      const showPages = 5
+
+                      if (totalPages <= showPages + 2) {
+                        // Show all pages
+                        for (let i = 1; i <= totalPages; i++) pages.push(i)
+                      } else {
+                        // Always show first page
+                        pages.push(1)
+
+                        // Calculate range around current page
+                        let start = Math.max(2, currentPage - 1)
+                        let end = Math.min(totalPages - 1, currentPage + 1)
+
+                        // Adjust if at edges
+                        if (currentPage <= 3) {
+                          end = Math.min(totalPages - 1, 4)
+                        } else if (currentPage >= totalPages - 2) {
+                          start = Math.max(2, totalPages - 3)
+                        }
+
+                        if (start > 2) pages.push('ellipsis')
+                        for (let i = start; i <= end; i++) pages.push(i)
+                        if (end < totalPages - 1) pages.push('ellipsis')
+
+                        // Always show last page
+                        if (totalPages > 1) pages.push(totalPages)
+                      }
+
+                      return pages.map((page, i) =>
+                        page === 'ellipsis' ? (
+                          <span key={`ellipsis-${i}`} className="px-2 text-muted-foreground">…</span>
+                        ) : (
+                          <Button
+                            key={page}
+                            variant={page === currentPage ? 'default' : 'outline'}
+                            size="sm"
+                            onClick={() => handlePageChange(page)}
+                            disabled={isFiltering}
+                            className="h-8 w-8 p-0"
+                          >
+                            {page}
+                          </Button>
+                        )
+                      )
+                    })()}
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handlePageChange(currentPage + 1)}
+                      disabled={currentPage >= totalPages || isFiltering}
+                      className="h-8 px-2"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
               </div>
             )}
           </>

@@ -171,10 +171,12 @@ export async function POST(request: NextRequest) {
   let anthropicKey: string
   try {
     anthropicKey = await getAnthropicApiKey()
-  } catch {
+    console.log('[analyze-bug] Anthropic API key found, length:', anthropicKey.length)
+  } catch (keyError) {
+    console.error('[analyze-bug] Anthropic API key error:', keyError)
     return apiError(
       'SERVICE_UNAVAILABLE',
-      'AI analysis is not configured. Add your Anthropic API key in Settings → API Keys.',
+      'AI analysis is not configured. Add your Anthropic API key in Settings → Advanced.',
       503
     )
   }
@@ -247,6 +249,11 @@ PostHog API key not configured, so session replay data is not available.`)
   }
 
   // Call Claude for analysis
+  console.log('[analyze-bug] Context length:', contextParts.join('\n').length, 'chars')
+  console.log('[analyze-bug] Errors found:', errors.length)
+  console.log('[analyze-bug] PostHog available:', posthogAvailable)
+  console.log('[analyze-bug] Codebase files:', codebaseContext.files.length)
+
   const anthropic = new Anthropic({ apiKey: anthropicKey })
 
   const systemPrompt = `You are a senior software engineer analyzing bug reports for Sophie Hub, a Next.js 14 application with:
@@ -276,7 +283,7 @@ Respond with a JSON object matching this structure:
 
   try {
     const response = await anthropic.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
+      model: 'claude-sonnet-4-20250514',
       max_tokens: 2000,
       system: systemPrompt,
       messages: [
@@ -334,6 +341,22 @@ Respond with a JSON object matching this structure:
     })
   } catch (error) {
     console.error('Claude API error:', error)
+
+    // Provide more specific error messages
+    if (error instanceof Error) {
+      if (error.message.includes('401') || error.message.includes('authentication')) {
+        return apiError('AI_ERROR', 'Invalid Anthropic API key. Please check your API key in Settings → Advanced.', 401)
+      }
+      if (error.message.includes('429') || error.message.includes('rate')) {
+        return apiError('AI_ERROR', 'Rate limited by Anthropic API. Please wait a moment and try again.', 429)
+      }
+      if (error.message.includes('insufficient') || error.message.includes('credit')) {
+        return apiError('AI_ERROR', 'Anthropic API credits exhausted. Please check your API account.', 402)
+      }
+      // Include the actual error message for debugging
+      return apiError('AI_ERROR', `AI analysis failed: ${error.message}`, 500)
+    }
+
     return apiError('AI_ERROR', 'Failed to analyze bug report. Please try again.', 500)
   }
 }

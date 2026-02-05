@@ -81,7 +81,14 @@ export async function GET(request: Request) {
     // Sort
     query = query.order(sort, { ascending: order === 'asc' })
 
+    // Supabase defaults to 1000 rows max - explicitly set higher limit to get all partners
+    // We paginate in JS after filtering, so we need all rows for accurate filtering
+    query = query.limit(5000)
+
     const { data: allPartners, error } = await query
+
+    // Debug: log how many partners returned from Supabase
+    console.log(`[partners API] Supabase returned ${allPartners?.length || 0} partners`)
 
     if (error) {
       console.error('Error fetching partners:', error)

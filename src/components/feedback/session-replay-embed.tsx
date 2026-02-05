@@ -208,30 +208,30 @@ export function SessionReplayEmbed({ sessionId, defaultExpanded = false }: Sessi
 
           {/* Tab Content */}
           {activeTab === 'replay' && (
-            <div className="relative">
+            <div className="relative bg-[#1d1f27]">
               {loadingEmbed ? (
-                <div className="aspect-video flex items-center justify-center bg-muted/20">
+                <div className="h-[500px] flex items-center justify-center">
                   <div className="text-center">
                     <Loader2 className="h-8 w-8 animate-spin text-purple-500 mx-auto mb-2" />
-                    <p className="text-sm text-muted-foreground">Loading replay...</p>
+                    <p className="text-sm text-white/60">Loading replay...</p>
                   </div>
                 </div>
               ) : embedUrl ? (
-                <div className="aspect-video">
+                <div className="h-[500px]">
                   <iframe
                     src={embedUrl}
-                    className="w-full h-full border-0"
+                    className="w-full h-full border-0 rounded-b-lg"
                     allow="fullscreen"
                     title="PostHog Session Replay"
                   />
                 </div>
               ) : (
-                <div className="p-8 flex flex-col items-center justify-center text-center">
-                  <div className="h-16 w-16 rounded-full bg-purple-500/10 flex items-center justify-center mb-4">
-                    <Play className="h-8 w-8 text-purple-500" />
+                <div className="h-[300px] flex flex-col items-center justify-center text-center p-8">
+                  <div className="h-16 w-16 rounded-full bg-purple-500/20 flex items-center justify-center mb-4">
+                    <Play className="h-8 w-8 text-purple-400" />
                   </div>
-                  <h4 className="font-medium mb-2">Watch Session Recording</h4>
-                  <p className="text-sm text-muted-foreground mb-4 max-w-sm">
+                  <h4 className="font-medium mb-2 text-white">Watch Session Recording</h4>
+                  <p className="text-sm text-white/60 mb-4 max-w-sm">
                     {embedError || 'See exactly what the user experienced - their clicks, scrolls, and the bug in action.'}
                   </p>
                   <div className="flex gap-2">
@@ -244,6 +244,7 @@ export function SessionReplayEmbed({ sessionId, defaultExpanded = false }: Sessi
                           setEmbedUrl(null)
                           fetchEmbedUrl()
                         }}
+                        className="border-white/20 text-white hover:bg-white/10"
                       >
                         <RefreshCw className="h-3 w-3 mr-1" />
                         Retry

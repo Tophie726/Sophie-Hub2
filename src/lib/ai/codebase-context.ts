@@ -115,19 +115,19 @@ async function readSourceFile(filePath: string): Promise<FileContext | null> {
 }
 
 /**
- * Search for files matching a pattern using git grep
+ * Search for files matching a pattern using grep (fallback from git grep)
  */
 async function searchFiles(pattern: string, limit = 5): Promise<string[]> {
   try {
-    // Use git grep to find files containing the pattern
+    // First try git grep, then fall back to grep
     const { stdout } = await execAsync(
-      `git grep -l "${pattern.replace(/"/g, '\\"')}" -- "src/**/*.ts" "src/**/*.tsx" 2>/dev/null | head -${limit}`,
+      `(git grep -l "${pattern.replace(/"/g, '\\"')}" -- "src/**/*.ts" "src/**/*.tsx" 2>/dev/null || grep -rl "${pattern.replace(/"/g, '\\"')}" src --include="*.ts" --include="*.tsx" 2>/dev/null) | head -${limit}`,
       { cwd: PROJECT_ROOT, maxBuffer: 1024 * 1024 }
     )
 
     return stdout.trim().split('\n').filter(Boolean)
   } catch {
-    // git grep returns non-zero if no matches
+    // grep returns non-zero if no matches
     return []
   }
 }
@@ -178,6 +178,13 @@ export async function getCodebaseContextForBug(options: {
 
   const filesToRead = new Set<string>()
 
+  console.log('[codebase-context] Getting context for bug:', {
+    hasPageUrl: !!pageUrl,
+    hasErrorStack: !!errorStack,
+    descriptionLength: description?.length || 0,
+    affectedFilesCount: affectedFiles.length,
+  })
+
   // 1. Add explicitly mentioned files
   for (const file of affectedFiles) {
     if (file.startsWith('src/') || file.includes('.ts')) {
@@ -207,9 +214,13 @@ export async function getCodebaseContextForBug(options: {
     const keywords = description.match(/\b[A-Z][a-zA-Z]+(?:Modal|Button|Card|Form|List|Table|Dialog)?\b/g) || []
 
     for (const keyword of keywords.slice(0, 3)) {
-      const searchResults = await searchFiles(keyword, 2)
-      for (const file of searchResults) {
-        filesToRead.add(file)
+      try {
+        const searchResults = await searchFiles(keyword, 2)
+        for (const file of searchResults) {
+          filesToRead.add(file)
+        }
+      } catch (error) {
+        console.error(`[codebase-context] Search failed for ${keyword}:`, error)
       }
     }
   }
@@ -219,18 +230,32 @@ export async function getCodebaseContextForBug(options: {
   let totalSize = 0
   const filesToReadArray = Array.from(filesToRead)
 
+  console.log('[codebase-context] Files to read:', filesToReadArray.length)
+
   for (const filePath of filesToReadArray) {
     if (totalSize >= MAX_TOTAL_CONTEXT) break
 
-    const fileContext = await readSourceFile(filePath)
-    if (fileContext) {
-      files.push(fileContext)
-      totalSize += fileContext.content.length
+    try {
+      const fileContext = await readSourceFile(filePath)
+      if (fileContext) {
+        files.push(fileContext)
+        totalSize += fileContext.content.length
+      }
+    } catch (error) {
+      console.error(`[codebase-context] Failed to read ${filePath}:`, error)
     }
   }
 
   // Get project structure
-  const projectStructure = await getProjectStructure()
+  let projectStructure = ''
+  try {
+    projectStructure = await getProjectStructure()
+  } catch (error) {
+    console.error('[codebase-context] Failed to get project structure:', error)
+    projectStructure = 'Unable to fetch project structure'
+  }
+
+  console.log('[codebase-context] Context ready:', files.length, 'files,', totalSize, 'bytes')
 
   return {
     files,

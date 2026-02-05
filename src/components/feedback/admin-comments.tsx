@@ -13,6 +13,7 @@ import {
   Paperclip,
   Pencil,
   X,
+  ZoomIn,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -23,6 +24,10 @@ import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { formatDistanceToNow } from 'date-fns'
 import { DrawingPad } from './drawing-pad'
+import {
+  Dialog,
+  DialogContent,
+} from '@/components/ui/dialog'
 
 interface CommentAttachment {
   type: 'image' | 'drawing' | 'file'
@@ -63,6 +68,8 @@ export function AdminComments({ feedbackId, submitterEmail }: AdminCommentsProps
   const [expanded, setExpanded] = useState(true)
   const [attachments, setAttachments] = useState<CommentAttachment[]>([])
   const [drawingPadOpen, setDrawingPadOpen] = useState(false)
+  const [previewImage, setPreviewImage] = useState<string | null>(null)
+  const [editingAttachmentIndex, setEditingAttachmentIndex] = useState<number | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const commentsEndRef = useRef<HTMLDivElement>(null)
 
@@ -117,12 +124,35 @@ export function AdminComments({ feedbackId, submitterEmail }: AdminCommentsProps
   }
 
   const handleDrawingSave = (imageDataUrl: string) => {
-    setAttachments(prev => [...prev, {
-      type: 'drawing',
-      url: imageDataUrl,
-      name: `Drawing ${prev.filter(a => a.type === 'drawing').length + 1}`,
-      dataUrl: imageDataUrl,
-    }])
+    if (editingAttachmentIndex !== null) {
+      // Update existing attachment
+      setAttachments(prev => prev.map((att, idx) =>
+        idx === editingAttachmentIndex
+          ? { ...att, url: imageDataUrl, dataUrl: imageDataUrl }
+          : att
+      ))
+      setEditingAttachmentIndex(null)
+    } else {
+      // Add new attachment
+      setAttachments(prev => [...prev, {
+        type: 'drawing',
+        url: imageDataUrl,
+        name: `Drawing ${prev.filter(a => a.type === 'drawing').length + 1}`,
+        dataUrl: imageDataUrl,
+      }])
+    }
+  }
+
+  const handleEditDrawing = (index: number) => {
+    setEditingAttachmentIndex(index)
+    setDrawingPadOpen(true)
+  }
+
+  const handleCloseDrawingPad = (open: boolean) => {
+    setDrawingPadOpen(open)
+    if (!open) {
+      setEditingAttachmentIndex(null)
+    }
   }
 
   const handleRemoveAttachment = (index: number) => {
@@ -277,19 +307,45 @@ export function AdminComments({ feedbackId, submitterEmail }: AdminCommentsProps
                   <div key={idx} className="relative group">
                     {att.type === 'image' || att.type === 'drawing' ? (
                       <div className="relative">
-                        <img
-                          src={att.dataUrl || att.url}
-                          alt={att.name || 'Attachment'}
-                          className="h-12 w-12 object-cover rounded border"
-                        />
+                        <button
+                          type="button"
+                          onClick={() => setPreviewImage(att.dataUrl || att.url)}
+                          className="block"
+                        >
+                          <img
+                            src={att.dataUrl || att.url}
+                            alt={att.name || 'Attachment'}
+                            className="h-16 w-16 object-cover rounded border hover:border-primary/50 transition-colors cursor-zoom-in"
+                          />
+                        </button>
                         {att.type === 'drawing' && (
-                          <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[8px] px-1 text-center">
+                          <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[8px] px-1 text-center pointer-events-none">
                             Sketch
                           </div>
                         )}
+                        {/* Edit button for drawings */}
+                        {att.type === 'drawing' && (
+                          <button
+                            type="button"
+                            onClick={() => handleEditDrawing(idx)}
+                            className="absolute top-0.5 left-0.5 h-5 w-5 bg-background/90 rounded flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                            title="Edit sketch"
+                          >
+                            <Pencil className="h-2.5 w-2.5" />
+                          </button>
+                        )}
+                        {/* Zoom button */}
+                        <button
+                          type="button"
+                          onClick={() => setPreviewImage(att.dataUrl || att.url)}
+                          className="absolute bottom-0.5 right-0.5 h-5 w-5 bg-background/90 rounded flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                          title="View full size"
+                        >
+                          <ZoomIn className="h-2.5 w-2.5" />
+                        </button>
                       </div>
                     ) : (
-                      <div className="h-12 px-2 flex items-center gap-1 bg-muted rounded text-[10px]">
+                      <div className="h-16 px-2 flex items-center gap-1 bg-muted rounded text-[10px]">
                         <Paperclip className="h-3 w-3 shrink-0" />
                         <span className="truncate max-w-[60px]">{att.name}</span>
                       </div>
@@ -297,9 +353,9 @@ export function AdminComments({ feedbackId, submitterEmail }: AdminCommentsProps
                     <button
                       type="button"
                       onClick={() => handleRemoveAttachment(idx)}
-                      className="absolute -top-1 -right-1 h-4 w-4 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                      className="absolute -top-1.5 -right-1.5 h-5 w-5 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                     >
-                      <X className="h-2.5 w-2.5" />
+                      <X className="h-3 w-3" />
                     </button>
                   </div>
                 ))}
@@ -376,9 +432,22 @@ export function AdminComments({ feedbackId, submitterEmail }: AdminCommentsProps
           {/* Drawing Pad Modal */}
           <DrawingPad
             open={drawingPadOpen}
-            onOpenChange={setDrawingPadOpen}
+            onOpenChange={handleCloseDrawingPad}
             onSave={handleDrawingSave}
           />
+
+          {/* Image Preview Modal */}
+          <Dialog open={!!previewImage} onOpenChange={(open) => !open && setPreviewImage(null)}>
+            <DialogContent className="max-w-[90vw] max-h-[90vh] p-2">
+              {previewImage && (
+                <img
+                  src={previewImage}
+                  alt="Preview"
+                  className="w-full h-full object-contain max-h-[85vh]"
+                />
+              )}
+            </DialogContent>
+          </Dialog>
         </div>
       )}
     </div>

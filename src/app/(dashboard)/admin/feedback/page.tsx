@@ -24,6 +24,8 @@ import {
   ImageIcon,
   LayoutList,
   Kanban,
+  Copy,
+  Check,
 } from 'lucide-react'
 import Link from 'next/link'
 import { Switch } from '@/components/ui/switch'
@@ -864,12 +866,104 @@ function FeedbackDetailDialog({
   const [analysis, setAnalysis] = useState<BugAnalysis | null>(null)
   const [suggestion, setSuggestion] = useState<ImplementationSuggestion | null>(null)
   const [showAnalysis, setShowAnalysis] = useState(true)
+  const [copied, setCopied] = useState(false)
+
+  // Generate AI-ready prompt from analysis
+  const generateAIPrompt = useCallback(() => {
+    if (!item) return ''
+
+    const lines: string[] = []
+    lines.push(`# ${item.type === 'bug' ? 'Bug Fix Request' : 'Feature Implementation Request'}`)
+    lines.push('')
+    lines.push(`## Original Report`)
+    lines.push(`**Title:** ${item.title || 'No title'}`)
+    lines.push(`**Description:** ${item.description}`)
+    if (item.page_url) lines.push(`**Page URL:** ${item.page_url}`)
+    lines.push('')
+
+    if (analysis) {
+      lines.push(`## AI Analysis`)
+      lines.push(`**Summary:** ${analysis.summary}`)
+      lines.push('')
+      lines.push(`**Likely Cause:** ${analysis.likelyCause}`)
+      lines.push('')
+      lines.push(`**Suggested Fix:**`)
+      lines.push('```')
+      lines.push(analysis.suggestedFix)
+      lines.push('```')
+      lines.push('')
+      if (analysis.affectedFiles.length > 0) {
+        lines.push(`**Affected Files:**`)
+        analysis.affectedFiles.forEach(f => lines.push(`- ${f}`))
+        lines.push('')
+      }
+      lines.push(`**Confidence:** ${analysis.confidence}`)
+      if (analysis.additionalNotes) {
+        lines.push('')
+        lines.push(`**Notes:** ${analysis.additionalNotes}`)
+      }
+    }
+
+    if (suggestion) {
+      lines.push(`## Implementation Suggestion`)
+      lines.push(`**Summary:** ${suggestion.summary}`)
+      lines.push('')
+      lines.push(`**Approach:** ${suggestion.approach}`)
+      lines.push('')
+      if (suggestion.steps.length > 0) {
+        lines.push(`**Steps:**`)
+        suggestion.steps.forEach(step => {
+          lines.push(`${step.step}. ${step.description}`)
+          step.files.forEach(f => lines.push(`   - ${f}`))
+        })
+        lines.push('')
+      }
+      if (suggestion.filesToCreate.length > 0) {
+        lines.push(`**Files to Create:** ${suggestion.filesToCreate.join(', ')}`)
+      }
+      if (suggestion.filesToModify.length > 0) {
+        lines.push(`**Files to Modify:** ${suggestion.filesToModify.join(', ')}`)
+      }
+      if (suggestion.databaseChanges) {
+        lines.push('')
+        lines.push(`**Database Changes:** ${suggestion.databaseChanges}`)
+      }
+      lines.push('')
+      lines.push(`**Complexity:** ${suggestion.complexity}`)
+      lines.push(`**Scope:** ${suggestion.estimatedScope}`)
+    }
+
+    lines.push('')
+    lines.push('---')
+    lines.push('Please implement this fix/feature following the analysis above.')
+
+    return lines.join('\n')
+  }, [item, analysis, suggestion])
+
+  const handleCopy = useCallback(async () => {
+    const text = generateAIPrompt()
+    await navigator.clipboard.writeText(text)
+    setCopied(true)
+    toast.success('Copied to clipboard - paste into Claude Code')
+    setTimeout(() => setCopied(false), 2000)
+  }, [generateAIPrompt])
 
   useEffect(() => {
     if (item) {
       setStatus(item.status)
-      setAnalysis(null)
-      setSuggestion(null)
+      // Load cached analysis from item
+      if (item.ai_analysis) {
+        if (item.type === 'bug') {
+          setAnalysis(item.ai_analysis as unknown as BugAnalysis)
+          setSuggestion(null)
+        } else {
+          setSuggestion(item.ai_analysis as unknown as ImplementationSuggestion)
+          setAnalysis(null)
+        }
+      } else {
+        setAnalysis(null)
+        setSuggestion(null)
+      }
     }
   }, [item])
 
@@ -1025,24 +1119,46 @@ function FeedbackDetailDialog({
                 <Sparkles className="h-4 w-4 text-purple-500" />
                 AI Analysis
               </h4>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleAnalyze}
-                disabled={analyzing}
-              >
-                {analyzing ? (
-                  <>
-                    <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-                    Analyzing...
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="h-3.5 w-3.5 mr-1.5" />
-                    {item.type === 'bug' ? 'Analyze Bug' : 'Suggest Implementation'}
-                  </>
+              <div className="flex items-center gap-2">
+                {(analysis || suggestion) && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleCopy}
+                    className="h-8"
+                  >
+                    {copied ? (
+                      <>
+                        <Check className="h-3.5 w-3.5 mr-1.5 text-green-500" />
+                        Copied!
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-3.5 w-3.5 mr-1.5" />
+                        Copy for AI
+                      </>
+                    )}
+                  </Button>
                 )}
-              </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleAnalyze}
+                  disabled={analyzing}
+                >
+                  {analyzing ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                      Analyzing...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="h-3.5 w-3.5 mr-1.5" />
+                      {analysis || suggestion ? 'Re-analyze' : item.type === 'bug' ? 'Analyze Bug' : 'Suggest Implementation'}
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
 
             {/* Bug Analysis Results */}
