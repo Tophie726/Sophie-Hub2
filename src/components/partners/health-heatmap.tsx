@@ -1,9 +1,16 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { ArrowUpDown, ChevronLeft, ChevronRight } from 'lucide-react'
+import { ArrowUpDown, ChevronLeft, ChevronRight, Settings } from 'lucide-react'
 import { HeatmapShimmer } from '@/components/ui/shimmer-grid'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,6 +24,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { StatusMappingSettings } from '@/components/settings/status-mapping-settings'
 import { cn } from '@/lib/utils'
 import { getStatusBucket, BUCKET_LABELS, type StatusColorBucket } from '@/lib/status-colors'
 import Link from 'next/link'
@@ -223,6 +231,8 @@ export function HealthHeatmap({ statusFilter = [], search = '' }: HealthHeatmapP
   )
   const [weeksToShow, setWeeksToShow] = useState(WEEKS_DESKTOP)
   const [hoveredCell, setHoveredCell] = useState<HoveredCell | null>(null)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false)
   const hoveredCellRef = useRef<HoveredCell | null>(null) // Mirror of state for scroll handler
   // Highlight range for time period selection (click year/quarter/month to highlight)
   const [highlightRange, setHighlightRange] = useState<{ start: number; end: number } | null>(null)
@@ -251,6 +261,14 @@ export function HealthHeatmap({ statusFilter = [], search = '' }: HealthHeatmapP
     updateWeeks()
     window.addEventListener('resize', updateWeeks)
     return () => window.removeEventListener('resize', updateWeeks)
+  }, [])
+
+  // Check if user is admin (for settings button)
+  useEffect(() => {
+    fetch('/api/auth/me')
+      .then(res => res.ok ? res.json() : null)
+      .then(data => setIsAdmin(data?.user?.isAdmin || false))
+      .catch(() => setIsAdmin(false))
   }, [])
 
   const fetchPartners = useCallback(async () => {
@@ -584,23 +602,40 @@ export function HealthHeatmap({ statusFilter = [], search = '' }: HealthHeatmapP
             </Button>
           </div>
         </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" className="gap-1.5 h-8">
-              <ArrowUpDown className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">{SORT_OPTIONS.find(o => o.value === sortBy)?.label}</span>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuRadioGroup value={sortBy} onValueChange={(v) => setSortBy(v as SortOption)}>
-              {SORT_OPTIONS.map(option => (
-                <DropdownMenuRadioItem key={option.value} value={option.value}>
-                  {option.label}
-                </DropdownMenuRadioItem>
-              ))}
-            </DropdownMenuRadioGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <div className="flex items-center gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-1.5 h-8">
+                <ArrowUpDown className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">{SORT_OPTIONS.find(o => o.value === sortBy)?.label}</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuRadioGroup value={sortBy} onValueChange={(v) => setSortBy(v as SortOption)}>
+                {SORT_OPTIONS.map(option => (
+                  <DropdownMenuRadioItem key={option.value} value={option.value}>
+                    {option.label}
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          {isAdmin && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 w-8 p-0"
+                  onClick={() => setSettingsOpen(true)}
+                >
+                  <Settings className="h-3.5 w-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Color Settings</TooltipContent>
+            </Tooltip>
+          )}
+        </div>
       </div>
 
       {/* Heatmap container with sticky headers */}
@@ -931,6 +966,19 @@ export function HealthHeatmap({ statusFilter = [], search = '' }: HealthHeatmapP
           ))}
         </div>
       </div>
+
+      {/* Status Color Settings Dialog */}
+      <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Status Color Mappings</DialogTitle>
+            <DialogDescription>
+              Configure which status text patterns map to which color buckets in the heatmap.
+            </DialogDescription>
+          </DialogHeader>
+          <StatusMappingSettings />
+        </DialogContent>
+      </Dialog>
     </TooltipProvider>
   )
 }
