@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { Loader2, ArrowUpDown, ChevronLeft, ChevronRight } from 'lucide-react'
+import { ArrowUpDown, ChevronLeft, ChevronRight } from 'lucide-react'
+import { HeatmapShimmer } from '@/components/ui/shimmer-grid'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -538,11 +539,7 @@ export function HealthHeatmap({ statusFilter = [], search = '' }: HealthHeatmapP
   const nameColWidth = 180
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-24">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
-    )
+    return <HeatmapShimmer rows={15} columns={52} />
   }
 
   if (error) {

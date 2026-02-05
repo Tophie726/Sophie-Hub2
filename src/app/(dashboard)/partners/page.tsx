@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import Link from 'next/link'
+import { useSearchParams, useRouter } from 'next/navigation'
 import { format, parseISO } from 'date-fns'
 import { Building2, Plus, Database, ChevronRight, Loader2, Settings2, Activity, RefreshCw, FileSpreadsheet, MoreHorizontal, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
@@ -33,10 +34,6 @@ import {
 } from '@/components/ui/tooltip'
 import { useDebounce } from '@/lib/hooks/use-debounce'
 
-// Module-level cache for view state persistence
-const viewCache = {
-  showHeatmap: false,
-}
 
 // Extended partner type that includes source_data and computed status
 interface Partner {
@@ -457,6 +454,9 @@ function PartnerRow({ partner, columns, visibleColumns, onSync, onWeeklyClick }:
 }
 
 export default function PartnersPage() {
+  const searchParams = useSearchParams()
+  const router = useRouter()
+
   const [partners, setPartners] = useState<Partner[]>([])
   const [loading, setLoading] = useState(true)
   const [isFiltering, setIsFiltering] = useState(false) // Subtle indicator for filter changes
@@ -465,16 +465,19 @@ export default function PartnersPage() {
   const initialLoadDone = useRef(false)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string[]>(['active']) // Default to Active partners
-  const [showHeatmap, setShowHeatmapState] = useState(() => viewCache.showHeatmap)
 
-  // Wrapper to persist heatmap toggle to cache
+  // Read heatmap view from URL params - clicking Partners nav resets to list view
+  const showHeatmap = searchParams.get('view') === 'heatmap'
+
+  // Toggle heatmap via URL params
   const setShowHeatmap = useCallback((value: boolean | ((prev: boolean) => boolean)) => {
-    setShowHeatmapState(prev => {
-      const newValue = typeof value === 'function' ? value(prev) : value
-      viewCache.showHeatmap = newValue
-      return newValue
-    })
-  }, [])
+    const newValue = typeof value === 'function' ? value(showHeatmap) : value
+    if (newValue) {
+      router.push('/partners?view=heatmap', { scroll: false })
+    } else {
+      router.push('/partners', { scroll: false })
+    }
+  }, [router, showHeatmap])
   const [sort, setSort] = useState('brand_name')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
   const [total, setTotal] = useState(0)
@@ -604,20 +607,22 @@ export default function PartnersPage() {
   }, [fetchPartners])
 
   // Fetch field lineage info (which sheet/tab/column each field came from)
-  useEffect(() => {
-    async function fetchFieldLineage() {
-      try {
-        const res = await fetch('/api/partners/field-lineage')
-        const json = await res.json()
-        if (json.data?.lineage) {
-          setFieldLineage(json.data.lineage)
-        }
-      } catch (error) {
-        console.error('Failed to fetch field lineage:', error)
+  const fetchFieldLineage = useCallback(async () => {
+    try {
+      // Add cache buster to force fresh data
+      const res = await fetch(`/api/partners/field-lineage?_=${Date.now()}`)
+      const json = await res.json()
+      if (json.data?.lineage) {
+        setFieldLineage(json.data.lineage)
       }
+    } catch (error) {
+      console.error('Failed to fetch field lineage:', error)
     }
-    fetchFieldLineage()
   }, [])
+
+  useEffect(() => {
+    fetchFieldLineage()
+  }, [fetchFieldLineage])
 
   const handleLoadMore = () => {
     fetchPartners(true, partners.length)
@@ -628,7 +633,10 @@ export default function PartnersPage() {
     setIsRefreshing(true)
     // Clear the heatmap cache
     clearHeatmapCache()
-    await fetchPartners(false)
+    await Promise.all([
+      fetchPartners(false),
+      fetchFieldLineage(),
+    ])
     setIsRefreshing(false)
   }
 
@@ -769,7 +777,7 @@ export default function PartnersPage() {
                         <span className="sr-only">Toggle columns</span>
                       </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-72 max-h-[400px] overflow-y-auto z-50">
+                    <DropdownMenuContent align="end" className="w-80 max-h-[400px] overflow-y-auto z-50 pr-2 scrollbar-thin">
                       <TooltipProvider delayDuration={400}>
                         {/* Visible columns section */}
                         {dropdownOrderedColumns.visible.length > 0 && (

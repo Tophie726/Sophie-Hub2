@@ -163,3 +163,68 @@ export function ShimmerBar({
     />
   )
 }
+
+/**
+ * HeatmapShimmer — Loading state for the health heatmap grid.
+ * Mimics the tiny cell grid structure with a wave animation.
+ */
+export function HeatmapShimmer({
+  rows = 12,
+  columns = 52,
+  cellSize = 12,
+  cellGap = 2,
+  nameColWidth = 180,
+  className,
+}: {
+  rows?: number
+  columns?: number
+  cellSize?: number
+  cellGap?: number
+  nameColWidth?: number
+  className?: string
+}) {
+  return (
+    <div className={cn('border rounded-lg bg-card overflow-hidden', className)}>
+      {/* Header shimmer */}
+      <div className="border-b p-2">
+        <div className="flex items-center gap-4">
+          <ShimmerBar width={100} height={14} />
+          <ShimmerBar width={60} height={14} />
+        </div>
+      </div>
+
+      {/* Grid shimmer */}
+      <div className="p-3 overflow-hidden">
+        <div className="space-y-0">
+          {Array.from({ length: rows }, (_, rowIdx) => (
+            <div key={rowIdx} className="flex items-center" style={{ gap: cellGap, marginBottom: cellGap }}>
+              {/* Name column */}
+              <div
+                className="shrink-0 rounded bg-gradient-to-r from-muted/30 via-muted/10 to-muted/30 bg-[length:200%_100%] animate-[shimmer_1.8s_ease-in-out_infinite]"
+                style={{
+                  width: nameColWidth,
+                  height: cellSize,
+                  animationDelay: `${rowIdx * 60}ms`,
+                }}
+              />
+              {/* Cell columns */}
+              <div className="flex" style={{ gap: cellGap }}>
+                {Array.from({ length: Math.min(columns, 40) }, (_, colIdx) => (
+                  <div
+                    key={colIdx}
+                    className="rounded-[2px] bg-gradient-to-r from-muted/25 via-muted/8 to-muted/25 bg-[length:200%_100%] animate-[shimmer_1.8s_ease-in-out_infinite]"
+                    style={{
+                      width: cellSize,
+                      height: cellSize,
+                      animationDelay: `${(rowIdx * 3 + colIdx) * 15}ms`,
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
