@@ -107,22 +107,29 @@ export default function FeedbackAdminPage() {
   const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list')
 
   // AI state - persisted in localStorage
-  const [aiEnabled, setAiEnabled] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('admin-feedback-ai-enabled') === 'true'
-    }
-    return false
-  })
+  const [aiEnabled, setAiEnabled] = useState(false)
   const [summarizing, setSummarizing] = useState<Record<string, boolean>>({})
   const [analyzing, setAnalyzing] = useState<Record<string, boolean>>({})
   const [summaries, setSummaries] = useState<Record<string, AISummary>>({})
   const [analyses, setAnalyses] = useState<Record<string, AIAnalysis>>({})
   const [batchSummarizing, setBatchSummarizing] = useState(false)
+  const [mounted, setMounted] = useState(false)
 
-  // Persist AI toggle to localStorage
+  // Read from localStorage on mount (client-side only)
   useEffect(() => {
-    localStorage.setItem('admin-feedback-ai-enabled', aiEnabled.toString())
-  }, [aiEnabled])
+    const stored = localStorage.getItem('admin-feedback-ai-enabled')
+    if (stored === 'true') {
+      setAiEnabled(true)
+    }
+    setMounted(true)
+  }, [])
+
+  // Persist AI toggle to localStorage (only after initial mount)
+  useEffect(() => {
+    if (mounted) {
+      localStorage.setItem('admin-feedback-ai-enabled', aiEnabled.toString())
+    }
+  }, [aiEnabled, mounted])
 
   const handleSummarize = async (id: string) => {
     setSummarizing(prev => ({ ...prev, [id]: true }))
