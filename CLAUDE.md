@@ -430,10 +430,24 @@ The actual sync was unaffected (data integrity preserved), but it was confusing 
   - API endpoint: `GET /api/help/[docId]` - Fetches published help content
   - `WorkflowCard` component: Reusable numbered workflow steps card
     - Supports inline content OR database fetch via `docId` prop
-    - Collapsible with smooth Framer Motion animations
+    - Dismissible with `onClose` prop - shows by default, can be closed
     - Falls back to inline content if database fetch fails
-  - Change Approval page updated to use WorkflowCard
+  - Change Approval page: Help panel visible by default at top
+    - Close button hides it, "How it works" button in header restores it
+    - Preference persisted in localStorage
   - Future phases: HelpButton, HelpPopover, FieldTooltip, AI generation
+- ✅ **Dashboard Active Partners** - Shows healthy partners count
+  - Stats API returns `activeCount` (partners in "healthy" bucket)
+  - Dashboard card shows "Active Partners of X" format
+  - Fixed data sources extraction to handle `apiSuccess` wrapper
+- ✅ **Field Lineage Tooltips** - Shows source sheet/tab/column for each field
+  - API: `GET /api/partners/field-lineage` - Returns mapping provenance
+  - Tooltip shows sheet name, tab name, and original column header
+  - Improved error handling with "re-save mapping" hint for missing data
+  - Schema validation now requires non-empty `source_column`
+- ✅ **Admin Repair Endpoint** - Fix broken column mappings
+  - `POST /api/admin/repair-mappings` - Fetches headers from sheets, repairs DB
+  - `GET /api/admin/repair-mappings` - Check repair status without fixing
 
 **Pending:**
 - ⚠️ Real-time progress feedback in UI (WebSocket or polling)
