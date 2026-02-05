@@ -224,6 +224,8 @@ export function HealthHeatmap({ statusFilter = [], search = '' }: HealthHeatmapP
   const [weeksToShow, setWeeksToShow] = useState(WEEKS_DESKTOP)
   const [hoveredCell, setHoveredCell] = useState<HoveredCell | null>(null)
   const hoveredCellRef = useRef<HoveredCell | null>(null) // Mirror of state for scroll handler
+  // Highlight range for time period selection (click year/quarter/month to highlight)
+  const [highlightRange, setHighlightRange] = useState<{ start: number; end: number } | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const hasScrolledRef = useRef(false)
   const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -263,7 +265,7 @@ export function HealthHeatmap({ statusFilter = [], search = '' }: HealthHeatmapP
     setError(null)
     try {
       const params = new URLSearchParams()
-      params.set('limit', '1000')
+      params.set('limit', '5000')
       params.set('sort', 'brand_name')
       params.set('order', 'asc')
       if (statusFilter.length > 0) {
@@ -539,7 +541,15 @@ export function HealthHeatmap({ statusFilter = [], search = '' }: HealthHeatmapP
   const nameColWidth = 180
 
   if (isLoading) {
-    return <HeatmapShimmer rows={15} columns={52} />
+    return (
+      <HeatmapShimmer
+        rows={25}
+        columns={weeksToShow > 100 ? 100 : weeksToShow}
+        cellSize={cellSize}
+        cellGap={cellGap}
+        nameColWidth={nameColWidth}
+      />
+    )
   }
 
   if (error) {
@@ -616,50 +626,84 @@ export function HealthHeatmap({ statusFilter = [], search = '' }: HealthHeatmapP
             {/* Sticky header section */}
             <div className="sticky top-0 z-20 bg-card border-b select-none">
               {/* Year row */}
-              <div className="flex items-center">
-                <div style={{ width: nameColWidth }} className="shrink-0 px-3 py-1 bg-card sticky left-0 z-30 border-r border-border/20" />
-                <div className="flex">
-                  {timeHeaders.years.map(({ year, count }, idx) => (
-                    <div
-                      key={`year-${idx}`}
-                      className="text-xs font-semibold text-foreground border-l border-border px-1"
-                      style={{ width: count * (cellSize + cellGap) }}
+              <div className="flex">
+                <div style={{ width: nameColWidth }} className="shrink-0 px-3 py-1 bg-card sticky left-0 z-30 border-r border-border/20 flex items-center">
+                  {highlightRange && (
+                    <button
+                      onClick={() => setHighlightRange(null)}
+                      className="text-[9px] text-primary hover:underline"
                     >
-                      {year}
-                    </div>
-                  ))}
+                      Clear
+                    </button>
+                  )}
+                </div>
+                <div className="flex overflow-hidden">
+                  {timeHeaders.years.map(({ year, count, startIdx }, idx) => {
+                    const endIdx = startIdx + count - 1
+                    const isHighlighted = highlightRange && startIdx === highlightRange.start && endIdx === highlightRange.end
+                    return (
+                      <div
+                        key={`year-${idx}`}
+                        onClick={() => setHighlightRange(isHighlighted ? null : { start: startIdx, end: endIdx })}
+                        className={cn(
+                          'text-xs font-semibold border-l border-border px-1 shrink-0 cursor-pointer',
+                          isHighlighted ? 'bg-primary/20 text-primary' : 'text-foreground hover:bg-muted/50'
+                        )}
+                        style={{ width: count * (cellSize + cellGap) }}
+                        title={`Click to highlight ${year}`}
+                      >
+                        {year}
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
 
               {/* Quarter row */}
-              <div className="flex items-center">
-                <div style={{ width: nameColWidth }} className="shrink-0 px-3 bg-card sticky left-0 z-30 border-r border-border/20" />
-                <div className="flex">
-                  {timeHeaders.quarters.map(({ quarter, count }, idx) => (
-                    <div
-                      key={`quarter-${idx}`}
-                      className="text-[10px] font-medium text-muted-foreground border-l border-border/50 px-1"
-                      style={{ width: count * (cellSize + cellGap) }}
-                    >
-                      Q{quarter}
-                    </div>
-                  ))}
+              <div className="flex">
+                <div style={{ width: nameColWidth }} className="shrink-0 px-3 py-0.5 bg-card sticky left-0 z-30 border-r border-border/20 flex items-center" />
+                <div className="flex overflow-hidden">
+                  {timeHeaders.quarters.map(({ quarter, year, count, startIdx }, idx) => {
+                    const endIdx = startIdx + count - 1
+                    const isHighlighted = highlightRange && startIdx === highlightRange.start && endIdx === highlightRange.end
+                    return (
+                      <div
+                        key={`quarter-${idx}`}
+                        onClick={() => setHighlightRange(isHighlighted ? null : { start: startIdx, end: endIdx })}
+                        className={cn(
+                          'text-[10px] font-medium border-l border-border/50 px-1 shrink-0 cursor-pointer transition-colors',
+                          isHighlighted ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:bg-muted/50'
+                        )}
+                        style={{ width: count * (cellSize + cellGap) }}
+                      >
+                        Q{quarter} '{String(year).slice(-2)}
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
 
               {/* Month row */}
-              <div className="flex items-center">
-                <div style={{ width: nameColWidth }} className="shrink-0 px-3 bg-card sticky left-0 z-30 border-r border-border/20" />
-                <div className="flex">
-                  {timeHeaders.months.map(({ month, count }, idx) => (
-                    <div
-                      key={`month-${idx}`}
-                      className="text-[9px] text-muted-foreground/70 border-l border-border/30 px-0.5"
-                      style={{ width: count * (cellSize + cellGap) }}
-                    >
-                      {MONTH_NAMES[month]}
-                    </div>
-                  ))}
+              <div className="flex">
+                <div style={{ width: nameColWidth }} className="shrink-0 px-3 py-0.5 bg-card sticky left-0 z-30 border-r border-border/20 flex items-center" />
+                <div className="flex overflow-hidden">
+                  {timeHeaders.months.map(({ month, count, startIdx }, idx) => {
+                    const endIdx = startIdx + count - 1
+                    const isHighlighted = highlightRange && startIdx === highlightRange.start && endIdx === highlightRange.end
+                    return (
+                      <div
+                        key={`month-${idx}`}
+                        onClick={() => setHighlightRange(isHighlighted ? null : { start: startIdx, end: endIdx })}
+                        className={cn(
+                          'text-[9px] border-l border-border/30 px-0.5 shrink-0 cursor-pointer transition-colors',
+                          isHighlighted ? 'bg-primary/20 text-primary' : 'text-muted-foreground/70 hover:bg-muted/50'
+                        )}
+                        style={{ width: count * (cellSize + cellGap) }}
+                      >
+                        {MONTH_NAMES[month]}
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
 
@@ -672,15 +716,23 @@ export function HealthHeatmap({ statusFilter = [], search = '' }: HealthHeatmapP
                   Partner
                 </div>
                 <div className="flex">
-                  {weeks.map((week, i) => (
-                    <div
-                      key={i}
-                      className="text-[8px] text-muted-foreground/50 text-center"
-                      style={{ width: cellSize + cellGap }}
-                    >
-                      {getISOWeekNumber(week)}
-                    </div>
-                  ))}
+                  {weeks.map((week, i) => {
+                    const isDimmed = highlightRange && (i < highlightRange.start || i > highlightRange.end)
+                    const isHighlighted = highlightRange && i >= highlightRange.start && i <= highlightRange.end
+                    return (
+                      <div
+                        key={i}
+                        className={cn(
+                          'text-[8px] text-center',
+                          isDimmed ? 'text-muted-foreground/20' : 'text-muted-foreground/50',
+                          isHighlighted && 'text-primary/70 font-medium'
+                        )}
+                        style={{ width: cellSize + cellGap }}
+                      >
+                        {getISOWeekNumber(week)}
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
 
@@ -709,13 +761,16 @@ export function HealthHeatmap({ statusFilter = [], search = '' }: HealthHeatmapP
                       else if (healthyPct > 20) bgColor = 'bg-green-300'
                     }
 
+                    const isDimmed = highlightRange && (weekIndex < highlightRange.start || weekIndex > highlightRange.end)
+
                     return (
                       <Tooltip key={weekIndex}>
                         <TooltipTrigger asChild>
                           <div
                             className={cn(
                               'rounded-sm cursor-default mx-px',
-                              isFuture ? 'bg-transparent border border-dashed border-border/30' : bgColor
+                              isFuture ? 'bg-transparent border border-dashed border-border/30' : bgColor,
+                              isDimmed && 'opacity-20'
                             )}
                             style={{ width: cellSize, height: cellSize + 2 }}
                           />
@@ -822,6 +877,7 @@ export function HealthHeatmap({ statusFilter = [], search = '' }: HealthHeatmapP
                     {weekStatuses.map((status, weekIndex) => {
                       const bucket = getStatusBucket(status)
                       const isFuture = weeks[weekIndex] > new Date()
+                      const isDimmed = highlightRange && (weekIndex < highlightRange.start || weekIndex > highlightRange.end)
 
                       return (
                         <div
@@ -831,7 +887,8 @@ export function HealthHeatmap({ statusFilter = [], search = '' }: HealthHeatmapP
                           data-week={weekIndex}
                           className={cn(
                             'rounded-[2px] mx-px',
-                            isFuture ? 'bg-transparent' : BUCKET_COLORS[bucket]
+                            isFuture ? 'bg-transparent' : BUCKET_COLORS[bucket],
+                            isDimmed && 'opacity-20'
                           )}
                           style={{ width: cellSize, height: cellSize }}
                         />

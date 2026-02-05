@@ -118,7 +118,7 @@ export const TabMappingSchema = {
 // =============================================================================
 
 export const ColumnMappingSchema = z.object({
-  source_column: z.string(),
+  source_column: z.string().min(1, 'Source column header is required'),
   source_column_index: z.number().int().min(0),
   category: z.enum(['partner', 'staff', 'asin', 'weekly', 'computed', 'skip']),
   target_field: z.string().nullable(),

@@ -184,18 +184,23 @@ src/
 ├── app/
 │   ├── (dashboard)/           # Authenticated routes
 │   │   ├── admin/
-│   │   │   └── data-enrichment/  # The Data Mapping Wizard
+│   │   │   ├── data-enrichment/  # The Data Mapping Wizard
+│   │   │   ├── change-approval/  # Review/approve staged changes
+│   │   │   └── layout.tsx        # Admin route protection
 │   │   ├── partners/          # Partner management
 │   │   ├── staff/             # Staff management
 │   │   └── team/              # Team/squad views
 │   └── (auth)/                # Login, etc.
 ├── components/
 │   ├── data-enrichment/       # Wizard, staging, lineage components
+│   ├── help/                  # Help system (WorkflowCard, etc.)
 │   ├── layout/                # Sidebar, headers, shells
+│   ├── sync/                  # Sync-related components (SyncButton)
 │   └── ui/                    # shadcn/ui base components
 ├── lib/
 │   ├── db/                    # Database schema, queries
 │   ├── entity-fields/         # Field registry (single source of truth)
+│   ├── navigation/            # Role-based navigation config
 │   ├── sheets/                # Google Sheets integration
 │   ├── enrichment/            # Data mapping logic
 │   └── utils/                 # Helpers
@@ -223,6 +228,8 @@ src/
 ### Tier 4: Reference/Config
 - `external_contacts` - Amazon reps, partnerships
 - `system_settings` - App configuration
+- `help_docs` - Centralized help documentation content
+- `help_doc_versions` - Version history for help content changes
 
 ### Data Pipeline Tables
 - `data_sources` - Configured external sources (sheets, forms)
@@ -275,6 +282,47 @@ Many Google Sheets have headers on rows other than row 0 (e.g., Master Client Da
 1. If you need data with headers parsed → use `getSheetData()` WITH `headerRow`
 2. If you need raw rows for detection/preview → use `getSheetRawRows()`
 3. Always check if `tab_mappings.header_row` exists and pass it through
+
+### Tab Mappings: is_active and status (CRITICAL)
+
+The `tab_mappings` table has two related fields that **MUST stay in sync**:
+- `status`: The tab's workflow status (`active`, `hidden`, `reference`, `flagged`)
+- `is_active`: Boolean used for filtering in queries
+
+**The Rule:** `is_active` must ALWAYS equal `(status === 'active')`
+
+| status | is_active |
+|--------|-----------|
+| `active` | `true` |
+| `hidden` | `false` |
+| `reference` | `false` |
+| `flagged` | `false` |
+
+**Why this matters:** A past bug allowed `status: 'hidden'` with `is_active: true`, causing hidden tabs to appear in:
+- Sync sources (Change Approval page)
+- Data Flow Map
+- Field lineage tooltips
+
+The actual sync was unaffected (data integrity preserved), but it was confusing and could lead to syncing from wrong tabs.
+
+**How it's enforced:**
+1. **Application level**: `PATCH /api/tab-mappings/[id]/status` automatically sets `is_active` based on `status`
+2. **Database level** (optional): A trigger can be added to enforce this at the DB level
+
+**When querying tab_mappings for UI/sync:**
+```typescript
+// CORRECT - filter to only active tabs
+.from('tab_mappings')
+.select('...')
+.eq('is_active', true)
+
+// WRONG - shows hidden tabs too
+.from('tab_mappings')
+.select('...')
+.not('primary_entity', 'is', null)  // Missing is_active filter!
+```
+
+**Exception:** The Data Enrichment admin page intentionally shows ALL tabs (including hidden) so admins can manage them. But sync, flow map, and lineage queries must filter.
 
 ### Partner Management
 - View all partners with search/filter
@@ -356,13 +404,51 @@ Many Google Sheets have headers on rows other than row 0 (e.g., Master Client Da
   - Header and content have independent horizontal scroll wrappers
   - Z-index layering ensures rows don't overlap header
 
+- ✅ **Modular Navigation System** - Role-based sidebar visibility
+  - Navigation config extracted to `src/lib/navigation/config.ts`
+  - `NavSection` and `NavItem` types with `requiredRole` field
+  - `getNavigationForRole(role)` filters sections/items by user role
+  - Sidebar fetches user role from `/api/auth/me` with module-level caching
+  - Admin section only visible to users with admin role
+- ✅ **Admin Route Protection** - Server-side role check for `/admin/*` routes
+  - `src/app/(dashboard)/admin/layout.tsx` - Checks admin role before rendering
+  - Non-admins redirected to dashboard with error
+  - Uses same role logic as `api-auth.ts` (ADMIN_EMAILS + staff table lookup)
+- ✅ **Change Approval Page** - `/admin/change-approval`
+  - Hub view with stats cards (Pending/Approved/Rejected/Applied)
+  - **Entity-centric sync**: Shows Partners, Staff, ASINs (not individual tabs)
+  - "Sync Partners" button syncs ALL tabs that feed partner data
+  - Expandable detail shows which sources/tabs contribute to each entity
+  - API: `GET /api/sync/sources` - Returns entities with aggregated source info
+  - Browser view placeholder for future change list
+- ✅ **SyncButton Component** - Reusable sync button with status tooltip
+  - `src/components/sync/SyncButton.tsx` - Shows last sync time on hover
+  - Placeholder for scheduled auto-sync time (future feature)
+  - Spinning state during sync, disabled when syncing
+- ✅ **Help Documentation System (Phase 1)** - Self-documenting help infrastructure
+  - Database tables: `help_docs` and `help_doc_versions` with RLS policies
+  - API endpoint: `GET /api/help/[docId]` - Fetches published help content
+  - `WorkflowCard` component: Reusable numbered workflow steps card
+    - Supports inline content OR database fetch via `docId` prop
+    - Collapsible with smooth Framer Motion animations
+    - Falls back to inline content if database fetch fails
+  - Change Approval page updated to use WorkflowCard
+  - Future phases: HelpButton, HelpPopover, FieldTooltip, AI generation
+
 **Pending:**
-- ⚠️ Vercel staging deployment setup
 - ⚠️ Real-time progress feedback in UI (WebSocket or polling)
+- ⚠️ Change Approval backend (staged_changes API, sync integration)
+- ⚠️ Change Approval frontend (change list, field-level diffs, approve/reject)
 
 ### Phase 5 Roadmap: Change Approval Workflow
 
 **Vision:** When syncing from sheets, show a "Review Changes" screen before applying updates to the database. This prevents accidental overwrites and creates an audit trail.
+
+**Design Decisions (Confirmed):**
+1. **Approval mode**: Opt-in with default ON - new mappings require approval, can disable per mapping once trusted
+2. **Auto-approve rules**: Not in v1 - start simple with manual review, add rules later
+3. **Scheduled syncs**: Future feature - daily auto-sync at off-peak hours
+4. **Location**: `/admin/change-approval` - dedicated page, not a popup
 
 **User Flow:**
 1. User clicks "Sync" on a mapped sheet
@@ -934,6 +1020,80 @@ useEffect(() => {
 ### Current Implementations
 
 - `src/lib/data-enrichment/cache.ts` - Data sources, sheet previews, SmartMapper state
+
+---
+
+## Help Documentation System
+
+A self-documenting help system where content is stored in the database and displayed via reusable components. Designed for AI-assisted generation (future phase) while supporting manual content creation.
+
+### Database Tables
+
+**`help_docs`** - Main documentation storage
+```sql
+doc_id TEXT UNIQUE        -- e.g., "change-approval"
+route_pattern TEXT        -- e.g., "/admin/change-approval"
+scope TEXT               -- page | section | workflow | field
+category TEXT            -- core | admin | workflow | reference
+title TEXT               -- Display title
+content JSONB            -- Structured content (steps, tips, etc.)
+ai_generated BOOLEAN     -- Track if AI-created
+ai_confidence REAL       -- 0-1 confidence score
+published_at TIMESTAMPTZ -- NULL = draft, set when published
+```
+
+**`help_doc_versions`** - Version history for rollback/audit
+
+### Content Structure (JSONB)
+
+```typescript
+interface HelpDocContent {
+  overview?: string
+  steps?: { title: string; description: string }[]
+  tips?: string[]
+  keyConcepts?: { term: string; definition: string }[]
+}
+```
+
+### Components
+
+**WorkflowCard** (`src/components/help/WorkflowCard.tsx`)
+- Displays numbered workflow steps explaining how a feature works
+- Supports database fetch (`docId` prop) OR inline content (`title` + `steps` props)
+- Falls back to inline content if database fetch fails
+- Collapsible with smooth Framer Motion animations
+
+```tsx
+// Fetch from database with inline fallback
+<WorkflowCard
+  docId="change-approval"
+  title="How Change Approval Works"
+  steps={[
+    { title: "Run a Sync", description: "..." },
+    { title: "Review Changes", description: "..." },
+    { title: "Approve & Apply", description: "..." },
+  ]}
+/>
+
+// Inline only
+<WorkflowCard
+  title="How It Works"
+  steps={[...]}
+  collapsible
+  defaultCollapsed
+/>
+```
+
+### API Endpoints
+
+- `GET /api/help/[docId]` - Fetch published help document by doc_id
+
+### Future Phases
+
+- **HelpButton + HelpPopover** - Question mark button showing page-level help
+- **FieldTooltip** - Enhanced field tooltips pulling from centralized definitions
+- **AI Generation SDK** - Claude-powered documentation generation from codebase analysis
+- **Feature Toggle** - Admin setting to enable/disable help system globally
 
 ---
 

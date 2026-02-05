@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { signOut, useSession } from 'next-auth/react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
@@ -15,17 +15,14 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import {
-  LayoutDashboard,
-  Users,
-  Database,
   ChevronRight,
-  Building2,
   LogOut,
   Settings,
   X,
-  Package,
 } from 'lucide-react'
 import { useMobileMenu } from './mobile-menu-context'
+import { getNavigationForRole, type NavSection } from '@/lib/navigation/config'
+import type { Role } from '@/lib/auth/roles'
 
 // Get initials from name
 function getInitials(name?: string | null): string {
@@ -38,42 +35,36 @@ function getInitials(name?: string | null): string {
     .slice(0, 2)
 }
 
-interface NavItem {
-  name: string
-  href: string
-  icon: typeof LayoutDashboard
-  highlight?: boolean
-}
-
-interface NavSection {
-  title: string
-  items: NavItem[]
-}
-
-const navigation: NavSection[] = [
-  {
-    title: 'Overview',
-    items: [
-      { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-    ],
-  },
-  {
-    title: 'Core',
-    items: [
-      { name: 'Partners', href: '/partners', icon: Building2 },
-      { name: 'Staff', href: '/staff', icon: Users },
-    ],
-  },
-  {
-    title: 'Admin',
-    items: [
-      { name: 'Data Enrichment', href: '/admin/data-enrichment', icon: Database, highlight: true },
-      { name: 'Products', href: '/admin/products', icon: Package },
-    ],
-  },
-]
-
 const easeOut: [number, number, number, number] = [0.22, 1, 0.36, 1]
+
+// Module-level cache for user role (avoids refetch on navigation)
+let cachedUserRole: Role | undefined = undefined
+let roleLoadPromise: Promise<Role | undefined> | null = null
+
+async function fetchUserRole(): Promise<Role | undefined> {
+  try {
+    const res = await fetch('/api/auth/me')
+    if (!res.ok) return undefined
+    const data = await res.json()
+    return data.user?.role as Role | undefined
+  } catch {
+    return undefined
+  }
+}
+
+function getUserRole(): Promise<Role | undefined> {
+  if (cachedUserRole !== undefined) {
+    return Promise.resolve(cachedUserRole)
+  }
+  if (!roleLoadPromise) {
+    roleLoadPromise = fetchUserRole().then(role => {
+      cachedUserRole = role
+      roleLoadPromise = null
+      return role
+    })
+  }
+  return roleLoadPromise
+}
 
 interface SidebarContentProps {
   onNavigate?: () => void
@@ -83,9 +74,19 @@ interface SidebarContentProps {
 function SidebarContent({ onNavigate, layoutId = 'activeNav' }: SidebarContentProps) {
   const pathname = usePathname()
   const { data: session } = useSession()
+  const [userRole, setUserRole] = useState<Role | undefined>(cachedUserRole)
+  const [filteredNav, setFilteredNav] = useState<NavSection[]>(() => getNavigationForRole(cachedUserRole))
 
-  // Determine user role (simplified - could be enhanced with actual role lookup)
-  const userRole = session?.user?.email?.includes('admin') ? 'Admin' : 'Staff'
+  // Fetch user role on mount
+  useEffect(() => {
+    getUserRole().then(role => {
+      setUserRole(role)
+      setFilteredNav(getNavigationForRole(role))
+    })
+  }, [])
+
+  // Display role label
+  const roleLabel = userRole === 'admin' ? 'Admin' : userRole === 'pod_leader' ? 'Pod Leader' : 'Staff'
 
   return (
     <div className="flex h-full flex-col">
@@ -103,7 +104,7 @@ function SidebarContent({ onNavigate, layoutId = 'activeNav' }: SidebarContentPr
       {/* Navigation */}
       <ScrollArea className="flex-1 px-3 py-4">
         <nav className="space-y-6">
-          {navigation.map((section) => (
+          {filteredNav.map((section) => (
             <div key={section.title}>
               <h4 className="mb-2 px-3 text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
                 {section.title}
@@ -178,7 +179,7 @@ function SidebarContent({ onNavigate, layoutId = 'activeNav' }: SidebarContentPr
               <span className="text-sm font-medium truncate leading-tight">
                 {session?.user?.name || 'Loading...'}
               </span>
-              <span className="text-xs text-muted-foreground leading-tight">{userRole}</span>
+              <span className="text-xs text-muted-foreground leading-tight">{roleLabel}</span>
             </div>
           </Link>
 

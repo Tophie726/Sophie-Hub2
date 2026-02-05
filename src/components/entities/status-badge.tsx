@@ -68,6 +68,7 @@ interface ComputedStatusBadgeProps {
   statusMatches: boolean           // Does computed match sheet?
   latestWeeklyStatus?: string | null // Raw weekly status text
   className?: string
+  onClick?: () => void             // Click handler for investigation dialog
 }
 
 export function ComputedStatusBadge({
@@ -77,6 +78,7 @@ export function ComputedStatusBadge({
   statusMatches,
   latestWeeklyStatus,
   className,
+  onClick,
 }: ComputedStatusBadgeProps) {
   const status = computedStatus || 'pending'
   const style = partnerStatusStyles[status] || defaultStyle
@@ -84,10 +86,12 @@ export function ComputedStatusBadge({
 
   const badge = (
     <span
+      onClick={onClick}
       className={cn(
         'inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium rounded-md border',
         style,
         showMismatch && 'ring-1 ring-amber-500 ring-offset-1',
+        onClick && 'cursor-pointer hover:opacity-80 transition-opacity',
         className
       )}
     >

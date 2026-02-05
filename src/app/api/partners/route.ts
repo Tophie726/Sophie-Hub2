@@ -12,7 +12,7 @@ const QuerySchema = z.object({
   tier: z.string().optional(),
   sort: z.enum(['brand_name', 'created_at', 'tier', 'onboarding_date']).optional().default('brand_name'),
   order: z.enum(['asc', 'desc']).optional().default('asc'),
-  limit: z.coerce.number().int().min(1).max(1000).optional().default(50),
+  limit: z.coerce.number().int().min(1).max(5000).optional().default(50),
   offset: z.coerce.number().int().min(0).optional().default(0),
 })
 

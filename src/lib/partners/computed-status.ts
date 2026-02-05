@@ -224,19 +224,24 @@ export function computePartnerStatus(
     (computedStatus === null && sheetStatusValue === null)
 
   // Build display label
+  // Note: Terminal statuses (churned, offboarding) should just show as-is, not "Pending"
+  // "Pending" only makes sense for active/onboarding partners who missed a weekly update
+  const isTerminalStatus = bucket === 'churned' || bucket === 'offboarding'
+
   let displayLabel: string
   if (computedStatus) {
-    if (weeksWithoutData > 2) {
-      // Stale data - show pending with last known
+    if (weeksWithoutData > 2 && !isTerminalStatus) {
+      // Stale data for non-terminal status - show pending with last known
       displayLabel = `Pending (last: ${STATUS_LABELS[computedStatus]})`
     } else {
+      // Terminal status or recent data - show actual status
       displayLabel = STATUS_LABELS[computedStatus]
     }
   } else if (bucket === 'unknown') {
     displayLabel = `Unknown: "${latest.status}"`
   } else {
     displayLabel = sheetStatusValue
-      ? `Pending (last: ${STATUS_LABELS[sheetStatusValue]})`
+      ? STATUS_LABELS[sheetStatusValue]
       : 'No Data'
   }
 

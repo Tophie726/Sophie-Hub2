@@ -446,11 +446,14 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
 
               // Merge: saved mappings applied on top of full column list
               const merged: ColumnClassification[] = headers.map((header: string, idx: number) => {
-                const saved = savedByColumn.get(header || `Column ${columnIndexToLetter(idx)}`)
+                const headerKey = header || `Column ${columnIndexToLetter(idx)}`
+                const saved = savedByColumn.get(headerKey)
                 if (saved) {
                   return {
                     sourceIndex: saved.source_column_index ?? idx,
-                    sourceColumn: saved.source_column,
+                    // Use saved source_column if available, otherwise fall back to current header
+                    // This handles cases where source_column was saved as empty
+                    sourceColumn: saved.source_column || headerKey,
                     category: saved.category,
                     targetField: saved.target_field,
                     authority: saved.authority,

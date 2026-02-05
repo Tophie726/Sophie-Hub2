@@ -33,6 +33,7 @@ export async function GET() {
         tab_mapping:tab_mapping_id (
           tab_name,
           primary_entity,
+          is_active,
           data_source:data_source_id (
             id,
             name
@@ -49,24 +50,35 @@ export async function GET() {
     // Transform to a clean structure, filtering for partners
     const lineage: Record<string, FieldLineageInfo> = {}
 
+    // Debug: log first few raw rows to see data structure
+    if (data && data.length > 0) {
+      console.log('[field-lineage] Sample raw row:', JSON.stringify(data[0], null, 2))
+    }
+
     for (const row of data || []) {
-      const tabMapping = row.tab_mapping as {
+      // Supabase returns nested relations - use unknown first to handle type mismatch
+      const tabMappingRaw = row.tab_mapping as unknown as {
         tab_name: string
         primary_entity: string
-        data_source: { id: string; name: string }
+        is_active: boolean
+        data_source: { id: string; name: string } | null
       } | null
 
-      // Skip if join failed or not a partner mapping
-      if (!tabMapping) continue
-      if (tabMapping.primary_entity !== 'partners') continue
+      // Skip if join failed, not a partner mapping, or tab is inactive
+      if (!tabMappingRaw) continue
+      if (tabMappingRaw.primary_entity !== 'partners') continue
+      if (!tabMappingRaw.is_active) continue // Only show active tab mappings
       if (!row.target_field) continue
+
+      // Debug: log each processed entry
+      console.log(`[field-lineage] ${row.target_field}: source_column="${row.source_column}", tab_name="${tabMappingRaw.tab_name}", sheet="${tabMappingRaw.data_source?.name}"`)
 
       lineage[row.target_field] = {
         targetField: row.target_field,
         sourceColumn: row.source_column,
-        tabName: tabMapping.tab_name,
-        sheetName: tabMapping.data_source?.name || 'Unknown',
-        dataSourceId: tabMapping.data_source?.id || '',
+        tabName: tabMappingRaw.tab_name,
+        sheetName: tabMappingRaw.data_source?.name || 'Unknown',
+        dataSourceId: tabMappingRaw.data_source?.id || '',
       }
     }
 

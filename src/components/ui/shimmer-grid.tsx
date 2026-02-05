@@ -166,11 +166,11 @@ export function ShimmerBar({
 
 /**
  * HeatmapShimmer — Loading state for the health heatmap grid.
- * Mimics the tiny cell grid structure with a wave animation.
+ * Individual cells shimmer with a diagonal wave effect.
  */
 export function HeatmapShimmer({
-  rows = 12,
-  columns = 52,
+  rows = 20,
+  columns = 80,
   cellSize = 12,
   cellGap = 2,
   nameColWidth = 180,
@@ -183,47 +183,128 @@ export function HeatmapShimmer({
   nameColWidth?: number
   className?: string
 }) {
+  // Limit columns for performance - render fewer cells but they animate
+  const visibleCols = Math.min(columns, 50)
+
   return (
-    <div className={cn('border rounded-lg bg-card overflow-hidden', className)}>
-      {/* Header shimmer */}
-      <div className="border-b p-2">
-        <div className="flex items-center gap-4">
-          <ShimmerBar width={100} height={14} />
-          <ShimmerBar width={60} height={14} />
+    <div className={cn('', className)}>
+      {/* Header controls */}
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-3">
+          <ShimmerBar width={140} height={16} />
+          <div className="flex items-center gap-1">
+            <div className="h-7 w-7 rounded bg-muted/20" />
+            <div className="h-7 w-7 rounded bg-muted/20" />
+          </div>
         </div>
+        <ShimmerBar width={100} height={28} className="rounded-md" />
       </div>
 
-      {/* Grid shimmer */}
-      <div className="p-3 overflow-hidden">
-        <div className="space-y-0">
-          {Array.from({ length: rows }, (_, rowIdx) => (
-            <div key={rowIdx} className="flex items-center" style={{ gap: cellGap, marginBottom: cellGap }}>
-              {/* Name column */}
-              <div
-                className="shrink-0 rounded bg-gradient-to-r from-muted/30 via-muted/10 to-muted/30 bg-[length:200%_100%] animate-[shimmer_1.8s_ease-in-out_infinite]"
-                style={{
-                  width: nameColWidth,
-                  height: cellSize,
-                  animationDelay: `${rowIdx * 60}ms`,
-                }}
-              />
-              {/* Cell columns */}
+      {/* Main grid container */}
+      <div className="border rounded-lg bg-card overflow-hidden">
+        <div className="overflow-hidden" style={{ maxHeight: 'calc(100vh - 280px)' }}>
+          {/* Header section */}
+          <div className="bg-card border-b py-2">
+            <div className="flex">
+              <div style={{ width: nameColWidth }} className="shrink-0 px-3" />
+              <div className="flex-1 space-y-1.5 pr-3">
+                <ShimmerBar width="70%" height={12} />
+                <ShimmerBar width="85%" height={10} />
+                <ShimmerBar width="95%" height={8} />
+              </div>
+            </div>
+            {/* Week numbers row */}
+            <div className="flex mt-1 pb-1">
+              <div style={{ width: nameColWidth }} className="shrink-0 px-3">
+                <ShimmerBar width={50} height={10} />
+              </div>
               <div className="flex" style={{ gap: cellGap }}>
-                {Array.from({ length: Math.min(columns, 40) }, (_, colIdx) => (
+                {Array.from({ length: visibleCols }, (_, i) => (
                   <div
-                    key={colIdx}
-                    className="rounded-[2px] bg-gradient-to-r from-muted/25 via-muted/8 to-muted/25 bg-[length:200%_100%] animate-[shimmer_1.8s_ease-in-out_infinite]"
+                    key={i}
+                    className="rounded-[2px] bg-gradient-to-r from-muted/15 via-muted/5 to-muted/15 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite]"
                     style={{
                       width: cellSize,
-                      height: cellSize,
-                      animationDelay: `${(rowIdx * 3 + colIdx) * 15}ms`,
+                      height: 8,
+                      animationDelay: `${i * 15}ms`,
                     }}
                   />
                 ))}
               </div>
             </div>
-          ))}
+          </div>
+
+          {/* Summary row - cells slightly taller to match actual heatmap */}
+          <div className="flex items-center py-1 bg-muted/40 border-b">
+            <div style={{ width: nameColWidth }} className="shrink-0 px-3">
+              <ShimmerBar width={55} height={12} />
+            </div>
+            <div className="flex" style={{ gap: cellGap }}>
+              {Array.from({ length: visibleCols }, (_, i) => (
+                <div
+                  key={i}
+                  className="rounded-[2px] bg-gradient-to-r from-muted/30 via-muted/10 to-muted/30 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite]"
+                  style={{
+                    width: cellSize,
+                    height: cellSize + 2,
+                    animationDelay: `${i * 15}ms`,
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* Data rows with animated cells */}
+          <div>
+            {Array.from({ length: rows }, (_, rowIdx) => (
+              <div
+                key={rowIdx}
+                className="flex items-center"
+                style={{ paddingTop: cellGap, paddingBottom: cellGap }}
+              >
+                {/* Name column */}
+                <div style={{ width: nameColWidth }} className="shrink-0 px-3">
+                  <div
+                    className="rounded bg-gradient-to-r from-muted/25 via-muted/8 to-muted/25 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite]"
+                    style={{
+                      width: 70 + (rowIdx % 5) * 20,
+                      height: cellSize,
+                      animationDelay: `${rowIdx * 40}ms`,
+                    }}
+                  />
+                </div>
+                {/* Cell grid - diagonal wave animation */}
+                <div className="flex" style={{ gap: cellGap }}>
+                  {Array.from({ length: visibleCols }, (_, colIdx) => (
+                    <div
+                      key={colIdx}
+                      className="rounded-[2px] bg-gradient-to-r from-muted/25 via-muted/8 to-muted/25 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite]"
+                      style={{
+                        width: cellSize,
+                        height: cellSize,
+                        // Diagonal wave: delay based on row + column position
+                        animationDelay: `${(rowIdx + colIdx) * 8}ms`,
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
+      </div>
+
+      {/* Legend */}
+      <div className="flex flex-wrap items-center gap-4 px-4 py-3 border border-t-0 rounded-b-lg bg-card">
+        {Array.from({ length: 7 }, (_, i) => (
+          <div key={i} className="flex items-center gap-1.5">
+            <div
+              className="w-3 h-3 rounded-[2px] bg-gradient-to-r from-muted/25 via-muted/8 to-muted/25 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite]"
+              style={{ animationDelay: `${i * 100}ms` }}
+            />
+            <ShimmerBar width={40 + i * 5} height={10} />
+          </div>
+        ))}
       </div>
     </div>
   )

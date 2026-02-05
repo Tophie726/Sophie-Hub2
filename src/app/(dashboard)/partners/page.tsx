@@ -15,6 +15,7 @@ import { StatusBadge, ComputedStatusBadge } from '@/components/entities/status-b
 import { TierBadge } from '@/components/entities/tier-badge'
 import { WeeklyStatusPreview } from '@/components/partners/weekly-status-preview'
 import { WeeklyStatusDialog } from '@/components/partners/weekly-status-dialog'
+import { StatusInvestigationDialog } from '@/components/partners/status-investigation-dialog'
 import { HealthBarCompact } from '@/components/partners/health-bar-compact'
 import { HealthHeatmap, clearHeatmapCache } from '@/components/partners/health-heatmap'
 import {
@@ -118,7 +119,7 @@ const CORE_COLUMNS: ColumnDef[] = [
     render: (p) => <TierBadge tier={p.tier} />
   },
   { key: 'client_name', label: 'Client', source: 'db', sourceType: 'sheet', defaultVisible: true, width: 'w-32' },
-  { key: 'client_email', label: 'Email', source: 'db', sourceType: 'sheet', defaultVisible: false, width: 'w-40' },
+  { key: 'client_email', label: 'Email', source: 'db', sourceType: 'sheet', defaultVisible: false, width: 'w-48' },
   { key: 'client_phone', label: 'Phone', source: 'db', sourceType: 'sheet', defaultVisible: false, width: 'w-28' },
   {
     key: 'pod_leader_name',
@@ -327,13 +328,21 @@ function ColumnDropdownItem({
               ) : fieldLineage[col.key] ? (
                 // Core columns lookup from field-lineage API
                 <div className="space-y-0.5">
-                  <div className="font-medium">{fieldLineage[col.key].sheetName}</div>
-                  <div className="text-muted-foreground">
-                    Tab: <span className="text-foreground">{fieldLineage[col.key].tabName}</span>
-                  </div>
-                  <div className="text-muted-foreground">
-                    Column: <span className="text-foreground">{fieldLineage[col.key].sourceColumn}</span>
-                  </div>
+                  <div className="font-medium">{fieldLineage[col.key].sheetName || 'Unknown Sheet'}</div>
+                  {fieldLineage[col.key].tabName ? (
+                    <div className="text-muted-foreground">
+                      Tab: <span className="text-foreground">{fieldLineage[col.key].tabName}</span>
+                    </div>
+                  ) : (
+                    <div className="text-amber-500 text-[10px]">Tab name missing - re-save mapping</div>
+                  )}
+                  {fieldLineage[col.key].sourceColumn ? (
+                    <div className="text-muted-foreground">
+                      Column: <span className="text-foreground">{fieldLineage[col.key].sourceColumn}</span>
+                    </div>
+                  ) : (
+                    <div className="text-amber-500 text-[10px]">Column header missing - re-save mapping</div>
+                  )}
                 </div>
               ) : (
                 <div className="text-muted-foreground">Not mapped in Data Enrichment</div>
@@ -346,12 +355,13 @@ function ColumnDropdownItem({
   )
 }
 
-function PartnerRow({ partner, columns, visibleColumns, onSync, onWeeklyClick }: {
+function PartnerRow({ partner, columns, visibleColumns, onSync, onWeeklyClick, onStatusClick }: {
   partner: Partner
   columns: ColumnDef[]
   visibleColumns: Set<string>
   onSync: (partnerId: string, brandName: string) => void
   onWeeklyClick: (partner: Partner) => void
+  onStatusClick: (partner: Partner) => void
 }) {
   const [isSyncing, setIsSyncing] = useState(false)
 
@@ -364,11 +374,14 @@ function PartnerRow({ partner, columns, visibleColumns, onSync, onWeeklyClick }:
   }
 
   return (
-    <div className="flex items-center gap-4 px-5 py-3.5 hover:bg-muted/30 transition-colors min-w-fit">
-      {/* Brand name + code - clickable link */}
-      <Link href={`/partners/${partner.id}`} className="flex-1 min-w-[180px] cursor-pointer">
+    <div className="flex items-center gap-4 py-3.5 hover:bg-orange-500/5 dark:hover:bg-orange-500/10 transition-colors group">
+      {/* Brand name + code - sticky left, clickable link */}
+      <Link
+        href={`/partners/${partner.id}`}
+        className="sticky left-0 z-10 bg-card group-hover:bg-orange-500/5 dark:group-hover:bg-orange-500/10 pl-5 w-[200px] shrink-0 cursor-pointer transition-colors shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]"
+      >
         <div className="flex items-center gap-2">
-          <span className="font-medium text-sm truncate hover:underline">{partner.brand_name}</span>
+          <span className="font-medium text-sm truncate hover:underline hover:text-orange-600 dark:hover:text-orange-400 transition-colors">{partner.brand_name}</span>
           {partner.partner_code && (
             <span className="hidden sm:inline text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded shrink-0">
               {partner.partner_code}
@@ -396,6 +409,18 @@ function PartnerRow({ partner, columns, visibleColumns, onSync, onWeeklyClick }:
               onExpand={() => onWeeklyClick(partner)}
             />
           )
+        } else if (col.key === 'status') {
+          // Special handling for status column to add investigation click handler
+          content = (
+            <ComputedStatusBadge
+              computedStatus={partner.computed_status ?? null}
+              displayLabel={partner.computed_status_label || (partner.status ? partner.status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : 'No Data')}
+              sheetStatus={partner.status}
+              statusMatches={partner.status_matches ?? true}
+              latestWeeklyStatus={partner.latest_weekly_status}
+              onClick={() => onStatusClick(partner)}
+            />
+          )
         } else if (col.render) {
           content = col.render(partner)
         } else if (col.source === 'source_data' && col.sourceKey) {
@@ -408,7 +433,7 @@ function PartnerRow({ partner, columns, visibleColumns, onSync, onWeeklyClick }:
         return (
           <div
             key={col.key}
-            className={`${col.width || 'w-28'} hidden md:block text-sm ${col.align === 'right' ? 'text-right' : ''} text-muted-foreground shrink-0`}
+            className={`${col.width || 'w-28'} hidden md:block text-sm ${col.align === 'right' ? 'text-right' : ''} text-muted-foreground shrink-0 truncate`}
           >
             {content}
           </div>
@@ -488,6 +513,9 @@ export default function PartnersPage() {
 
   // Weekly status dialog state
   const [weeklyDialogPartner, setWeeklyDialogPartner] = useState<Partner | null>(null)
+
+  // Status investigation dialog state
+  const [investigationDialogPartner, setInvestigationDialogPartner] = useState<Partner | null>(null)
 
   // Field lineage info for tooltips (which sheet/tab/column each field came from)
   const [fieldLineage, setFieldLineage] = useState<Record<string, {
@@ -613,6 +641,11 @@ export default function PartnersPage() {
       const res = await fetch(`/api/partners/field-lineage?_=${Date.now()}`)
       const json = await res.json()
       if (json.data?.lineage) {
+        // Debug: log first lineage entry
+        const firstKey = Object.keys(json.data.lineage)[0]
+        if (firstKey) {
+          console.log('Frontend received lineage for', firstKey, ':', json.data.lineage[firstKey])
+        }
         setFieldLineage(json.data.lineage)
       }
     } catch (error) {
@@ -723,7 +756,7 @@ export default function PartnersPage() {
           />
         ) : loading ? (
           <div className="rounded-xl border bg-card p-1">
-            <ShimmerGrid variant="table" rows={10} columns={6} />
+            <ShimmerGrid variant="table" rows={8} columns={6} />
           </div>
         ) : partners.length === 0 ? (
           <Card className="border-dashed">
@@ -754,77 +787,98 @@ export default function PartnersPage() {
         ) : (
           <>
             <div className={`rounded-xl border bg-card transition-opacity duration-150 ${isFiltering ? 'opacity-60' : ''}`}>
-              {/* Sticky header row — sticks below the toolbar, outside scroll wrapper */}
-              <div className="sticky top-[113px] z-20 bg-card border-b border-border/60 rounded-t-xl overflow-x-auto">
-                <div className="hidden md:flex items-center gap-4 px-5 py-2.5 text-[11px] font-medium text-muted-foreground uppercase tracking-wider min-w-fit">
-                  <div className="flex-1 min-w-[180px]">Brand</div>
-                  {orderedColumns.map(col => {
-                    if (!visibleColumns.has(col.key)) return null
-                    return (
-                      <div
-                        key={col.key}
-                        className={`${col.width || 'w-28'} shrink-0 ${col.align === 'right' ? 'text-right' : ''}`}
-                      >
-                        {col.label}
-                      </div>
-                    )
-                  })}
-                  {/* Column visibility toggle */}
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="sm" className="h-6 w-6 p-0 hover:bg-muted shrink-0">
-                        <Settings2 className="h-3.5 w-3.5" />
-                        <span className="sr-only">Toggle columns</span>
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-80 max-h-[400px] overflow-y-auto z-50 pr-2 scrollbar-thin">
-                      <TooltipProvider delayDuration={400}>
-                        {/* Visible columns section */}
-                        {dropdownOrderedColumns.visible.length > 0 && (
-                          <>
-                            <DropdownMenuLabel className="text-xs flex items-center justify-between">
-                              <span>Visible Columns ({dropdownOrderedColumns.visible.length})</span>
-                            </DropdownMenuLabel>
-                            <DropdownMenuSeparator />
-                            {dropdownOrderedColumns.visible.map(col => (
-                              <ColumnDropdownItem
-                                key={col.key}
-                                col={col}
-                                isVisible={true}
-                                fieldLineage={fieldLineage}
-                                onToggle={() => toggleColumn(col.key)}
-                              />
-                            ))}
-                          </>
-                        )}
+              {/* Sticky header - outside scroll container for proper vertical sticky */}
+              <div className="sticky top-[113px] z-20 bg-card border-b border-border/60 rounded-t-xl overflow-hidden">
+                <div
+                  className="overflow-x-auto scrollbar-hide"
+                  onScroll={(e) => {
+                    // Sync scroll with content
+                    const content = e.currentTarget.parentElement?.nextElementSibling?.querySelector('.overflow-x-auto')
+                    if (content) content.scrollLeft = e.currentTarget.scrollLeft
+                  }}
+                >
+                  <div className="hidden md:flex items-center gap-4 py-2.5 text-[11px] font-medium text-muted-foreground uppercase tracking-wider min-w-fit">
+                    {/* Brand header - sticky left */}
+                    <div className="sticky left-0 z-10 bg-card pl-5 w-[200px] shrink-0 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]">
+                      Brand
+                    </div>
+                    {orderedColumns.map(col => {
+                      if (!visibleColumns.has(col.key)) return null
+                      return (
+                        <div
+                          key={col.key}
+                          className={`${col.width || 'w-28'} shrink-0 ${col.align === 'right' ? 'text-right' : ''}`}
+                        >
+                          {col.label}
+                        </div>
+                      )
+                    })}
+                    {/* Column visibility toggle */}
+                    <div className="pr-5">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="sm" className="h-6 w-6 p-0 hover:bg-muted shrink-0">
+                            <Settings2 className="h-3.5 w-3.5" />
+                            <span className="sr-only">Toggle columns</span>
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-80 max-h-[400px] overflow-y-auto z-50 pr-2 scrollbar-thin">
+                          <TooltipProvider delayDuration={400}>
+                            {/* Visible columns section */}
+                            {dropdownOrderedColumns.visible.length > 0 && (
+                              <>
+                                <DropdownMenuLabel className="text-xs flex items-center justify-between">
+                                  <span>Visible Columns ({dropdownOrderedColumns.visible.length})</span>
+                                </DropdownMenuLabel>
+                                <DropdownMenuSeparator />
+                                {dropdownOrderedColumns.visible.map(col => (
+                                  <ColumnDropdownItem
+                                    key={col.key}
+                                    col={col}
+                                    isVisible={true}
+                                    fieldLineage={fieldLineage}
+                                    onToggle={() => toggleColumn(col.key)}
+                                  />
+                                ))}
+                              </>
+                            )}
 
-                        {/* Hidden columns section */}
-                        {dropdownOrderedColumns.hidden.length > 0 && (
-                          <>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuLabel className="text-xs">
-                              Hidden Columns ({dropdownOrderedColumns.hidden.length})
-                            </DropdownMenuLabel>
-                            <DropdownMenuSeparator />
-                            {dropdownOrderedColumns.hidden.map(col => (
-                              <ColumnDropdownItem
-                                key={col.key}
-                                col={col}
-                                isVisible={false}
-                                fieldLineage={fieldLineage}
-                                onToggle={() => toggleColumn(col.key)}
-                              />
-                            ))}
-                          </>
-                        )}
-                      </TooltipProvider>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                            {/* Hidden columns section */}
+                            {dropdownOrderedColumns.hidden.length > 0 && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuLabel className="text-xs">
+                                  Hidden Columns ({dropdownOrderedColumns.hidden.length})
+                                </DropdownMenuLabel>
+                                <DropdownMenuSeparator />
+                                {dropdownOrderedColumns.hidden.map(col => (
+                                  <ColumnDropdownItem
+                                    key={col.key}
+                                    col={col}
+                                    isVisible={false}
+                                    fieldLineage={fieldLineage}
+                                    onToggle={() => toggleColumn(col.key)}
+                                  />
+                                ))}
+                              </>
+                            )}
+                          </TooltipProvider>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  </div>
                 </div>
               </div>
-              {/* Horizontal scroll wrapper for table content */}
-              <div className="overflow-x-auto relative z-0">
-                <div className="divide-y divide-border/60 rounded-b-xl overflow-hidden min-w-fit">
+              {/* Table content - separate scroll container synced with header */}
+              <div
+                className="overflow-x-auto"
+                onScroll={(e) => {
+                  // Sync scroll with header
+                  const header = e.currentTarget.parentElement?.querySelector('.sticky .overflow-x-auto')
+                  if (header) header.scrollLeft = e.currentTarget.scrollLeft
+                }}
+              >
+                <div className="divide-y divide-border/60 rounded-b-xl min-w-fit">
                   {partners.map(partner => (
                     <PartnerRow
                       key={partner.id}
@@ -833,6 +887,7 @@ export default function PartnersPage() {
                       visibleColumns={visibleColumns}
                       onSync={handleSyncPartner}
                       onWeeklyClick={setWeeklyDialogPartner}
+                      onStatusClick={setInvestigationDialogPartner}
                     />
                   ))}
                 </div>
@@ -865,6 +920,13 @@ export default function PartnersPage() {
         partnerId={weeklyDialogPartner?.id ?? ''}
         partnerName={weeklyDialogPartner?.brand_name ?? ''}
         sourceData={weeklyDialogPartner?.source_data}
+      />
+
+      {/* Status Investigation Dialog */}
+      <StatusInvestigationDialog
+        open={investigationDialogPartner !== null}
+        onOpenChange={(open) => !open && setInvestigationDialogPartner(null)}
+        partner={investigationDialogPartner}
       />
     </div>
   )

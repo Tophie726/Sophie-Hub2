@@ -38,11 +38,13 @@ export async function GET() {
 
     const sourceIds = sources.map((s) => s.id)
 
-    // Query 2: Fetch all tab mappings for those sources
+    // Query 2: Fetch all ACTIVE tab mappings for those sources
+    // Hidden/inactive tabs should never appear in the flow map
     const { data: allTabs, error: tabsError } = await supabase
       .from('tab_mappings')
       .select('id, data_source_id, tab_name, primary_entity, status')
       .in('data_source_id', sourceIds)
+      .eq('is_active', true)
 
     if (tabsError) throw tabsError
 

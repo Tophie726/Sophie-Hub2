@@ -25,11 +25,17 @@ export async function PATCH(
 
     const { status, notes } = validation.data
 
+    // CRITICAL: Keep is_active in sync with status
+    // Only 'active' status should have is_active = true
+    // All other statuses (hidden, reference, flagged) are inactive
+    const is_active = status === 'active'
+
     // Update tab mapping
     const { data, error } = await supabase
       .from('tab_mappings')
       .update({
         status,
+        is_active,
         notes: notes || null,
         updated_at: new Date().toISOString(),
       })

@@ -17,7 +17,7 @@ import Link from 'next/link'
 import { HealthDistributionCard } from '@/components/dashboard/health-distribution-card'
 
 interface TableStats {
-  partners: { count: number; fields: string[] }
+  partners: { count: number; activeCount: number; fields: string[] }
   staff: { count: number; fields: string[] }
 }
 
@@ -57,8 +57,9 @@ export default function DashboardPage() {
         }
 
         if (sourcesRes.ok) {
-          const data = await sourcesRes.json()
-          setDataSources(data.sources || [])
+          const json = await sourcesRes.json()
+          // Handle both apiSuccess wrapper and direct format
+          setDataSources(json.data?.sources || json.sources || [])
         }
       } catch (error) {
         console.error('Error fetching dashboard data:', error)
@@ -116,8 +117,13 @@ export default function DashboardPage() {
                     <ArrowUpRight className="h-4 w-4 text-muted-foreground opacity-0 transition-all duration-200 group-hover:opacity-100" />
                   </div>
                   <div className="mt-4">
-                    <p className="text-3xl font-bold tabular-nums">{stats?.partners.count ?? 0}</p>
-                    <p className="text-sm text-muted-foreground mt-1">Partners</p>
+                    <p className="text-3xl font-bold tabular-nums">{stats?.partners.activeCount ?? 0}</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Active Partners
+                      {stats?.partners.count && stats.partners.count > stats.partners.activeCount && (
+                        <span className="text-xs ml-1">of {stats.partners.count}</span>
+                      )}
+                    </p>
                   </div>
                 </CardContent>
               </Card>
