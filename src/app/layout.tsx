@@ -3,6 +3,7 @@ import localFont from "next/font/local";
 import "./globals.css";
 import { SessionProvider } from "@/components/providers/session-provider";
 import { ThemeProvider } from "@/components/providers/theme-provider";
+import { PostHogProvider } from "@/components/providers/posthog-provider";
 import { Toaster } from "@/components/ui/toaster";
 import { SessionMonitor } from "@/components/providers/session-monitor";
 
@@ -40,11 +41,13 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <ThemeProvider>
-          <SessionProvider>
-            <SessionMonitor />
-            {children}
-            <Toaster />
-          </SessionProvider>
+          <PostHogProvider>
+            <SessionProvider>
+              <SessionMonitor />
+              {children}
+              <Toaster />
+            </SessionProvider>
+          </PostHogProvider>
         </ThemeProvider>
       </body>
     </html>

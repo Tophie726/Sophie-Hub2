@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import Link from 'next/link'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { format, parseISO } from 'date-fns'
-import { Building2, Plus, Database, ChevronRight, Loader2, Settings2, Activity, RefreshCw, FileSpreadsheet, MoreHorizontal, Sparkles } from 'lucide-react'
+import { Building2, Plus, Database, ChevronRight, ChevronUp, ChevronDown, Loader2, Settings2, Activity, RefreshCw, FileSpreadsheet, MoreHorizontal, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import { PageHeader } from '@/components/layout/page-header'
 import { Button } from '@/components/ui/button'
@@ -66,7 +66,8 @@ interface Partner {
   [key: string]: unknown // Allow dynamic field access
 }
 
-// Column definition for dynamic columns
+
+// Column definition extended with sortable flag
 interface ColumnDef {
   key: string
   label: string
@@ -75,20 +76,39 @@ interface ColumnDef {
   sourceType?: 'sheet' | 'computed' | 'both' // Where the data comes from
   sourceTab?: string // Tab name for source_data fields
   defaultVisible: boolean
-  width?: string
+  minWidth?: number // Minimum width in pixels
+  flex?: number // Flex grow factor (default 1)
   align?: 'left' | 'right'
+  sortable?: boolean // Can click header to sort
+  sortKey?: string // API sort key if different from column key
   render?: (partner: Partner) => React.ReactNode
 }
 
 // Core database columns that always exist
 const CORE_COLUMNS: ColumnDef[] = [
   {
+    key: 'partner_code',
+    label: 'Code',
+    source: 'db',
+    sourceType: 'sheet',
+    defaultVisible: false,
+    minWidth: 90,
+    flex: 0,
+    sortable: true,
+    render: (p) => p.partner_code ? (
+      <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded font-mono">
+        {p.partner_code}
+      </span>
+    ) : <span className="text-muted-foreground">--</span>
+  },
+  {
     key: 'status',
     label: 'Status',
     source: 'db',
     sourceType: 'computed', // Computed from latest weekly status
     defaultVisible: true,
-    width: 'w-28',
+    minWidth: 120,
+    flex: 0,
     render: (p) => (
       <ComputedStatusBadge
         computedStatus={p.computed_status ?? null}
@@ -105,7 +125,8 @@ const CORE_COLUMNS: ColumnDef[] = [
     source: 'db',
     sourceType: 'sheet', // From source_data weekly columns
     defaultVisible: true,
-    width: 'w-14',
+    minWidth: 70,
+    flex: 0,
     // Note: weekly column is handled specially in PartnerRow to support click handler
     render: (p) => <WeeklyStatusPreview sourceData={p.source_data} weeks={8} />
   },
@@ -115,19 +136,23 @@ const CORE_COLUMNS: ColumnDef[] = [
     source: 'db',
     sourceType: 'sheet', // From sheet sync
     defaultVisible: true,
-    width: 'w-20',
+    minWidth: 70,
+    flex: 0,
+    sortable: true,
     render: (p) => <TierBadge tier={p.tier} />
   },
-  { key: 'client_name', label: 'Client', source: 'db', sourceType: 'sheet', defaultVisible: true, width: 'w-32' },
-  { key: 'client_email', label: 'Email', source: 'db', sourceType: 'sheet', defaultVisible: false, width: 'w-48' },
-  { key: 'client_phone', label: 'Phone', source: 'db', sourceType: 'sheet', defaultVisible: false, width: 'w-28' },
+  { key: 'client_name', label: 'Client', source: 'db', sourceType: 'sheet', defaultVisible: true, minWidth: 120, flex: 1, sortable: true },
+  { key: 'client_email', label: 'Email', source: 'db', sourceType: 'sheet', defaultVisible: false, minWidth: 160, flex: 1 },
+  { key: 'client_phone', label: 'Phone', source: 'db', sourceType: 'sheet', defaultVisible: false, minWidth: 110, flex: 0 },
   {
     key: 'pod_leader_name',
     label: 'Pod Leader',
     source: 'db',
     sourceType: 'sheet',
     defaultVisible: true,
-    width: 'w-28',
+    minWidth: 110,
+    flex: 1,
+    sortable: true,
     render: (p) => {
       if (p.pod_leader) {
         return <span className="text-foreground">{p.pod_leader.full_name}</span>
@@ -143,15 +168,16 @@ const CORE_COLUMNS: ColumnDef[] = [
       return <span className="text-muted-foreground">--</span>
     }
   },
-  { key: 'brand_manager_name', label: 'Brand Manager', source: 'db', sourceType: 'sheet', defaultVisible: false, width: 'w-28' },
-  { key: 'sales_rep_name', label: 'Sales Rep', source: 'db', sourceType: 'sheet', defaultVisible: false, width: 'w-28' },
+  { key: 'brand_manager_name', label: 'Brand Manager', source: 'db', sourceType: 'sheet', defaultVisible: false, minWidth: 110, flex: 1 },
+  { key: 'sales_rep_name', label: 'Sales Rep', source: 'db', sourceType: 'sheet', defaultVisible: false, minWidth: 110, flex: 1 },
   {
     key: 'asin_count',
     label: 'ASINs',
     source: 'db',
     sourceType: 'sheet',
-    defaultVisible: true,
-    width: 'w-16',
+    defaultVisible: false,
+    minWidth: 70,
+    flex: 0,
     align: 'right',
     render: (p) => {
       const count = (p.parent_asin_count || 0) + (p.child_asin_count || 0)
@@ -164,8 +190,11 @@ const CORE_COLUMNS: ColumnDef[] = [
     source: 'db',
     sourceType: 'sheet',
     defaultVisible: false,
-    width: 'w-28',
+    minWidth: 100,
+    flex: 0,
     align: 'right',
+    sortable: true,
+    sortKey: 'onboarding_date',
     render: (p) => p.onboarding_date ? format(parseISO(p.onboarding_date), 'MMM d, yyyy') : '--'
   },
   {
@@ -174,7 +203,8 @@ const CORE_COLUMNS: ColumnDef[] = [
     source: 'db',
     sourceType: 'computed',
     defaultVisible: false,
-    width: 'w-28',
+    minWidth: 120,
+    flex: 0,
     align: 'right',
     render: (p) => p.updated_at ? format(parseISO(p.updated_at), 'MMM d, h:mm a') : '--'
   },
@@ -231,7 +261,8 @@ function extractSourceDataColumns(partners: Partner[]): ColumnDef[] {
       sourceType: 'sheet' as const,
       sourceTab: tabName,
       defaultVisible: false,
-      width: 'w-32',
+      minWidth: 120,
+      flex: 1,
     }))
 }
 
@@ -374,20 +405,16 @@ function PartnerRow({ partner, columns, visibleColumns, onSync, onWeeklyClick, o
   }
 
   return (
-    <div className="flex items-center gap-4 py-3.5 hover:bg-orange-500/5 dark:hover:bg-orange-500/10 transition-colors group">
-      {/* Brand name + code - sticky left, clickable link */}
+    <div className="flex items-center py-3.5 hover:bg-orange-500/5 dark:hover:bg-orange-500/10 transition-colors group">
+      {/* Brand name - sticky left, clickable link */}
       <Link
         href={`/partners/${partner.id}`}
-        className="sticky left-0 z-10 bg-card group-hover:bg-orange-500/5 dark:group-hover:bg-orange-500/10 pl-5 w-[200px] shrink-0 cursor-pointer transition-colors shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]"
+        className="sticky left-0 z-10 bg-card group-hover:bg-orange-500/5 dark:group-hover:bg-orange-500/10 pl-5 pr-4 shrink-0 cursor-pointer transition-colors shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]"
+        style={{ width: 180, minWidth: 180 }}
       >
-        <div className="flex items-center gap-2">
-          <span className="font-medium text-sm truncate hover:underline hover:text-orange-600 dark:hover:text-orange-400 transition-colors">{partner.brand_name}</span>
-          {partner.partner_code && (
-            <span className="hidden sm:inline text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded shrink-0">
-              {partner.partner_code}
-            </span>
-          )}
-        </div>
+        <span className="font-medium text-sm truncate block hover:underline hover:text-orange-600 dark:hover:text-orange-400 transition-colors">
+          {partner.brand_name}
+        </span>
         {/* Mobile: show client name below brand */}
         <div className="md:hidden text-xs text-muted-foreground mt-0.5 truncate">
           {partner.client_name || 'No client contact'}
@@ -430,10 +457,16 @@ function PartnerRow({ partner, columns, visibleColumns, onSync, onWeeklyClick, o
           content = value !== null && value !== undefined && value !== '' ? String(value) : '--'
         }
 
+        const colStyle: React.CSSProperties = {
+          minWidth: col.minWidth || 100,
+          flex: col.flex ?? 1,
+        }
+
         return (
           <div
             key={col.key}
-            className={`${col.width || 'w-28'} hidden md:block text-sm ${col.align === 'right' ? 'text-right' : ''} text-muted-foreground shrink-0 truncate`}
+            className={`hidden md:block text-sm ${col.align === 'right' ? 'text-right' : ''} text-muted-foreground truncate px-2`}
+            style={colStyle}
           >
             {content}
           </div>
@@ -441,13 +474,13 @@ function PartnerRow({ partner, columns, visibleColumns, onSync, onWeeklyClick, o
       })}
 
       {/* Mobile status + chevron */}
-      <Link href={`/partners/${partner.id}`} className="flex md:hidden items-center gap-2 shrink-0">
+      <Link href={`/partners/${partner.id}`} className="flex md:hidden items-center gap-2 shrink-0 pr-4">
         <StatusBadge status={partner.status} entity="partners" />
         <ChevronRight className="h-4 w-4 text-muted-foreground" />
       </Link>
 
       {/* Row actions dropdown */}
-      <div className="hidden md:flex shrink-0 items-center">
+      <div className="hidden md:flex shrink-0 items-center px-3">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="sm" className="h-7 w-7 p-0 hover:bg-muted">
@@ -844,27 +877,73 @@ export default function PartnersPage() {
                     if (content) content.scrollLeft = e.currentTarget.scrollLeft
                   }}
                 >
-                  <div className="hidden md:flex items-center gap-4 py-2.5 text-[11px] font-medium text-muted-foreground uppercase tracking-wider min-w-fit">
-                    {/* Brand header - sticky left */}
-                    <div className="sticky left-0 z-10 bg-card pl-5 w-[200px] shrink-0 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]">
+                  <div className="hidden md:flex items-center py-2.5 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+                    {/* Brand header - sticky left, sortable */}
+                    <button
+                      onClick={() => {
+                        if (sort === 'brand_name') {
+                          setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
+                        } else {
+                          setSort('brand_name')
+                          setSortOrder('asc')
+                        }
+                      }}
+                      className="sticky left-0 z-10 bg-card pl-5 pr-4 shrink-0 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] flex items-center gap-1 hover:text-foreground transition-colors"
+                      style={{ width: 180, minWidth: 180 }}
+                    >
                       Brand
-                    </div>
+                      {sort === 'brand_name' && (
+                        sortOrder === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />
+                      )}
+                    </button>
                     {orderedColumns.map(col => {
                       if (!visibleColumns.has(col.key)) return null
+
+                      const isSorted = sort === (col.sortKey || col.key)
+                      const colStyle: React.CSSProperties = {
+                        minWidth: col.minWidth || 100,
+                        flex: col.flex ?? 1,
+                      }
+
+                      if (col.sortable) {
+                        return (
+                          <button
+                            key={col.key}
+                            onClick={() => {
+                              const sortKey = col.sortKey || col.key
+                              if (sort === sortKey) {
+                                setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
+                              } else {
+                                setSort(sortKey)
+                                setSortOrder('asc')
+                              }
+                            }}
+                            className={`flex items-center gap-1 hover:text-foreground transition-colors px-2 ${col.align === 'right' ? 'justify-end' : ''}`}
+                            style={colStyle}
+                          >
+                            {col.label}
+                            {isSorted && (
+                              sortOrder === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />
+                            )}
+                          </button>
+                        )
+                      }
+
                       return (
                         <div
                           key={col.key}
-                          className={`${col.width || 'w-28'} shrink-0 ${col.align === 'right' ? 'text-right' : ''}`}
+                          className={`px-2 ${col.align === 'right' ? 'text-right' : ''}`}
+                          style={colStyle}
                         >
                           {col.label}
                         </div>
                       )
                     })}
                     {/* Column visibility toggle */}
-                    <div className="pr-5">
+                    <div className="shrink-0 px-3">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm" className="h-6 w-6 p-0 hover:bg-muted shrink-0">
+                          <Button variant="ghost" size="sm" className="h-6 w-6 p-0 hover:bg-muted">
                             <Settings2 className="h-3.5 w-3.5" />
                             <span className="sr-only">Toggle columns</span>
                           </Button>

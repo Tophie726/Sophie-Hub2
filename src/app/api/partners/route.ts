@@ -10,7 +10,7 @@ const QuerySchema = z.object({
   search: z.string().max(200).optional(),
   status: z.string().optional(),
   tier: z.string().optional(),
-  sort: z.enum(['brand_name', 'created_at', 'tier', 'onboarding_date']).optional().default('brand_name'),
+  sort: z.enum(['brand_name', 'created_at', 'tier', 'onboarding_date', 'partner_code', 'client_name', 'pod_leader_name']).optional().default('brand_name'),
   order: z.enum(['asc', 'desc']).optional().default('asc'),
   limit: z.coerce.number().int().min(1).max(5000).optional().default(50),
   offset: z.coerce.number().int().min(0).optional().default(0),
