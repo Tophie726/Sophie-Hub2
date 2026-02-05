@@ -26,11 +26,14 @@ export async function GET() {
 
     const patterns = (mappings || []).map(m => m.status_pattern.toLowerCase())
 
-    // Get all partners with source_data
+    // Get recent partners with source_data (limit for performance)
+    // Checking 200 recent partners is sufficient to discover unmapped patterns
     const { data: partners, error: partnersError } = await supabase
       .from('partners')
       .select('source_data')
       .not('source_data', 'is', null)
+      .order('updated_at', { ascending: false })
+      .limit(200)
 
     if (partnersError) {
       return ApiErrors.database(partnersError.message)
@@ -85,6 +88,9 @@ export async function GET() {
       unmapped,
       totalUnmappedPartners: unmapped.reduce((sum, u) => sum + u.count, 0),
       uniqueUnmappedStatuses: unmapped.length,
+    }, 200, {
+      // Cache for 2 minutes - unmapped status discovery doesn't need to be real-time
+      'Cache-Control': 'private, max-age=120, stale-while-revalidate=300',
     })
   } catch (error) {
     console.error('Unmapped statuses fetch error:', error)

@@ -109,8 +109,11 @@ export function StatusMappingSettings() {
   }, [])
 
   useEffect(() => {
-    fetchMappings()
-    fetchUnmapped()
+    // Fetch mappings immediately, unmapped lazy-loaded after
+    fetchMappings().then(() => {
+      // Defer unmapped fetch so UI is responsive first
+      setTimeout(fetchUnmapped, 100)
+    })
   }, [fetchMappings, fetchUnmapped])
 
   const handleCreate = async () => {

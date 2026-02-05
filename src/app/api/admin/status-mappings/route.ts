@@ -47,6 +47,8 @@ export async function GET() {
     return apiSuccess({
       mappings: mappings || [],
       buckets,
+    }, 200, {
+      'Cache-Control': 'private, max-age=30, stale-while-revalidate=60',
     })
   } catch (error) {
     console.error('Status mappings fetch error:', error)
