@@ -1,8 +1,8 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import Link from 'next/link'
-import { ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react'
+import { ExternalLink } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -31,15 +31,8 @@ interface WeeklyStatusDialogProps {
   sourceData: Record<string, Record<string, Record<string, unknown>>> | null | undefined
 }
 
-// Get the Monday of a given date's week
-function getMonday(date: Date): Date {
-  const d = new Date(date)
-  const day = d.getDay()
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1)
-  d.setDate(diff)
-  d.setHours(0, 0, 0, 0)
-  return d
-}
+const MONTH_NAMES_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const DAY_NAMES = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
 
 // Format date as M/D/YY for lookup
 function formatDateKey(date: Date): string {
@@ -49,19 +42,13 @@ function formatDateKey(date: Date): string {
   return `${m}/${d}/${y}`
 }
 
-// Format date for display
-function formatDisplayDate(date: Date): string {
-  return date.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-  })
-}
-
-// Get week number of the year
+// Get ISO week number
 function getWeekNumber(date: Date): number {
-  const firstDayOfYear = new Date(date.getFullYear(), 0, 1)
-  const pastDaysOfYear = (date.getTime() - firstDayOfYear.getTime()) / 86400000
-  return Math.ceil((pastDaysOfYear + firstDayOfYear.getDay() + 1) / 7)
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()))
+  const dayNum = d.getUTCDay() || 7
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum)
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1))
+  return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7)
 }
 
 // Build a lookup map from source_data weekly columns
@@ -100,12 +87,92 @@ function buildWeeklyLookup(
   return lookup
 }
 
-interface WeekData {
+interface DayData {
   date: Date
-  dateStr: string
+  day: number
+  isCurrentMonth: boolean
+  isToday: boolean
+}
+
+interface WeekRowData {
   weekNumber: number
+  days: DayData[]
   status: string | null
-  bucket: StatusColorBucket
+  mondayDate: Date | null
+  hasData: boolean
+  isFuture: boolean
+}
+
+function buildMonthCalendar(
+  year: number,
+  month: number,
+  statusLookup: Map<string, { status: string; weekNumber: number }>,
+  lastKnownStatus: string | null
+): { weeks: WeekRowData[]; lastStatus: string | null } {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  const firstDay = new Date(year, month, 1)
+  const lastDay = new Date(year, month + 1, 0)
+
+  const startDate = new Date(firstDay)
+  startDate.setDate(startDate.getDate() - startDate.getDay())
+
+  const weeks: WeekRowData[] = []
+  const current = new Date(startDate)
+  let runningStatus = lastKnownStatus
+
+  while (current <= lastDay || current.getDay() !== 0) {
+    const weekDays: DayData[] = []
+    let weekMonday: Date | null = null
+    let weekStatus: string | null = null
+    let hasData = false
+
+    for (let i = 0; i < 7; i++) {
+      const isCurrentMonth = current.getMonth() === month
+      const isMonday = current.getDay() === 1
+      const isToday = current.getTime() === today.getTime()
+
+      if (isMonday) {
+        weekMonday = new Date(current)
+        const key = formatDateKey(current)
+        const fromSource = statusLookup.get(key)
+        weekStatus = fromSource?.status || null
+        hasData = weekStatus !== null
+
+        if (hasData) {
+          runningStatus = weekStatus
+        }
+      }
+
+      weekDays.push({
+        date: new Date(current),
+        day: current.getDate(),
+        isCurrentMonth,
+        isToday,
+      })
+
+      current.setDate(current.getDate() + 1)
+    }
+
+    if (weekDays.some(d => d.isCurrentMonth)) {
+      const isFuture = weekMonday ? weekMonday > today : false
+
+      weeks.push({
+        weekNumber: weekDays[1] ? getWeekNumber(weekDays[1].date) : getWeekNumber(weekDays[0].date),
+        days: weekDays,
+        status: weekStatus,
+        mondayDate: weekMonday,
+        hasData,
+        isFuture,
+      })
+    }
+
+    if (current.getMonth() > month && current.getFullYear() >= year) break
+    if (current.getFullYear() > year) break
+  }
+
+  return { weeks, lastStatus: runningStatus }
 }
 
 export function WeeklyStatusDialog({
@@ -115,129 +182,163 @@ export function WeeklyStatusDialog({
   partnerName,
   sourceData,
 }: WeeklyStatusDialogProps) {
-  const [weeksToShow, setWeeksToShow] = useState(12)
+  const statusLookup = useMemo(() => buildWeeklyLookup(sourceData), [sourceData])
 
-  // Build display data for the last N weeks
-  const displayWeeks = useMemo(() => {
-    const lookup = buildWeeklyLookup(sourceData)
-    const result: WeekData[] = []
+  // Build calendar data for the last 4 months
+  const monthsData = useMemo(() => {
+    const today = new Date()
+    const result: { name: string; year: number; month: number; weeks: WeekRowData[] }[] = []
+    let lastStatus: string | null = null
 
-    const thisMonday = getMonday(new Date())
-
-    for (let i = weeksToShow - 1; i >= 0; i--) {
-      const monday = new Date(thisMonday)
-      monday.setDate(monday.getDate() - i * 7)
-
-      const dateStr = formatDateKey(monday)
-      const weekNumber = getWeekNumber(monday)
-      const found = lookup.get(dateStr)
-      const status = found?.status || null
-
+    // Go back 3 months from current month (show 4 months total)
+    for (let i = 3; i >= 0; i--) {
+      const targetDate = new Date(today.getFullYear(), today.getMonth() - i, 1)
+      const { weeks, lastStatus: newLastStatus } = buildMonthCalendar(
+        targetDate.getFullYear(),
+        targetDate.getMonth(),
+        statusLookup,
+        lastStatus
+      )
       result.push({
-        date: monday,
-        dateStr,
-        weekNumber: found?.weekNumber || weekNumber,
-        status,
-        bucket: getStatusBucket(status),
+        name: MONTH_NAMES_SHORT[targetDate.getMonth()],
+        year: targetDate.getFullYear(),
+        month: targetDate.getMonth(),
+        weeks,
       })
+      lastStatus = newLastStatus
     }
 
     return result
-  }, [sourceData, weeksToShow])
+  }, [statusLookup])
 
-  // Calculate bucket distribution
+  // Calculate bucket stats
   const bucketStats = useMemo(() => {
     const stats = new Map<StatusColorBucket, number>()
-    for (const week of displayWeeks) {
-      stats.set(week.bucket, (stats.get(week.bucket) || 0) + 1)
-    }
-    return stats
-  }, [displayWeeks])
 
-  const weeksWithData = displayWeeks.filter(w => w.status !== null).length
+    for (const month of monthsData) {
+      for (const week of month.weeks) {
+        if (week.hasData) {
+          const bucket = getStatusBucket(week.status)
+          stats.set(bucket, (stats.get(bucket) || 0) + 1)
+        }
+      }
+    }
+
+    return stats
+  }, [monthsData])
+
+  const weeksWithData = monthsData.reduce(
+    (sum, m) => sum + m.weeks.filter(w => w.hasData).length,
+    0
+  )
+  const totalWeeks = monthsData.reduce((sum, m) => sum + m.weeks.length, 0)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center justify-between pr-6">
             <span className="truncate">{partnerName}</span>
           </DialogTitle>
         </DialogHeader>
 
-        <TooltipProvider delayDuration={150}>
+        <TooltipProvider delayDuration={100}>
           <div className="space-y-4">
-            {/* Week count selector */}
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">
-                Showing last {weeksToShow} weeks
-              </span>
-              <div className="flex items-center gap-1">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 w-7 p-0"
-                  onClick={() => setWeeksToShow(w => Math.max(8, w - 4))}
-                  disabled={weeksToShow <= 8}
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                <span className="text-sm tabular-nums w-6 text-center">{weeksToShow}</span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 w-7 p-0"
-                  onClick={() => setWeeksToShow(w => Math.min(24, w + 4))}
-                  disabled={weeksToShow >= 24}
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
+            {/* Mini Calendar Grid - 4 months in 2x2 */}
+            <div className="grid grid-cols-2 gap-4">
+              {monthsData.map((month) => (
+                <div key={`${month.year}-${month.month}`} className="space-y-1">
+                  {/* Month Header */}
+                  <div className="text-xs font-medium text-muted-foreground text-center">
+                    {month.name} {month.year !== new Date().getFullYear() ? month.year : ''}
+                  </div>
 
-            {/* Weekly status list */}
-            <div className="max-h-[300px] overflow-y-auto -mx-2 px-2">
-              <div className="space-y-1">
-                {displayWeeks.slice().reverse().map((week, i) => (
-                  <Tooltip key={i}>
-                    <TooltipTrigger asChild>
-                      <div className="flex items-center gap-3 py-1.5 px-2 rounded-md hover:bg-muted/50 transition-colors">
-                        <div
-                          className={`w-2 h-6 rounded-sm shrink-0 ${BUCKET_COLORS[week.bucket]}`}
-                        />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-baseline gap-2">
-                            <span className="text-sm font-medium">Week {week.weekNumber}</span>
-                            <span className="text-xs text-muted-foreground">
-                              {formatDisplayDate(week.date)}
-                            </span>
-                          </div>
+                  {/* Calendar Grid */}
+                  <div className="text-[9px]">
+                    {/* Day headers */}
+                    <div className="grid grid-cols-8 gap-px mb-0.5">
+                      <div className="text-muted-foreground/60 text-center">W</div>
+                      {DAY_NAMES.map((day, i) => (
+                        <div key={i} className="text-muted-foreground/60 text-center">
+                          {day}
                         </div>
-                        <div className={`text-sm truncate max-w-[120px] ${
-                          week.status ? '' : 'text-muted-foreground'
-                        }`}>
-                          {week.status || 'No data'}
-                        </div>
-                      </div>
-                    </TooltipTrigger>
-                    {week.status && (
-                      <TooltipContent side="left" className="text-xs">
-                        {week.status}
-                      </TooltipContent>
-                    )}
-                  </Tooltip>
-                ))}
-              </div>
+                      ))}
+                    </div>
+
+                    {/* Week rows */}
+                    {month.weeks.map((week, weekIndex) => {
+                      const effectiveStatus = week.isFuture ? null : week.status
+                      const bucket = getStatusBucket(effectiveStatus)
+                      const bgColor = effectiveStatus ? BUCKET_COLORS[bucket] : ''
+
+                      return (
+                        <Tooltip key={weekIndex}>
+                          <TooltipTrigger asChild>
+                            <div className="grid grid-cols-8 gap-[2px] cursor-default">
+                              {/* Week number */}
+                              <div className={`
+                                text-center py-0.5 rounded-[1px] font-medium text-[8px]
+                                ${effectiveStatus ? `${bgColor} text-white` : 'text-muted-foreground/50'}
+                              `}>
+                                {week.weekNumber}
+                              </div>
+
+                              {/* Days */}
+                              {week.days.map((day, dayIndex) => {
+                                let dayClass = ''
+                                if (!day.isCurrentMonth) {
+                                  dayClass = 'text-muted-foreground/20'
+                                } else if (effectiveStatus) {
+                                  dayClass = `${bgColor} text-white/90`
+                                } else {
+                                  dayClass = 'text-muted-foreground/40'
+                                }
+
+                                return (
+                                  <div
+                                    key={dayIndex}
+                                    className={`
+                                      text-center py-0.5 rounded-[1px]
+                                      ${day.isToday ? 'ring-1 ring-primary ring-inset font-bold' : ''}
+                                      ${dayClass}
+                                    `}
+                                  >
+                                    {day.day}
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="text-xs max-w-[180px]">
+                            <div className="font-medium">Week {week.weekNumber}</div>
+                            {week.mondayDate && (
+                              <div className="text-muted-foreground">
+                                {week.mondayDate.toLocaleDateString('en-US', {
+                                  month: 'short',
+                                  day: 'numeric',
+                                })}
+                              </div>
+                            )}
+                            <div className={week.status ? 'font-medium mt-0.5' : 'text-muted-foreground mt-0.5'}>
+                              {week.isFuture ? 'Future' : week.status || 'No data'}
+                            </div>
+                          </TooltipContent>
+                        </Tooltip>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
 
             {/* Legend / Stats */}
-            <div className="flex flex-wrap gap-3 pt-2 border-t border-border/60">
+            <div className="flex flex-wrap gap-3 pt-3 border-t border-border/60">
               {Array.from(bucketStats.entries())
                 .filter(([, count]) => count > 0)
                 .sort((a, b) => b[1] - a[1])
                 .map(([bucket, count]) => (
                   <div key={bucket} className="flex items-center gap-1.5 text-xs">
-                    <div className={`w-2.5 h-2.5 rounded-sm ${BUCKET_COLORS[bucket]}`} />
+                    <div className={`w-2 h-3 rounded-[1px] ${BUCKET_COLORS[bucket]}`} />
                     <span className="text-muted-foreground">
                       {BUCKET_LABELS[bucket]} ({count})
                     </span>
@@ -248,7 +349,7 @@ export function WeeklyStatusDialog({
             {/* Footer with link to full page */}
             <div className="flex items-center justify-between pt-2 border-t border-border/60">
               <span className="text-xs text-muted-foreground">
-                {weeksWithData} of {weeksToShow} weeks have data
+                {weeksWithData} of {totalWeeks} weeks have data
               </span>
               <Link
                 href={`/partners/${partnerId}?tab=weekly`}

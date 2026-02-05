@@ -749,7 +749,7 @@ export default function PartnersPage() {
               {/* Horizontal scroll wrapper for table content */}
               <div className="overflow-x-auto">
                 {/* Sticky header row — sticks below the toolbar */}
-                <div className="sticky top-[113px] z-10 bg-card border-b border-border/60 rounded-t-xl min-w-fit">
+                <div className="sticky top-[113px] z-20 bg-card border-b border-border/60 rounded-t-xl min-w-fit">
                   <div className="hidden md:flex items-center gap-4 px-5 py-2.5 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
                     <div className="flex-1 min-w-[180px]">Brand</div>
                     {orderedColumns.map(col => {

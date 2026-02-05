@@ -21,6 +21,7 @@ import { StatusBadge } from '@/components/entities/status-badge'
 import { FieldGroupSection } from '@/components/entities/field-group-section'
 import { PartnerAssignmentCard } from '@/components/entities/partner-assignment-card'
 import type { StaffDetail } from '@/types/entities'
+import type { FieldLineageMap } from '@/types/lineage'
 
 function formatRole(role: string | null): string {
   if (!role) return ''
@@ -111,10 +112,11 @@ export default function StaffDetailPage() {
           <FieldGroupSection
             title="Core Info"
             icon={<Users className="h-4 w-4 text-muted-foreground" />}
+            lineageMap={staff.lineage as FieldLineageMap | undefined}
             fields={[
-              { label: 'Full Name', value: staff.full_name },
-              { label: 'Staff Code', value: staff.staff_code },
-              { label: 'Title', value: staff.title },
+              { label: 'Full Name', value: staff.full_name, fieldKey: 'full_name' },
+              { label: 'Staff Code', value: staff.staff_code, fieldKey: 'staff_code' },
+              { label: 'Title', value: staff.title, fieldKey: 'title' },
             ]}
           />
 
@@ -122,10 +124,11 @@ export default function StaffDetailPage() {
           <FieldGroupSection
             title="Contact"
             icon={<Contact className="h-4 w-4 text-muted-foreground" />}
+            lineageMap={staff.lineage as FieldLineageMap | undefined}
             fields={[
-              { label: 'Email', value: staff.email, type: 'email' },
-              { label: 'Phone', value: staff.phone, type: 'phone' },
-              { label: 'Slack ID', value: staff.slack_id },
+              { label: 'Email', value: staff.email, type: 'email', fieldKey: 'email' },
+              { label: 'Phone', value: staff.phone, type: 'phone', fieldKey: 'phone' },
+              { label: 'Slack ID', value: staff.slack_id, fieldKey: 'slack_id' },
             ]}
           />
 
@@ -133,11 +136,12 @@ export default function StaffDetailPage() {
           <FieldGroupSection
             title="Status & Role"
             icon={<Briefcase className="h-4 w-4 text-muted-foreground" />}
+            lineageMap={staff.lineage as FieldLineageMap | undefined}
             fields={[
-              { label: 'Role', value: staff.role },
-              { label: 'Department', value: staff.department },
-              { label: 'Status', value: staff.status },
-              { label: 'Services', value: staff.services, type: 'array' },
+              { label: 'Role', value: staff.role, fieldKey: 'role' },
+              { label: 'Department', value: staff.department, fieldKey: 'department' },
+              { label: 'Status', value: staff.status, fieldKey: 'status' },
+              { label: 'Services', value: staff.services, type: 'array', fieldKey: 'services' },
             ]}
           />
 
@@ -145,9 +149,10 @@ export default function StaffDetailPage() {
           <FieldGroupSection
             title="Metrics"
             icon={<BarChart3 className="h-4 w-4 text-muted-foreground" />}
+            lineageMap={staff.lineage as FieldLineageMap | undefined}
             fields={[
-              { label: 'Current Clients', value: staff.current_client_count, type: 'number' },
-              { label: 'Max Clients', value: staff.max_clients, type: 'number' },
+              { label: 'Current Clients', value: staff.current_client_count, type: 'number', fieldKey: 'current_client_count' },
+              { label: 'Max Clients', value: staff.max_clients, type: 'number', fieldKey: 'max_clients' },
             ]}
           />
 
@@ -155,10 +160,11 @@ export default function StaffDetailPage() {
           <FieldGroupSection
             title="Dates"
             icon={<CalendarDays className="h-4 w-4 text-muted-foreground" />}
+            lineageMap={staff.lineage as FieldLineageMap | undefined}
             fields={[
-              { label: 'Hire Date', value: staff.hire_date, type: 'date' },
-              { label: 'Probation End', value: staff.probation_end_date, type: 'date' },
-              { label: 'Departure Date', value: staff.departure_date, type: 'date' },
+              { label: 'Hire Date', value: staff.hire_date, type: 'date', fieldKey: 'hire_date' },
+              { label: 'Probation End', value: staff.probation_end_date, type: 'date', fieldKey: 'probation_end_date' },
+              { label: 'Departure Date', value: staff.departure_date, type: 'date', fieldKey: 'departure_date' },
             ]}
           />
 
@@ -166,9 +172,10 @@ export default function StaffDetailPage() {
           <FieldGroupSection
             title="Links"
             icon={<Link2 className="h-4 w-4 text-muted-foreground" />}
+            lineageMap={staff.lineage as FieldLineageMap | undefined}
             fields={[
-              { label: 'Dashboard URL', value: staff.dashboard_url, type: 'url' },
-              { label: 'Calendly URL', value: staff.calendly_url, type: 'url' },
+              { label: 'Dashboard URL', value: staff.dashboard_url, type: 'url', fieldKey: 'dashboard_url' },
+              { label: 'Calendly URL', value: staff.calendly_url, type: 'url', fieldKey: 'calendly_url' },
             ]}
           />
 

@@ -27,6 +27,7 @@ import { FieldGroupSection } from '@/components/entities/field-group-section'
 import { StaffAssignmentCard } from '@/components/entities/staff-assignment-card'
 import { WeeklyStatusTab } from '@/components/partners/weekly-status-tab'
 import type { PartnerDetail } from '@/types/entities'
+import type { FieldLineageMap } from '@/types/lineage'
 
 type TabId = 'overview' | 'weekly'
 
@@ -200,12 +201,13 @@ export default function PartnerDetailPage() {
               <FieldGroupSection
                 title="Core Info"
                 icon={<Building2 className="h-4 w-4 text-muted-foreground" />}
+                lineageMap={partner.lineage as FieldLineageMap | undefined}
                 fields={[
-                  { label: 'Brand Name', value: partner.brand_name },
-                  { label: 'Partner Code', value: partner.partner_code },
-                  { label: 'Status', value: partner.status },
-                  { label: 'Tier', value: partner.tier },
-                  { label: 'Notes', value: partner.notes },
+                  { label: 'Brand Name', value: partner.brand_name, fieldKey: 'brand_name' },
+                  { label: 'Partner Code', value: partner.partner_code, fieldKey: 'partner_code' },
+                  { label: 'Status', value: partner.status, fieldKey: 'status' },
+                  { label: 'Tier', value: partner.tier, fieldKey: 'tier' },
+                  { label: 'Notes', value: partner.notes, fieldKey: 'notes' },
                 ]}
               />
 
@@ -213,10 +215,11 @@ export default function PartnerDetailPage() {
               <FieldGroupSection
                 title="Contact"
                 icon={<Contact className="h-4 w-4 text-muted-foreground" />}
+                lineageMap={partner.lineage as FieldLineageMap | undefined}
                 fields={[
-                  { label: 'Client Name', value: partner.client_name },
-                  { label: 'Client Email', value: partner.client_email, type: 'email' },
-                  { label: 'Client Phone', value: partner.client_phone, type: 'phone' },
+                  { label: 'Client Name', value: partner.client_name, fieldKey: 'client_name' },
+                  { label: 'Client Email', value: partner.client_email, type: 'email', fieldKey: 'client_email' },
+                  { label: 'Client Phone', value: partner.client_phone, type: 'phone', fieldKey: 'client_phone' },
                 ]}
               />
 
@@ -224,10 +227,11 @@ export default function PartnerDetailPage() {
               <FieldGroupSection
                 title="Financial"
                 icon={<DollarSign className="h-4 w-4 text-muted-foreground" />}
+                lineageMap={partner.lineage as FieldLineageMap | undefined}
                 fields={[
-                  { label: 'Base Fee', value: partner.base_fee, type: 'currency' },
-                  { label: 'Commission Rate', value: partner.commission_rate, type: 'percent' },
-                  { label: 'Billing Day', value: partner.billing_day, type: 'number' },
+                  { label: 'Base Fee', value: partner.base_fee, type: 'currency', fieldKey: 'base_fee' },
+                  { label: 'Commission Rate', value: partner.commission_rate, type: 'percent', fieldKey: 'commission_rate' },
+                  { label: 'Billing Day', value: partner.billing_day, type: 'number', fieldKey: 'billing_day' },
                 ]}
               />
 
@@ -235,11 +239,12 @@ export default function PartnerDetailPage() {
               <FieldGroupSection
                 title="Dates"
                 icon={<CalendarDays className="h-4 w-4 text-muted-foreground" />}
+                lineageMap={partner.lineage as FieldLineageMap | undefined}
                 fields={[
-                  { label: 'Onboarding Date', value: partner.onboarding_date, type: 'date' },
-                  { label: 'Contract Start', value: partner.contract_start_date, type: 'date' },
-                  { label: 'Contract End', value: partner.contract_end_date, type: 'date' },
-                  { label: 'Churned Date', value: partner.churned_date, type: 'date' },
+                  { label: 'Onboarding Date', value: partner.onboarding_date, type: 'date', fieldKey: 'onboarding_date' },
+                  { label: 'Contract Start', value: partner.contract_start_date, type: 'date', fieldKey: 'contract_start_date' },
+                  { label: 'Contract End', value: partner.contract_end_date, type: 'date', fieldKey: 'contract_end_date' },
+                  { label: 'Churned Date', value: partner.churned_date, type: 'date', fieldKey: 'churned_date' },
                 ]}
               />
 
@@ -247,9 +252,10 @@ export default function PartnerDetailPage() {
               <FieldGroupSection
                 title="Metrics"
                 icon={<Package className="h-4 w-4 text-muted-foreground" />}
+                lineageMap={partner.lineage as FieldLineageMap | undefined}
                 fields={[
-                  { label: 'Parent ASINs', value: partner.parent_asin_count, type: 'number' },
-                  { label: 'Child ASINs', value: partner.child_asin_count, type: 'number' },
+                  { label: 'Parent ASINs', value: partner.parent_asin_count, type: 'number', fieldKey: 'parent_asin_count' },
+                  { label: 'Child ASINs', value: partner.child_asin_count, type: 'number', fieldKey: 'child_asin_count' },
                 ]}
               />
 

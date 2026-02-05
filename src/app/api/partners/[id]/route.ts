@@ -1,6 +1,7 @@
 import { getAdminClient } from '@/lib/supabase/admin'
 import { requireAuth } from '@/lib/auth/api-auth'
 import { apiSuccess, ApiErrors } from '@/lib/api/response'
+import { deduplicateLineage, type FieldLineageRow } from '@/types/lineage'
 
 const supabase = getAdminClient()
 
@@ -21,7 +22,7 @@ export async function GET(
     const { id } = await params
 
     // Run all queries in parallel
-    const [partnerResult, assignmentsResult, asinsResult, statusesResult] = await Promise.all([
+    const [partnerResult, assignmentsResult, asinsResult, statusesResult, lineageResult] = await Promise.all([
       supabase
         .from('partners')
         .select('*')
@@ -44,6 +45,12 @@ export async function GET(
         .eq('partner_id', id)
         .order('week_start_date', { ascending: false })
         .limit(156), // 3 years of weekly data for the Weekly Status tab
+      supabase
+        .from('field_lineage')
+        .select('field_name, source_type, source_ref, previous_value, new_value, changed_at, sync_run_id')
+        .eq('entity_type', 'partners')
+        .eq('entity_id', id)
+        .order('changed_at', { ascending: false }),
     ])
 
     if (partnerResult.error) {
@@ -54,12 +61,16 @@ export async function GET(
       return ApiErrors.database(partnerResult.error.message)
     }
 
+    // Deduplicate lineage to get most recent per field
+    const lineage = deduplicateLineage((lineageResult.data || []) as FieldLineageRow[])
+
     return apiSuccess({
       partner: {
         ...partnerResult.data,
         assignments: assignmentsResult.data || [],
         asins: asinsResult.data || [],
         recent_statuses: statusesResult.data || [],
+        lineage,
       },
     })
   } catch (error) {

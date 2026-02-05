@@ -1,16 +1,20 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { format, parseISO } from 'date-fns'
+import { LineageIndicator } from './lineage-indicator'
+import type { FieldLineageMap } from '@/types/lineage'
 
-interface FieldValue {
+export interface FieldValue {
   label: string
   value: string | number | boolean | string[] | null | undefined
   type?: 'text' | 'number' | 'date' | 'currency' | 'percent' | 'array' | 'url' | 'email' | 'phone'
+  fieldKey?: string // Maps to field_lineage.field_name for provenance lookup
 }
 
 interface FieldGroupSectionProps {
   title: string
   icon?: React.ReactNode
   fields: FieldValue[]
+  lineageMap?: FieldLineageMap
 }
 
 function formatFieldValue(field: FieldValue): React.ReactNode {
@@ -86,7 +90,7 @@ function formatFieldValue(field: FieldValue): React.ReactNode {
   }
 }
 
-export function FieldGroupSection({ title, icon, fields }: FieldGroupSectionProps) {
+export function FieldGroupSection({ title, icon, fields, lineageMap }: FieldGroupSectionProps) {
   // Filter out fields where all values are null/undefined (completely empty group)
   const hasAnyValue = fields.some(f => f.value !== null && f.value !== undefined && f.value !== '')
   if (!hasAnyValue && fields.length > 0) {
@@ -106,7 +110,12 @@ export function FieldGroupSection({ title, icon, fields }: FieldGroupSectionProp
           {fields.map((field, i) => (
             <div key={i} className="space-y-0.5">
               <dt className="text-xs text-muted-foreground">{field.label}</dt>
-              <dd className="text-sm">{formatFieldValue(field)}</dd>
+              <dd className="text-sm flex items-center">
+                {formatFieldValue(field)}
+                {field.fieldKey && lineageMap?.[field.fieldKey] && (
+                  <LineageIndicator lineage={lineageMap[field.fieldKey]} />
+                )}
+              </dd>
             </div>
           ))}
         </div>

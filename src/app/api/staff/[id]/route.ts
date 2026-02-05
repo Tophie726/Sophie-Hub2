@@ -1,6 +1,7 @@
 import { getAdminClient } from '@/lib/supabase/admin'
 import { requireAuth } from '@/lib/auth/api-auth'
 import { apiSuccess, ApiErrors } from '@/lib/api/response'
+import { deduplicateLineage, type FieldLineageRow } from '@/types/lineage'
 
 const supabase = getAdminClient()
 
@@ -20,7 +21,7 @@ export async function GET(
   try {
     const { id } = await params
 
-    const [staffResult, assignmentsResult] = await Promise.all([
+    const [staffResult, assignmentsResult, lineageResult] = await Promise.all([
       supabase
         .from('staff')
         .select('*')
@@ -32,6 +33,12 @@ export async function GET(
         .eq('staff_id', id)
         .is('unassigned_at', null)
         .order('assignment_role'),
+      supabase
+        .from('field_lineage')
+        .select('field_name, source_type, source_ref, previous_value, new_value, changed_at, sync_run_id')
+        .eq('entity_type', 'staff')
+        .eq('entity_id', id)
+        .order('changed_at', { ascending: false }),
     ])
 
     if (staffResult.error) {
@@ -42,10 +49,14 @@ export async function GET(
       return ApiErrors.database(staffResult.error.message)
     }
 
+    // Deduplicate lineage to get most recent per field
+    const lineage = deduplicateLineage((lineageResult.data || []) as FieldLineageRow[])
+
     return apiSuccess({
       staff: {
         ...staffResult.data,
         assigned_partners: assignmentsResult.data || [],
+        lineage,
       },
     })
   } catch (error) {
