@@ -746,76 +746,76 @@ export default function PartnersPage() {
         ) : (
           <>
             <div className={`rounded-xl border bg-card transition-opacity duration-150 ${isFiltering ? 'opacity-60' : ''}`}>
-              {/* Horizontal scroll wrapper for table content */}
-              <div className="overflow-x-auto">
-                {/* Sticky header row — sticks below the toolbar */}
-                <div className="sticky top-[113px] z-20 bg-card border-b border-border/60 rounded-t-xl min-w-fit">
-                  <div className="hidden md:flex items-center gap-4 px-5 py-2.5 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
-                    <div className="flex-1 min-w-[180px]">Brand</div>
-                    {orderedColumns.map(col => {
-                      if (!visibleColumns.has(col.key)) return null
-                      return (
-                        <div
-                          key={col.key}
-                          className={`${col.width || 'w-28'} shrink-0 ${col.align === 'right' ? 'text-right' : ''}`}
-                        >
-                          {col.label}
-                        </div>
-                      )
-                    })}
-                    {/* Column visibility toggle */}
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="sm" className="h-6 w-6 p-0 hover:bg-muted shrink-0">
-                          <Settings2 className="h-3.5 w-3.5" />
-                          <span className="sr-only">Toggle columns</span>
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-72 max-h-[400px] overflow-y-auto z-50">
-                        <TooltipProvider delayDuration={400}>
-                          {/* Visible columns section */}
-                          {dropdownOrderedColumns.visible.length > 0 && (
-                            <>
-                              <DropdownMenuLabel className="text-xs flex items-center justify-between">
-                                <span>Visible Columns ({dropdownOrderedColumns.visible.length})</span>
-                              </DropdownMenuLabel>
-                              <DropdownMenuSeparator />
-                              {dropdownOrderedColumns.visible.map(col => (
-                                <ColumnDropdownItem
-                                  key={col.key}
-                                  col={col}
-                                  isVisible={true}
-                                  fieldLineage={fieldLineage}
-                                  onToggle={() => toggleColumn(col.key)}
-                                />
-                              ))}
-                            </>
-                          )}
+              {/* Sticky header row — sticks below the toolbar, outside scroll wrapper */}
+              <div className="sticky top-[113px] z-20 bg-card border-b border-border/60 rounded-t-xl overflow-x-auto">
+                <div className="hidden md:flex items-center gap-4 px-5 py-2.5 text-[11px] font-medium text-muted-foreground uppercase tracking-wider min-w-fit">
+                  <div className="flex-1 min-w-[180px]">Brand</div>
+                  {orderedColumns.map(col => {
+                    if (!visibleColumns.has(col.key)) return null
+                    return (
+                      <div
+                        key={col.key}
+                        className={`${col.width || 'w-28'} shrink-0 ${col.align === 'right' ? 'text-right' : ''}`}
+                      >
+                        {col.label}
+                      </div>
+                    )
+                  })}
+                  {/* Column visibility toggle */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="sm" className="h-6 w-6 p-0 hover:bg-muted shrink-0">
+                        <Settings2 className="h-3.5 w-3.5" />
+                        <span className="sr-only">Toggle columns</span>
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-72 max-h-[400px] overflow-y-auto z-50">
+                      <TooltipProvider delayDuration={400}>
+                        {/* Visible columns section */}
+                        {dropdownOrderedColumns.visible.length > 0 && (
+                          <>
+                            <DropdownMenuLabel className="text-xs flex items-center justify-between">
+                              <span>Visible Columns ({dropdownOrderedColumns.visible.length})</span>
+                            </DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            {dropdownOrderedColumns.visible.map(col => (
+                              <ColumnDropdownItem
+                                key={col.key}
+                                col={col}
+                                isVisible={true}
+                                fieldLineage={fieldLineage}
+                                onToggle={() => toggleColumn(col.key)}
+                              />
+                            ))}
+                          </>
+                        )}
 
-                          {/* Hidden columns section */}
-                          {dropdownOrderedColumns.hidden.length > 0 && (
-                            <>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuLabel className="text-xs">
-                                Hidden Columns ({dropdownOrderedColumns.hidden.length})
-                              </DropdownMenuLabel>
-                              <DropdownMenuSeparator />
-                              {dropdownOrderedColumns.hidden.map(col => (
-                                <ColumnDropdownItem
-                                  key={col.key}
-                                  col={col}
-                                  isVisible={false}
-                                  fieldLineage={fieldLineage}
-                                  onToggle={() => toggleColumn(col.key)}
-                                />
-                              ))}
-                            </>
-                          )}
-                        </TooltipProvider>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
+                        {/* Hidden columns section */}
+                        {dropdownOrderedColumns.hidden.length > 0 && (
+                          <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuLabel className="text-xs">
+                              Hidden Columns ({dropdownOrderedColumns.hidden.length})
+                            </DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            {dropdownOrderedColumns.hidden.map(col => (
+                              <ColumnDropdownItem
+                                key={col.key}
+                                col={col}
+                                isVisible={false}
+                                fieldLineage={fieldLineage}
+                                onToggle={() => toggleColumn(col.key)}
+                              />
+                            ))}
+                          </>
+                        )}
+                      </TooltipProvider>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
+              </div>
+              {/* Horizontal scroll wrapper for table content */}
+              <div className="overflow-x-auto relative z-0">
                 <div className="divide-y divide-border/60 rounded-b-xl overflow-hidden min-w-fit">
                   {partners.map(partner => (
                     <PartnerRow

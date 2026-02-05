@@ -345,6 +345,16 @@ Many Google Sheets have headers on rows other than row 0 (e.g., Master Client Da
   - Finds partner row in source sheet by key field
   - Updates only that partner's `source_data` and mapped fields
   - Sync button in partner detail page header
+- ✅ **Weekly Status Preview Dialog** - Click weekly bars in partner list for quick view
+  - `src/components/partners/weekly-status-dialog.tsx` - Mini calendar popup
+  - Shows last 4 months in 2x2 grid with week-by-week status colors
+  - Tooltips show week number, date, and full status text
+  - "View Full History" button links to partner detail weekly tab
+  - Partner detail page supports `?tab=weekly` URL param for direct linking
+- ✅ **Responsive Partners Table** - Horizontal scrolling for narrow viewports
+  - Sticky header stays fixed while content scrolls underneath
+  - Header and content have independent horizontal scroll wrappers
+  - Z-index layering ensures rows don't overlap header
 
 **Pending:**
 - ⚠️ Vercel staging deployment setup
