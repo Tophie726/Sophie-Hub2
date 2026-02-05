@@ -3,6 +3,7 @@ import { requireAuth, requireRole } from '@/lib/auth/api-auth'
 import { ROLES } from '@/lib/auth/roles'
 import { apiSuccess, apiError, ApiErrors, ErrorCodes, apiValidationError } from '@/lib/api/response'
 import { computePartnerStatus, matchesStatusFilter } from '@/lib/partners/computed-status'
+import { checkRateLimit, RATE_LIMITS, rateLimitHeaders } from '@/lib/rate-limit'
 import { z } from 'zod'
 
 const supabase = getAdminClient()
@@ -34,6 +35,12 @@ const QuerySchema = z.object({
 export async function GET(request: Request) {
   const auth = await requireAuth()
   if (!auth.authenticated) return auth.response
+
+  // Rate limit: 30 requests/minute per user
+  const rateLimit = checkRateLimit(auth.user.id, 'partners:list', RATE_LIMITS.PARTNERS_LIST)
+  if (!rateLimit.allowed) {
+    return ApiErrors.rateLimited('Too many requests. Please wait before fetching partners again.')
+  }
 
   try {
     const { searchParams } = new URL(request.url)
@@ -154,6 +161,7 @@ export async function GET(request: Request) {
       has_more: total > offset + limit,
     }, 200, {
       'Cache-Control': 'private, max-age=10, stale-while-revalidate=30',
+      ...rateLimitHeaders(rateLimit),
     })
   } catch (error) {
     console.error('Error in GET /api/partners:', error)

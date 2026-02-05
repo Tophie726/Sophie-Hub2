@@ -61,6 +61,12 @@ export const RATE_LIMITS = {
     windowMs: 60 * 1000, // 1 minute
   },
 
+  /** Partners list: 30 requests per minute (fetches 700+ records) */
+  PARTNERS_LIST: {
+    maxRequests: 30,
+    windowMs: 60 * 1000, // 1 minute
+  },
+
   /** Strict: 5 requests per minute (for expensive operations) */
   STRICT: {
     maxRequests: 5,
