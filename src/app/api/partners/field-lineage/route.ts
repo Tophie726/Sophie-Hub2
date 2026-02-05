@@ -24,15 +24,16 @@ export async function GET() {
 
   try {
     // Query the column mappings with joins to get full lineage
+    // Foreign key is tab_mapping_id -> tab_mappings, and data_source_id -> data_sources
     const { data, error } = await supabase
       .from('column_mappings')
       .select(`
         target_field,
         source_column,
-        tab_mappings!inner (
+        tab_mapping:tab_mapping_id (
           tab_name,
           primary_entity,
-          data_sources!inner (
+          data_source:data_source_id (
             id,
             name
           )
@@ -49,13 +50,14 @@ export async function GET() {
     const lineage: Record<string, FieldLineageInfo> = {}
 
     for (const row of data || []) {
-      const tabMapping = row.tab_mappings as unknown as {
+      const tabMapping = row.tab_mapping as {
         tab_name: string
         primary_entity: string
-        data_sources: { id: string; name: string }
-      }
+        data_source: { id: string; name: string }
+      } | null
 
-      // Only include partner mappings
+      // Skip if join failed or not a partner mapping
+      if (!tabMapping) continue
       if (tabMapping.primary_entity !== 'partners') continue
       if (!row.target_field) continue
 
@@ -63,8 +65,8 @@ export async function GET() {
         targetField: row.target_field,
         sourceColumn: row.source_column,
         tabName: tabMapping.tab_name,
-        sheetName: tabMapping.data_sources.name,
-        dataSourceId: tabMapping.data_sources.id,
+        sheetName: tabMapping.data_source?.name || 'Unknown',
+        dataSourceId: tabMapping.data_source?.id || '',
       }
     }
 
