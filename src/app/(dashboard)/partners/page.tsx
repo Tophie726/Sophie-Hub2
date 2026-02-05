@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import Link from 'next/link'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { format, parseISO } from 'date-fns'
-import { Building2, Plus, Database, ChevronRight, ChevronUp, ChevronDown, Loader2, Settings2, Activity, RefreshCw, FileSpreadsheet, MoreHorizontal, Sparkles } from 'lucide-react'
+import { Building2, Plus, Database, ChevronRight, ChevronUp, ChevronDown, ArrowUp, ArrowDown, Loader2, Settings2, Activity, RefreshCw, FileSpreadsheet, MoreHorizontal, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import { PageHeader } from '@/components/layout/page-header'
 import { Button } from '@/components/ui/button'
@@ -299,74 +299,108 @@ const sortOptions = [
   { value: 'tier', label: 'Tier' },
 ]
 
-// Column dropdown item with source indicator and lineage tooltip
+// Column dropdown item with source indicator, lineage tooltip, and reorder buttons
 function ColumnDropdownItem({
   col,
   isVisible,
   fieldLineage,
   onToggle,
+  onMoveUp,
+  onMoveDown,
+  canMoveUp,
+  canMoveDown,
 }: {
   col: ColumnDef
   isVisible: boolean
   fieldLineage: Record<string, { sourceColumn: string; tabName: string; sheetName: string }>
   onToggle: () => void
+  onMoveUp?: () => void
+  onMoveDown?: () => void
+  canMoveUp?: boolean
+  canMoveDown?: boolean
 }) {
   return (
-    <DropdownMenuCheckboxItem
-      checked={isVisible}
-      onCheckedChange={onToggle}
-      className="text-sm"
-    >
-      <span className="flex items-center justify-between w-full">
-        <span className="truncate">{col.label}</span>
-        {col.sourceType === 'computed' && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-purple-500/10 text-purple-600 dark:text-purple-400 ml-2 shrink-0 cursor-help">
-                <Sparkles className="h-3 w-3" />
-              </span>
-            </TooltipTrigger>
-            <TooltipContent side="left" className="text-xs z-[100]">
-              <div className="font-medium">Computed by App</div>
-              <div className="text-muted-foreground">Calculated from source data</div>
-            </TooltipContent>
-          </Tooltip>
-        )}
-        {col.sourceType === 'sheet' && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-green-500/10 text-green-600 dark:text-green-400 ml-2 shrink-0 cursor-help">
-                <FileSpreadsheet className="h-3 w-3" />
-              </span>
-            </TooltipTrigger>
-            <TooltipContent side="left" className="text-xs z-[100] max-w-xs">
-              {col.key === 'weekly' ? (
-                <div className="space-y-0.5">
-                  <div className="font-medium">Weekly Status Columns</div>
-                  <div className="text-muted-foreground">Pattern-matched from sheet</div>
+    <div className="flex items-center gap-1 px-2 py-1.5 text-sm">
+      {/* Reorder buttons */}
+      <div className="flex flex-col shrink-0">
+        <button
+          onClick={(e) => { e.stopPropagation(); onMoveUp?.() }}
+          disabled={!canMoveUp}
+          className="p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed"
+          title="Move up"
+        >
+          <ArrowUp className="h-3 w-3" />
+        </button>
+        <button
+          onClick={(e) => { e.stopPropagation(); onMoveDown?.() }}
+          disabled={!canMoveDown}
+          className="p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed"
+          title="Move down"
+        >
+          <ArrowDown className="h-3 w-3" />
+        </button>
+      </div>
+
+      {/* Checkbox */}
+      <label className="flex items-center gap-2 flex-1 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={isVisible}
+          onChange={onToggle}
+          className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+        />
+        <span className="truncate flex-1">{col.label}</span>
+      </label>
+
+      {/* Source indicator */}
+      {col.sourceType === 'computed' && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-purple-500/10 text-purple-600 dark:text-purple-400 shrink-0 cursor-help">
+              <Sparkles className="h-3 w-3" />
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="left" className="text-xs z-[100]">
+            <div className="font-medium">Computed by App</div>
+            <div className="text-muted-foreground">Calculated from source data</div>
+          </TooltipContent>
+        </Tooltip>
+      )}
+      {col.sourceType === 'sheet' && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-green-500/10 text-green-600 dark:text-green-400 shrink-0 cursor-help">
+              <FileSpreadsheet className="h-3 w-3" />
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="left" className="text-xs z-[100] max-w-xs">
+            {col.key === 'weekly' ? (
+              <div className="space-y-0.5">
+                <div className="font-medium">Weekly Status Columns</div>
+                <div className="text-muted-foreground">Pattern-matched from sheet</div>
+              </div>
+            ) : col.source === 'source_data' && col.sourceTab ? (
+              // Source data columns have their lineage directly on the column def
+              <div className="space-y-0.5">
+                <div className="font-medium">Google Sheet</div>
+                <div className="text-muted-foreground">
+                  Tab: <span className="text-foreground">{col.sourceTab}</span>
                 </div>
-              ) : col.source === 'source_data' && col.sourceTab ? (
-                // Source data columns have their lineage directly on the column def
-                <div className="space-y-0.5">
-                  <div className="font-medium">Google Sheet</div>
-                  <div className="text-muted-foreground">
-                    Tab: <span className="text-foreground">{col.sourceTab}</span>
-                  </div>
-                  <div className="text-muted-foreground">
-                    Column: <span className="text-foreground">{col.sourceKey}</span>
-                  </div>
+                <div className="text-muted-foreground">
+                  Column: <span className="text-foreground">{col.sourceKey}</span>
                 </div>
-              ) : fieldLineage[col.key] ? (
-                // Core columns lookup from field-lineage API
-                <div className="space-y-0.5">
-                  <div className="font-medium">{fieldLineage[col.key].sheetName || 'Unknown Sheet'}</div>
-                  {fieldLineage[col.key].tabName ? (
-                    <div className="text-muted-foreground">
-                      Tab: <span className="text-foreground">{fieldLineage[col.key].tabName}</span>
-                    </div>
-                  ) : (
-                    <div className="text-amber-500 text-[10px]">Tab name missing - re-save mapping</div>
-                  )}
+              </div>
+            ) : fieldLineage[col.key] ? (
+              // Core columns lookup from field-lineage API
+              <div className="space-y-0.5">
+                <div className="font-medium">{fieldLineage[col.key].sheetName || 'Unknown Sheet'}</div>
+                {fieldLineage[col.key].tabName ? (
+                  <div className="text-muted-foreground">
+                    Tab: <span className="text-foreground">{fieldLineage[col.key].tabName}</span>
+                  </div>
+                ) : (
+                  <div className="text-amber-500 text-[10px]">Tab name missing - re-save mapping</div>
+                )}
                   {fieldLineage[col.key].sourceColumn ? (
                     <div className="text-muted-foreground">
                       Column: <span className="text-foreground">{fieldLineage[col.key].sourceColumn}</span>
@@ -381,8 +415,7 @@ function ColumnDropdownItem({
             </TooltipContent>
           </Tooltip>
         )}
-      </span>
-    </DropdownMenuCheckboxItem>
+    </div>
   )
 }
 
@@ -653,8 +686,8 @@ export default function PartnersPage() {
     })
   }
 
-  // Move column in the order (for drag-and-drop) - reserved for future use
-  const _moveColumn = (fromIndex: number, toIndex: number) => {
+  // Move column in the order
+  const moveColumn = (fromIndex: number, toIndex: number) => {
     setColumnOrder(prev => {
       const next = [...prev]
       const [moved] = next.splice(fromIndex, 1)
@@ -662,7 +695,6 @@ export default function PartnersPage() {
       return next
     })
   }
-  void _moveColumn // silence unused warning
 
   const fetchPartners = useCallback(async (append = false, currentOffset = 0) => {
     if (append) {
@@ -950,44 +982,28 @@ export default function PartnersPage() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-80 max-h-[400px] overflow-y-auto z-50 pr-2 scrollbar-thin">
                           <TooltipProvider delayDuration={400}>
-                            {/* Visible columns section */}
-                            {dropdownOrderedColumns.visible.length > 0 && (
-                              <>
-                                <DropdownMenuLabel className="text-xs flex items-center justify-between">
-                                  <span>Visible Columns ({dropdownOrderedColumns.visible.length})</span>
-                                </DropdownMenuLabel>
-                                <DropdownMenuSeparator />
-                                {dropdownOrderedColumns.visible.map(col => (
-                                  <ColumnDropdownItem
-                                    key={col.key}
-                                    col={col}
-                                    isVisible={true}
-                                    fieldLineage={fieldLineage}
-                                    onToggle={() => toggleColumn(col.key)}
-                                  />
-                                ))}
-                              </>
-                            )}
-
-                            {/* Hidden columns section */}
-                            {dropdownOrderedColumns.hidden.length > 0 && (
-                              <>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuLabel className="text-xs">
-                                  Hidden Columns ({dropdownOrderedColumns.hidden.length})
-                                </DropdownMenuLabel>
-                                <DropdownMenuSeparator />
-                                {dropdownOrderedColumns.hidden.map(col => (
-                                  <ColumnDropdownItem
-                                    key={col.key}
-                                    col={col}
-                                    isVisible={false}
-                                    fieldLineage={fieldLineage}
-                                    onToggle={() => toggleColumn(col.key)}
-                                  />
-                                ))}
-                              </>
-                            )}
+                            {/* All columns - reorderable list */}
+                            <DropdownMenuLabel className="text-xs flex items-center justify-between">
+                              <span>Columns ({orderedColumns.length})</span>
+                              <span className="text-muted-foreground font-normal">Use arrows to reorder</span>
+                            </DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            {orderedColumns.map((col, idx) => {
+                              const orderIndex = columnOrder.indexOf(col.key)
+                              return (
+                                <ColumnDropdownItem
+                                  key={col.key}
+                                  col={col}
+                                  isVisible={visibleColumns.has(col.key)}
+                                  fieldLineage={fieldLineage}
+                                  onToggle={() => toggleColumn(col.key)}
+                                  onMoveUp={() => moveColumn(orderIndex, orderIndex - 1)}
+                                  onMoveDown={() => moveColumn(orderIndex, orderIndex + 1)}
+                                  canMoveUp={orderIndex > 0}
+                                  canMoveDown={orderIndex < columnOrder.length - 1}
+                                />
+                              )
+                            })}
                           </TooltipProvider>
                         </DropdownMenuContent>
                       </DropdownMenu>
