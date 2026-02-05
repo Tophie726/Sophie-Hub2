@@ -1262,6 +1262,8 @@ All env vars must be set in Vercel dashboard (Settings → Environment Variables
 | `ADMIN_EMAILS` | Comma-separated admin emails |
 | `ENCRYPTION_KEY` | Encryption key for sensitive data |
 | `STAGING_PASSWORD` | Password for staging gate |
+| `NEXT_PUBLIC_POSTHOG_KEY` | PostHog project API key |
+| `NEXT_PUBLIC_POSTHOG_HOST` | PostHog host (us.i.posthog.com) |
 
 **Important**: When adding env vars via CLI, use `printf '%s' 'value' | vercel env add NAME production` to avoid newline issues.
 
