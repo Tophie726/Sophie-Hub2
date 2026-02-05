@@ -1,6 +1,7 @@
 import { getAdminClient } from '@/lib/supabase/admin'
-import { requireAuth } from '@/lib/auth/api-auth'
-import { apiSuccess, apiError, ApiErrors, ErrorCodes } from '@/lib/api/response'
+import { requireAuth, requireRole } from '@/lib/auth/api-auth'
+import { ROLES } from '@/lib/auth/roles'
+import { apiSuccess, apiError, ApiErrors, ErrorCodes, apiValidationError } from '@/lib/api/response'
 import { computePartnerStatus, matchesStatusFilter } from '@/lib/partners/computed-status'
 import { z } from 'zod'
 
@@ -149,6 +150,68 @@ export async function GET(request: Request) {
     })
   } catch (error) {
     console.error('Error in GET /api/partners:', error)
+    return ApiErrors.internal()
+  }
+}
+
+// Schema for creating a new partner
+const CreatePartnerSchema = z.object({
+  brand_name: z.string().min(1, 'Brand name is required').max(200),
+  client_name: z.string().max(200).optional(),
+  client_email: z.string().email().optional().or(z.literal('')),
+  status: z.enum(['active', 'onboarding', 'paused', 'churned']).optional().default('onboarding'),
+  tier: z.enum(['tier_1', 'tier_2', 'tier_3']).optional(),
+})
+
+/**
+ * POST /api/partners
+ * Create a new partner (admin only)
+ */
+export async function POST(request: Request) {
+  const auth = await requireRole(ROLES.ADMIN)
+  if (!auth.authenticated) return auth.response
+
+  try {
+    const body = await request.json()
+    const validation = CreatePartnerSchema.safeParse(body)
+
+    if (!validation.success) {
+      return apiValidationError(validation.error)
+    }
+
+    const { brand_name, client_name, client_email, status, tier } = validation.data
+
+    // Check if partner with same brand_name already exists
+    const { data: existing } = await supabase
+      .from('partners')
+      .select('id')
+      .ilike('brand_name', brand_name)
+      .maybeSingle()
+
+    if (existing) {
+      return apiError('DUPLICATE', `Partner "${brand_name}" already exists`, 409)
+    }
+
+    const { data: partner, error } = await supabase
+      .from('partners')
+      .insert({
+        brand_name,
+        client_name: client_name || null,
+        client_email: client_email || null,
+        status,
+        tier: tier || null,
+      })
+      .select()
+      .single()
+
+    if (error) {
+      console.error('Failed to create partner:', error)
+      return ApiErrors.database(error.message)
+    }
+
+    return apiSuccess({ partner }, 201)
+  } catch (error) {
+    console.error('Error in POST /api/partners:', error)
     return ApiErrors.internal()
   }
 }

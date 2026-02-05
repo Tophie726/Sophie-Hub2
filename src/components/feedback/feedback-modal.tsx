@@ -16,6 +16,7 @@ import {
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { getPostHogSessionId } from '@/components/providers/posthog-provider'
+import { analytics } from '@/lib/posthog'
 import { ScreenshotEditor } from './screenshot-editor'
 
 type FeedbackType = 'bug' | 'feature' | 'question'
@@ -48,6 +49,10 @@ export function FeedbackModal({ open, onOpenChange, preScreenshot }: FeedbackMod
     if (open && preScreenshot) {
       setScreenshot(preScreenshot)
     }
+    // Track modal open
+    if (open) {
+      analytics.feedbackModalOpened()
+    }
   }, [open, preScreenshot])
 
   const captureScreenshot = async () => {
@@ -56,8 +61,7 @@ export function FeedbackModal({ open, onOpenChange, preScreenshot }: FeedbackMod
       // Dynamically import html2canvas to avoid SSR issues
       const html2canvas = (await import('html2canvas')).default
 
-      // Hide ONLY the feedback modal, not other overlays/dropdowns
-      // This preserves the user's current state (open dropdowns, etc.)
+      // Hide ONLY the feedback modal and its overlay
       const feedbackModal = document.querySelector('[data-feedback-modal="true"]') as HTMLElement
       const feedbackOverlay = feedbackModal?.previousElementSibling as HTMLElement
 
@@ -69,15 +73,29 @@ export function FeedbackModal({ open, onOpenChange, preScreenshot }: FeedbackMod
       // Small delay to ensure modal is hidden
       await new Promise(resolve => setTimeout(resolve, 100))
 
-      // Capture the page - including any open dropdowns/popovers
-      // Using scale 1.0 for better quality when annotating
-      const canvas = await html2canvas(document.body, {
+      // Get the actual viewport dimensions
+      const viewportWidth = window.innerWidth
+      const viewportHeight = window.innerHeight
+
+      // Find the main content element or use documentElement
+      const targetElement = document.documentElement
+
+      // Capture at exact viewport dimensions
+      const canvas = await html2canvas(targetElement, {
         useCORS: true,
         allowTaint: true,
-        scale: 1, // Full resolution for annotation
+        scale: window.devicePixelRatio || 2, // Use device pixel ratio for crisp capture
         logging: false,
+        width: viewportWidth,
+        height: viewportHeight,
+        windowWidth: viewportWidth,
+        windowHeight: viewportHeight,
+        x: window.scrollX,
+        y: window.scrollY,
+        scrollX: -window.scrollX,
+        scrollY: -window.scrollY,
         ignoreElements: (element) => {
-          // Only ignore the feedback modal itself
+          // Ignore the feedback modal and overlay
           return element.getAttribute('data-feedback-modal') === 'true' ||
                  element.getAttribute('data-feedback-overlay') === 'true'
         },
@@ -87,8 +105,8 @@ export function FeedbackModal({ open, onOpenChange, preScreenshot }: FeedbackMod
       if (feedbackModal) feedbackModal.style.visibility = ''
       if (feedbackOverlay) feedbackOverlay.style.visibility = ''
 
-      // Convert to base64
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.7)
+      // Convert to base64 with high quality
+      const dataUrl = canvas.toDataURL('image/png')
       setScreenshot(dataUrl)
       toast.success('Screenshot captured')
     } catch (error) {
@@ -168,8 +186,18 @@ export function FeedbackModal({ open, onOpenChange, preScreenshot }: FeedbackMod
         throw new Error('Failed to submit feedback')
       }
 
+      const json = await res.json()
+      const feedbackId = json.data?.feedback?.id
+
+      // Track successful submission
+      analytics.feedbackSubmitted(type, !!screenshot)
+
       toast.success('Feedback submitted', {
         description: 'Thank you! We\'ll review your feedback soon.',
+        action: feedbackId ? {
+          label: 'View',
+          onClick: () => window.location.href = `/feedback?id=${feedbackId}`,
+        } : undefined,
       })
 
       // Reset form
@@ -229,7 +257,10 @@ export function FeedbackModal({ open, onOpenChange, preScreenshot }: FeedbackMod
                         : 'border-border'
                     )}
                   >
-                    <AnimatedIcon className={cn(isSelected ? ft.color : 'text-muted-foreground')} />
+                    <AnimatedIcon
+                      className={cn(isSelected ? ft.color : 'text-muted-foreground')}
+                      animate={isSelected}
+                    />
                     <span className={cn(
                       'text-xs font-medium',
                       isSelected ? 'text-foreground' : 'text-muted-foreground'

@@ -35,6 +35,8 @@ interface FeedbackItem {
 interface IdeasListProps {
   onSubmitIdea?: () => void
   isAdmin?: boolean
+  /** Auto-open the detail modal for this feedback ID */
+  initialOpenId?: string | null
 }
 
 const TYPE_FILTERS = [
@@ -47,13 +49,15 @@ const TYPE_FILTERS = [
 /**
  * Filterable and sortable list of feedback ideas.
  */
-export function IdeasList({ onSubmitIdea, isAdmin = false }: IdeasListProps) {
+export function IdeasList({ onSubmitIdea, isAdmin = false, initialOpenId }: IdeasListProps) {
   const [ideas, setIdeas] = useState<FeedbackItem[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState<FeedbackType | 'all'>('all')
   const [sortBy, setSortBy] = useState<SortOption>('votes')
   const [showMine, setShowMine] = useState(false)
+  // Track which ID we've auto-opened to prevent re-opening on re-renders
+  const [openedId, setOpenedId] = useState<string | null>(null)
 
   const debouncedSearch = useDebounce(search, 300)
 
@@ -206,15 +210,24 @@ export function IdeasList({ onSubmitIdea, isAdmin = false }: IdeasListProps) {
         </div>
       ) : (
         <div className="space-y-3">
-          {ideas.map(item => (
-            <IdeaCard
-              key={item.id}
-              item={item}
-              onVoteChange={handleVoteChange}
-              onStatusChange={handleStatusChange}
-              isAdmin={isAdmin}
-            />
-          ))}
+          {ideas.map(item => {
+            // Auto-open if this is the initialOpenId and we haven't opened it yet
+            const shouldAutoOpen = initialOpenId === item.id && openedId !== item.id
+            if (shouldAutoOpen) {
+              // Mark as opened to prevent re-opening
+              setOpenedId(item.id)
+            }
+            return (
+              <IdeaCard
+                key={item.id}
+                item={item}
+                onVoteChange={handleVoteChange}
+                onStatusChange={handleStatusChange}
+                isAdmin={isAdmin}
+                autoOpen={shouldAutoOpen}
+              />
+            )
+          })}
         </div>
       )}
     </div>

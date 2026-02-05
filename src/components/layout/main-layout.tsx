@@ -5,6 +5,7 @@ import { Menu } from 'lucide-react'
 import { Sidebar } from './sidebar'
 import { MobileMenuProvider, useMobileMenu } from './mobile-menu-context'
 import { ErrorBoundary } from '@/components/error-boundary'
+import { captureError } from '@/lib/posthog'
 
 const easeOut: [number, number, number, number] = [0.22, 1, 0.36, 1]
 
@@ -48,7 +49,11 @@ function MainLayoutContent({ children }: MainLayoutProps) {
           transition={{ duration: 0.3, ease: easeOut }}
           className="min-h-screen pt-14 md:pt-0"
         >
-          <ErrorBoundary>
+          <ErrorBoundary
+            onError={(error, errorInfo) => {
+              captureError(error, { componentStack: errorInfo.componentStack })
+            }}
+          >
             {children}
           </ErrorBoundary>
         </motion.div>

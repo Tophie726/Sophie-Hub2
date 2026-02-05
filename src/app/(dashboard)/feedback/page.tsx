@@ -44,6 +44,7 @@ function FeedbackContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const tabParam = searchParams.get('tab') as TabValue | null
+  const feedbackId = searchParams.get('id')
   const [activeTab, setActiveTab] = useState<TabValue>(tabParam || 'ideas')
   const [showModal, setShowModal] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
@@ -115,7 +116,7 @@ function FeedbackContent() {
 
         {/* Tab content */}
         {activeTab === 'ideas' && (
-          <IdeasList onSubmitIdea={() => setShowModal(true)} isAdmin={isAdmin} />
+          <IdeasList onSubmitIdea={() => setShowModal(true)} isAdmin={isAdmin} initialOpenId={feedbackId} />
         )}
 
         {activeTab === 'roadmap' && (

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Bug, Lightbulb, HelpCircle, Clock, MessageCircle } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { VoteButton } from './vote-button'
@@ -30,6 +30,8 @@ interface IdeaCardProps {
   onStatusChange?: (id: string, newStatus: FeedbackStatus) => void
   showAuthor?: boolean
   isAdmin?: boolean
+  /** Auto-open the detail modal when rendered */
+  autoOpen?: boolean
 }
 
 const TYPE_CONFIG: Record<FeedbackType, { icon: typeof Bug; label: string; color: string }> = {
@@ -50,9 +52,16 @@ const STATUS_CONFIG: Record<FeedbackStatus, { label: string; color: string }> = 
  * Card component for displaying a feedback idea with voting.
  * Click to open detail modal with comments.
  */
-export function IdeaCard({ item, onVoteChange, onStatusChange, showAuthor = true, isAdmin = false }: IdeaCardProps) {
+export function IdeaCard({ item, onVoteChange, onStatusChange, showAuthor = true, isAdmin = false, autoOpen = false }: IdeaCardProps) {
   const [showDetail, setShowDetail] = useState(false)
   const typeConfig = TYPE_CONFIG[item.type]
+
+  // Auto-open detail modal if requested
+  useEffect(() => {
+    if (autoOpen) {
+      setShowDetail(true)
+    }
+  }, [autoOpen])
   const statusConfig = STATUS_CONFIG[item.status]
   const TypeIcon = typeConfig.icon
 

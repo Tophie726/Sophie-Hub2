@@ -70,10 +70,12 @@ export async function POST(request: NextRequest) {
   let anthropicKey: string
   try {
     anthropicKey = await getAnthropicApiKey()
-  } catch {
+    console.log('Got Anthropic API key:', anthropicKey ? `${anthropicKey.slice(0, 10)}...` : 'EMPTY')
+  } catch (keyError) {
+    console.error('Failed to get Anthropic API key:', keyError)
     return apiError(
       'SERVICE_UNAVAILABLE',
-      'AI is not configured. Add your Anthropic API key in Settings.',
+      'AI is not configured. Add your Anthropic API key in Settings → API Keys.',
       503
     )
   }
@@ -90,7 +92,7 @@ Reported by: ${feedback.submitted_by_email}`
 
   try {
     const response = await anthropic.messages.create({
-      model: 'claude-3-5-haiku-latest',
+      model: 'claude-3-haiku-20240307',
       max_tokens: 200,
       messages: [
         {
@@ -126,6 +128,7 @@ Reported by: ${feedback.submitted_by_email}`
     })
   } catch (error) {
     console.error('Claude API error:', error)
-    return apiError('AI_ERROR', 'Failed to summarize. Please try again.', 500)
+    const message = error instanceof Error ? error.message : 'Unknown error'
+    return apiError('AI_ERROR', `Failed to summarize: ${message}`, 500)
   }
 }

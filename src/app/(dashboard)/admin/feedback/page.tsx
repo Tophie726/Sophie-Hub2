@@ -14,7 +14,6 @@ import {
   Clock,
   CheckCircle2,
   AlertCircle,
-  Eye,
   ExternalLink,
   ArrowUpRight,
   Sparkles,
@@ -106,13 +105,23 @@ export default function FeedbackAdminPage() {
   const [selectedItem, setSelectedItem] = useState<FeedbackItem | null>(null)
   const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list')
 
-  // AI state
-  const [aiEnabled, setAiEnabled] = useState(false)
+  // AI state - persisted in localStorage
+  const [aiEnabled, setAiEnabled] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('admin-feedback-ai-enabled') === 'true'
+    }
+    return false
+  })
   const [summarizing, setSummarizing] = useState<Record<string, boolean>>({})
   const [analyzing, setAnalyzing] = useState<Record<string, boolean>>({})
   const [summaries, setSummaries] = useState<Record<string, AISummary>>({})
   const [analyses, setAnalyses] = useState<Record<string, AIAnalysis>>({})
   const [batchSummarizing, setBatchSummarizing] = useState(false)
+
+  // Persist AI toggle to localStorage
+  useEffect(() => {
+    localStorage.setItem('admin-feedback-ai-enabled', aiEnabled.toString())
+  }, [aiEnabled])
 
   const handleSummarize = async (id: string) => {
     setSummarizing(prev => ({ ...prev, [id]: true }))
@@ -292,7 +301,7 @@ export default function FeedbackAdminPage() {
         description="Admin view for managing and triaging user feedback"
       >
         <div className="flex items-center gap-2 md:gap-4">
-          {/* AI Toggle + Batch Actions */}
+          {/* AI Toggle */}
           <div className="flex items-center gap-2 px-2 md:px-3 py-1.5 rounded-lg bg-purple-500/10 border border-purple-500/20">
             <Sparkles className="h-4 w-4 text-purple-500" />
             <Label htmlFor="ai-toggle" className="text-sm font-medium text-purple-700 dark:text-purple-300 cursor-pointer hidden md:inline">
@@ -305,26 +314,6 @@ export default function FeedbackAdminPage() {
               className="data-[state=checked]:bg-purple-500"
             />
           </div>
-
-          {/* Batch AI Button - only show when AI enabled */}
-          {aiEnabled && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleBatchSummarize}
-              disabled={batchSummarizing || loading}
-              className="h-10 md:h-9 border-purple-500/30 text-purple-600 hover:bg-purple-500/10"
-            >
-              {batchSummarizing ? (
-                <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
-              ) : (
-                <Wand2 className="h-4 w-4 md:mr-1.5" />
-              )}
-              <span className="hidden md:inline">
-                {batchSummarizing ? 'Processing...' : 'Summarize All'}
-              </span>
-            </Button>
-          )}
 
           <Button
             variant="outline"
@@ -428,6 +417,31 @@ export default function FeedbackAdminPage() {
             </SelectContent>
           </Select>
 
+          {/* Batch AI Button - context-aware based on filter */}
+          {aiEnabled && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleBatchSummarize}
+              disabled={batchSummarizing || loading || feedback.length === 0}
+              className="h-10 md:h-9 border-purple-500/30 text-purple-600 hover:bg-purple-500/10"
+            >
+              {batchSummarizing ? (
+                <Loader2 className="h-4 w-4 md:mr-1.5 animate-spin" />
+              ) : (
+                <Wand2 className="h-4 w-4 md:mr-1.5" />
+              )}
+              <span className="hidden md:inline">
+                {batchSummarizing
+                  ? 'Processing...'
+                  : filter === 'all'
+                    ? 'Summarize All'
+                    : `Summarize ${filter === 'bug' ? 'Bugs' : filter === 'feature' ? 'Features' : 'Questions'}`
+                }
+              </span>
+            </Button>
+          )}
+
           {/* View Toggle */}
           <div className="flex items-center gap-0.5 bg-muted/50 rounded-lg p-1 ml-auto">
             <button
@@ -508,6 +522,7 @@ export default function FeedbackAdminPage() {
                 key={item.id}
                 item={item}
                 onView={() => setSelectedItem(item)}
+                onStatusChange={(newStatus) => handleStatusChange(item.id, newStatus)}
                 aiEnabled={aiEnabled}
                 summary={summaries[item.id]}
                 analysis={analyses[item.id]}
@@ -534,6 +549,7 @@ export default function FeedbackAdminPage() {
 function FeedbackCard({
   item,
   onView,
+  onStatusChange,
   aiEnabled,
   summary,
   analysis,
@@ -544,6 +560,7 @@ function FeedbackCard({
 }: {
   item: FeedbackItem
   onView: () => void
+  onStatusChange: (status: FeedbackStatus) => void
   aiEnabled: boolean
   summary?: AISummary
   analysis?: AIAnalysis
@@ -553,9 +570,9 @@ function FeedbackCard({
   onAnalyze: () => void
 }) {
   const typeConfig = TYPE_CONFIG[item.type]
-  const statusConfig = STATUS_CONFIG[item.status]
   const Icon = typeConfig.icon
   const [showFullAnalysis, setShowFullAnalysis] = useState(false)
+  const [showAIViewLocal, setShowAIViewLocal] = useState(true) // Per-card toggle
 
   // Check if this card has AI enhancement
   const hasAI = !!summary || !!analysis
@@ -563,37 +580,83 @@ function FeedbackCard({
     ? `https://us.posthog.com/replay/${item.posthog_session_id}`
     : null
 
+  // AI view is enabled only if both page-level AND card-level toggles are on
+  const showAIView = aiEnabled && showAIViewLocal
+
+  // Determine what to show based on AI toggle
+  const displayTitle = (hasAI && showAIView && summary)
+    ? summary.summary.split('.')[0]
+    : (item.title || item.description.slice(0, 60))
+
   return (
-    <Card className={cn(
-      'hover:shadow-md transition-shadow',
-      hasAI && 'ring-1 ring-purple-500/30 bg-purple-500/[0.02]'
-    )}>
+    <Card
+      className={cn(
+        'hover:shadow-md transition-shadow cursor-pointer',
+        hasAI && showAIView && 'ring-1 ring-purple-500/30 bg-purple-500/[0.02]'
+      )}
+      onClick={onView}
+    >
       <CardContent className="p-4">
         <div className="flex items-start gap-4">
-          <div className={cn('h-10 w-10 rounded-lg flex items-center justify-center shrink-0 relative', typeConfig.color)}>
+          {/* Clickable icon to toggle AI view (per-card) */}
+          <button
+            onClick={(e) => { e.stopPropagation(); if (hasAI && aiEnabled) setShowAIViewLocal(!showAIViewLocal) }}
+            disabled={!hasAI || !aiEnabled}
+            className={cn(
+              'h-10 w-10 rounded-lg flex items-center justify-center shrink-0 relative transition-all',
+              typeConfig.color,
+              hasAI && aiEnabled && 'cursor-pointer hover:scale-105 active:scale-95'
+            )}
+            title={hasAI && aiEnabled ? (showAIViewLocal ? 'Click to show original' : 'Click to show AI summary') : undefined}
+          >
             <Icon className="h-5 w-5" />
             {hasAI && (
-              <div className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-purple-500 flex items-center justify-center">
+              <div className={cn(
+                'absolute -top-1 -right-1 h-4 w-4 rounded-full flex items-center justify-center transition-colors',
+                showAIView ? 'bg-purple-500' : 'bg-muted-foreground/50'
+              )}>
                 <Sparkles className="h-2.5 w-2.5 text-white" />
               </div>
             )}
-          </div>
+          </button>
 
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                {/* Show AI summary as title if available, otherwise original */}
+                {/* Show AI summary as title if available and enabled, otherwise original */}
                 <h4 className="font-medium truncate flex items-center gap-2">
-                  {summary ? summary.summary.split('.')[0] : (item.title || item.description.slice(0, 60))}
+                  {displayTitle}
+                  {hasAI && !showAIView && (
+                    <span className="text-xs text-muted-foreground">(original)</span>
+                  )}
                 </h4>
                 <p className="text-sm text-muted-foreground line-clamp-2 mt-1">
-                  {summary ? item.description : item.description}
+                  {item.description}
                 </p>
               </div>
 
-              <Badge variant="outline" className={cn('shrink-0', statusConfig.color)}>
-                {statusConfig.label}
-              </Badge>
+              {/* Status Dropdown */}
+              <Select
+                value={item.status}
+                onValueChange={(v) => onStatusChange(v as FeedbackStatus)}
+              >
+                <SelectTrigger
+                  className={cn(
+                    'w-[110px] h-8 text-xs shrink-0',
+                    STATUS_CONFIG[item.status].color
+                  )}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="new">New</SelectItem>
+                  <SelectItem value="reviewed">Reviewed</SelectItem>
+                  <SelectItem value="in_progress">In Progress</SelectItem>
+                  <SelectItem value="resolved">Resolved</SelectItem>
+                  <SelectItem value="wont_fix">Won&apos;t Fix</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="flex items-center gap-4 mt-3 text-xs text-muted-foreground">
@@ -622,8 +685,8 @@ function FeedbackCard({
               )}
             </div>
 
-            {/* AI Summary - compact inline display */}
-            {summary && (
+            {/* AI Summary - compact inline display (only when AI view enabled) */}
+            {summary && showAIView && (
               <div className="mt-3 p-2.5 rounded-lg bg-purple-500/5 border border-purple-500/20">
                 <div className="flex items-start gap-2">
                   <Sparkles className="h-3.5 w-3.5 text-purple-500 mt-0.5 shrink-0" />
@@ -641,11 +704,11 @@ function FeedbackCard({
               </div>
             )}
 
-            {/* AI Analysis - expandable with quick preview */}
-            {analysis && (
+            {/* AI Analysis - expandable with quick preview (only when AI view enabled) */}
+            {analysis && showAIView && (
               <div className="mt-3 p-2.5 rounded-lg bg-amber-500/5 border border-amber-500/20">
                 <button
-                  onClick={() => setShowFullAnalysis(!showFullAnalysis)}
+                  onClick={(e) => { e.stopPropagation(); setShowFullAnalysis(!showFullAnalysis) }}
                   className="flex items-center gap-2 w-full text-left"
                 >
                   <Wrench className="h-3.5 w-3.5 text-amber-500 shrink-0" />
@@ -751,10 +814,6 @@ function FeedbackCard({
               </div>
             )}
           </div>
-
-          <Button variant="ghost" size="sm" onClick={onView} className="h-9 w-9 md:h-8 md:w-8 p-0">
-            <Eye className="h-4 w-4" />
-          </Button>
         </div>
       </CardContent>
     </Card>

@@ -9,6 +9,9 @@ import {
   Send,
   Clock,
   User,
+  Paperclip,
+  Pencil,
+  X,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -23,6 +26,7 @@ import {
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { formatDistanceToNow } from 'date-fns'
+import { DrawingPad } from './drawing-pad'
 
 type FeedbackType = 'bug' | 'feature' | 'question'
 type FeedbackStatus = 'new' | 'reviewed' | 'in_progress' | 'resolved' | 'wont_fix'
@@ -40,12 +44,20 @@ interface FeedbackItem {
   screenshot_url?: string | null
 }
 
+interface CommentAttachment {
+  type: 'image' | 'drawing' | 'file'
+  url: string
+  name?: string
+  dataUrl?: string // For local preview before upload
+}
+
 interface Comment {
   id: string
   user_email: string
   content: string
   is_from_submitter: boolean
   created_at: string
+  attachments?: CommentAttachment[]
 }
 
 interface IdeaDetailModalProps {
@@ -86,7 +98,13 @@ export function IdeaDetailModal({
   const [newComment, setNewComment] = useState('')
   const [submittingComment, setSubmittingComment] = useState(false)
   const [updatingStatus, setUpdatingStatus] = useState(false)
+  const [attachments, setAttachments] = useState<CommentAttachment[]>([])
+  const [drawingPadOpen, setDrawingPadOpen] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const commentsEndRef = useRef<HTMLDivElement>(null)
+
+  const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
+  const ALLOWED_FILE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf']
 
   // Fetch comments when modal opens
   useEffect(() => {
@@ -121,14 +139,21 @@ export function IdeaDetailModal({
 
   const handleSubmitComment = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!idea || !newComment.trim()) return
+    if (!idea || (!newComment.trim() && attachments.length === 0)) return
 
     setSubmittingComment(true)
     try {
       const res = await fetch(`/api/feedback/${idea.id}/comments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: newComment.trim() }),
+        body: JSON.stringify({
+          content: newComment.trim(),
+          attachments: attachments.map(a => ({
+            type: a.type,
+            url: a.dataUrl || a.url,
+            name: a.name,
+          })),
+        }),
       })
 
       if (!res.ok) throw new Error('Failed to add comment')
@@ -136,6 +161,7 @@ export function IdeaDetailModal({
       const json = await res.json()
       setComments(prev => [...prev, json.data.comment])
       setNewComment('')
+      setAttachments([])
       toast.success('Comment added')
     } catch (error) {
       console.error('Failed to add comment:', error)
@@ -172,6 +198,56 @@ export function IdeaDetailModal({
     if (idea && onVoteChange) {
       onVoteChange(idea.id, newCount, hasVoted)
     }
+  }
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (!files || files.length === 0) return
+
+    const file = files[0]
+
+    // Validate file type
+    if (!ALLOWED_FILE_TYPES.includes(file.type)) {
+      toast.error('File type not supported. Please use images or PDF.')
+      return
+    }
+
+    // Validate file size
+    if (file.size > MAX_FILE_SIZE) {
+      toast.error('File too large. Maximum size is 5MB.')
+      return
+    }
+
+    // Read file as data URL for preview
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      const dataUrl = reader.result as string
+      setAttachments(prev => [...prev, {
+        type: file.type.startsWith('image/') ? 'image' : 'file',
+        url: dataUrl,
+        name: file.name,
+        dataUrl,
+      }])
+    }
+    reader.readAsDataURL(file)
+
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+
+  const handleDrawingSave = (imageDataUrl: string) => {
+    setAttachments(prev => [...prev, {
+      type: 'drawing',
+      url: imageDataUrl,
+      name: `Drawing ${prev.filter(a => a.type === 'drawing').length + 1}`,
+      dataUrl: imageDataUrl,
+    }])
+  }
+
+  const handleRemoveAttachment = (index: number) => {
+    setAttachments(prev => prev.filter((_, i) => i !== index))
   }
 
   if (!idea) return null
@@ -303,7 +379,37 @@ export function IdeaDetailModal({
                         {formatDistanceToNow(new Date(comment.created_at), { addSuffix: true })}
                       </span>
                     </div>
-                    <p className="whitespace-pre-wrap">{comment.content}</p>
+                    {comment.content && (
+                      <p className="whitespace-pre-wrap">{comment.content}</p>
+                    )}
+                    {/* Display comment attachments */}
+                    {comment.attachments && comment.attachments.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {comment.attachments.map((att, idx) => (
+                          <div key={idx} className="relative group">
+                            {att.type === 'image' || att.type === 'drawing' ? (
+                              <a href={att.url} target="_blank" rel="noopener noreferrer">
+                                <img
+                                  src={att.url}
+                                  alt={att.name || 'Attachment'}
+                                  className="max-h-32 rounded-md border hover:opacity-90 transition-opacity"
+                                />
+                              </a>
+                            ) : (
+                              <a
+                                href={att.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-1.5 px-2 py-1 bg-muted rounded-md text-xs hover:bg-muted/80 transition-colors"
+                              >
+                                <Paperclip className="h-3 w-3" />
+                                {att.name || 'File'}
+                              </a>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ))}
                 <div ref={commentsEndRef} />
@@ -313,27 +419,106 @@ export function IdeaDetailModal({
         </div>
 
         {/* Add comment form */}
-        <form onSubmit={handleSubmitComment} className="flex gap-2 pt-4 border-t">
-          <Textarea
-            value={newComment}
-            onChange={(e) => setNewComment(e.target.value)}
-            placeholder="Add context, feedback, or questions..."
-            rows={2}
-            className="flex-1 min-h-0 resize-none"
-          />
-          <Button
-            type="submit"
-            size="sm"
-            disabled={submittingComment || !newComment.trim()}
-            className="self-end"
-          >
-            {submittingComment ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Send className="h-4 w-4" />
-            )}
-          </Button>
+        <form onSubmit={handleSubmitComment} className="pt-4 border-t space-y-3">
+          {/* Attachment preview */}
+          {attachments.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {attachments.map((att, idx) => (
+                <div key={idx} className="relative group">
+                  {att.type === 'image' || att.type === 'drawing' ? (
+                    <div className="relative">
+                      <img
+                        src={att.dataUrl || att.url}
+                        alt={att.name || 'Attachment'}
+                        className="h-16 w-16 object-cover rounded-md border"
+                      />
+                      {att.type === 'drawing' && (
+                        <div className="absolute bottom-0.5 left-0.5 bg-black/60 text-white text-[10px] px-1 rounded">
+                          <Pencil className="h-2.5 w-2.5 inline mr-0.5" />
+                          Sketch
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="h-16 px-3 flex items-center gap-1.5 bg-muted rounded-md text-xs">
+                      <Paperclip className="h-3.5 w-3.5 shrink-0" />
+                      <span className="truncate max-w-[80px]">{att.name}</span>
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveAttachment(idx)}
+                    className="absolute -top-1.5 -right-1.5 h-5 w-5 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Input row */}
+          <div className="flex gap-2">
+            <div className="flex-1 flex flex-col gap-2">
+              <Textarea
+                value={newComment}
+                onChange={(e) => setNewComment(e.target.value)}
+                placeholder="Add context, feedback, or questions..."
+                rows={2}
+                className="min-h-0 resize-none"
+              />
+              {/* Action buttons */}
+              <div className="flex items-center gap-1">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept={ALLOWED_FILE_TYPES.join(',')}
+                  onChange={handleFileSelect}
+                  className="hidden"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="h-8 px-2 text-muted-foreground hover:text-foreground"
+                >
+                  <Paperclip className="h-4 w-4 mr-1" />
+                  <span className="text-xs">Attach</span>
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setDrawingPadOpen(true)}
+                  className="h-8 px-2 text-muted-foreground hover:text-foreground"
+                >
+                  <Pencil className="h-4 w-4 mr-1" />
+                  <span className="text-xs">Draw</span>
+                </Button>
+              </div>
+            </div>
+            <Button
+              type="submit"
+              size="sm"
+              disabled={submittingComment || (!newComment.trim() && attachments.length === 0)}
+              className="self-end h-9"
+            >
+              {submittingComment ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
         </form>
+
+        {/* Drawing Pad Modal */}
+        <DrawingPad
+          open={drawingPadOpen}
+          onOpenChange={setDrawingPadOpen}
+          onSave={handleDrawingSave}
+        />
       </DialogContent>
     </Dialog>
   )

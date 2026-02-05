@@ -1322,16 +1322,64 @@ Users can attach screenshots to bug reports:
 
 ### PostHog Integration
 
+Sophie Hub has deep PostHog integration for analytics, error tracking, feature flags, and user identification.
+
+**Environment Variables:**
 ```bash
-# Environment variables (already configured)
 NEXT_PUBLIC_POSTHOG_KEY=phc_yg2P72DWBUYePWThsKDS6e8DuYgP4zozWo8TWelHA4M
 NEXT_PUBLIC_POSTHOG_HOST=https://us.i.posthog.com
+```
 
-# Add PostHog MCP to Claude Code for debugging
+**PostHog Module** (`src/lib/posthog/`):
+
+| File | Purpose |
+|------|---------|
+| `capture-error.ts` | Error capture for boundaries and catch blocks |
+| `events.ts` | Typed analytics events (`analytics.syncStarted(...)`) |
+| `flags.ts` | Feature flag constants (`FEATURE_FLAGS.DARK_MODE`) |
+| `server.ts` | Server-side flag checks and event capture |
+| `use-feature-flag.ts` | Client hooks (`useFeatureFlagEnabled(flag)`) |
+| `use-identify.ts` | User identification hook |
+| `index.ts` | Re-exports all utilities |
+
+**Usage Examples:**
+
+```typescript
+// Track analytics events
+import { analytics } from '@/lib/posthog'
+analytics.feedbackSubmitted('bug', true)
+analytics.syncCompleted(tabMappingId, 100, 5000)
+
+// Feature flags (client)
+import { useFeatureFlagEnabled, FEATURE_FLAGS } from '@/lib/posthog'
+const showNewFeature = useFeatureFlagEnabled(FEATURE_FLAGS.DARK_MODE)
+
+// Feature flags (server)
+import { isFeatureFlagEnabled } from '@/lib/posthog'
+const enabled = await isFeatureFlagEnabled('dark-mode', userId)
+
+// Error capture (in error boundaries)
+import { captureError } from '@/lib/posthog'
+captureError(error, { componentStack: errorInfo.componentStack })
+```
+
+**Automatic Features:**
+- Global error listeners capture unhandled errors and promise rejections
+- User identification on login (email, name, role)
+- Identity reset on logout
+- Page view tracking for SPA navigation
+
+**PostHog Dashboard:**
+- Project ID: 306226
+- Error tracking: https://us.posthog.com/project/306226/error_tracking
+- Session replay: https://us.posthog.com/project/306226/replay
+
+**MCP Integration:**
+```bash
 npx @anthropic-ai/claude-code mcp add posthog
 ```
 
-**Note:** Enable Session Replay in PostHog Project Settings for replay links to work.
+**Note:** Enable Exception Autocapture in PostHog dashboard (Project Settings → Error Tracking → Enable) for full error capture.
 
 ### Separation of Concerns
 

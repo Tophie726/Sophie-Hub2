@@ -5,11 +5,21 @@ import { apiSuccess, apiError, apiValidationError } from '@/lib/api/response'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { z } from 'zod'
 
+const AttachmentSchema = z.object({
+  type: z.enum(['image', 'drawing', 'file']),
+  url: z.string(),
+  name: z.string().optional(),
+})
+
 const CommentSchema = z.object({
-  content: z.string().min(1, 'Comment cannot be empty').max(2000),
+  content: z.string().max(2000).optional().default(''),
   is_internal: z.boolean().optional().default(false),
   parent_id: z.string().uuid().optional().nullable(),
-})
+  attachments: z.array(AttachmentSchema).optional().default([]),
+}).refine(
+  data => data.content.trim().length > 0 || (data.attachments && data.attachments.length > 0),
+  { message: 'Comment must have content or attachments' }
+)
 
 /**
  * GET /api/feedback/[id]/comments
@@ -104,7 +114,7 @@ export async function POST(
     return apiValidationError(validation.error)
   }
 
-  const { content, is_internal, parent_id } = validation.data
+  const { content, is_internal, parent_id, attachments } = validation.data
 
   // Check if user is admin (required for internal comments)
   const adminAuth = await requireRole(ROLES.ADMIN)
@@ -149,6 +159,7 @@ export async function POST(
       is_from_submitter: isFromSubmitter,
       is_internal: is_internal || false,
       parent_id: parent_id || null,
+      attachments: attachments.length > 0 ? attachments : null,
     })
     .select()
     .single()

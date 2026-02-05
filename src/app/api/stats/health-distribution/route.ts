@@ -140,7 +140,7 @@ export async function GET() {
     // Get all partners with source_data and status
     const { data: partners, error: partnersError } = await supabase
       .from('partners')
-      .select('id, name, status, source_data')
+      .select('id, brand_name, status, source_data')
 
     if (partnersError) {
       return ApiErrors.database(partnersError.message)

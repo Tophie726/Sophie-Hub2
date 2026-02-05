@@ -6,6 +6,7 @@ import { apiSuccess, apiError, apiValidationError } from '@/lib/api/response'
 import { getAnthropicApiKey, getPostHogApiKey } from '@/lib/settings'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { z } from 'zod'
+import { getCodebaseContextForBug, formatContextForPrompt } from '@/lib/ai/codebase-context'
 
 const POSTHOG_PROJECT_ID = '306226'
 const POSTHOG_HOST = 'https://us.posthog.com'
@@ -230,25 +231,38 @@ ${affectedFilesFromStack.map(f => `- ${f}`).join('\n')}`)
 
   if (!posthogAvailable) {
     contextParts.push(`\n## Note
-PostHog API key not configured, so session replay data is not available. Analysis is based solely on the bug report text.`)
+PostHog API key not configured, so session replay data is not available.`)
+  }
+
+  // Get codebase context (read-only access to source files)
+  const codebaseContext = await getCodebaseContextForBug({
+    pageUrl: feedback.page_url || undefined,
+    errorStack: errors[0]?.stack,
+    description: feedback.description,
+    affectedFiles: affectedFilesFromStack,
+  })
+
+  if (codebaseContext.files.length > 0) {
+    contextParts.push(`\n${formatContextForPrompt(codebaseContext)}`)
   }
 
   // Call Claude for analysis
   const anthropic = new Anthropic({ apiKey: anthropicKey })
 
-  const systemPrompt = `You are a senior software engineer analyzing bug reports for Sophie Hub, a Next.js application with:
-- React Server Components and Client Components
+  const systemPrompt = `You are a senior software engineer analyzing bug reports for Sophie Hub, a Next.js 14 application with:
+- React Server Components and Client Components (App Router)
 - Supabase (PostgreSQL) database
 - shadcn/ui component library
 - Tailwind CSS for styling
 - TypeScript throughout
+- Framer Motion for animations
 
-Your job is to analyze the bug report and any captured error data to:
-1. Understand what the user experienced
-2. Identify the likely root cause
-3. Suggest a concrete fix with code changes
+You have READ-ONLY access to the actual source code. The relevant files from the codebase are included in the context below. Use this real code to:
+1. Understand exactly what the user experienced
+2. Identify the precise root cause by examining the actual code
+3. Suggest a concrete fix with specific code changes
 
-Be specific and actionable. Reference actual file paths when you can infer them from the stack traces or page URLs.
+Be very specific. Reference actual function names, line numbers, and code patterns you see in the provided files. Your fix suggestions should be copy-paste ready when possible.
 
 Respond with a JSON object matching this structure:
 {
@@ -262,7 +276,7 @@ Respond with a JSON object matching this structure:
 
   try {
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-3-5-sonnet-20241022',
       max_tokens: 2000,
       system: systemPrompt,
       messages: [

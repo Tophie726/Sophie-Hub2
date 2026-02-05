@@ -6,6 +6,7 @@ import { apiSuccess, apiError, apiValidationError } from '@/lib/api/response'
 import { getAnthropicApiKey } from '@/lib/settings'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { z } from 'zod'
+import { getCodebaseContextForFeature, formatContextForPrompt } from '@/lib/ai/codebase-context'
 
 const RequestSchema = z.object({
   feedbackId: z.string().uuid('Invalid feedback ID'),
@@ -93,10 +94,20 @@ export async function POST(request: NextRequest) {
     contextParts.push(`- **Context Page**: ${feedback.page_url}`)
   }
 
+  // Get codebase context (read-only access to source files)
+  const codebaseContext = await getCodebaseContextForFeature({
+    pageUrl: feedback.page_url || undefined,
+    description: feedback.description,
+  })
+
+  if (codebaseContext.files.length > 0) {
+    contextParts.push(`\n${formatContextForPrompt(codebaseContext)}`)
+  }
+
   // Call Claude for implementation suggestion
   const anthropic = new Anthropic({ apiKey: anthropicKey })
 
-  const systemPrompt = `You are a senior software architect helping plan feature implementations for Sophie Hub v2, a Next.js 14 application with:
+  const systemPrompt = `You are a senior software architect helping plan feature implementations for Sophie Hub v2, a Next.js 14 application.
 
 ## Tech Stack
 - Next.js 14 with App Router (Server Components by default)
@@ -107,25 +118,11 @@ export async function POST(request: NextRequest) {
 - NextAuth.js for authentication
 - React Hook Form + Zod for forms
 
-## Project Structure
-\`\`\`
-src/
-├── app/
-│   ├── (dashboard)/     # Authenticated routes
-│   │   ├── admin/       # Admin-only pages
-│   │   ├── partners/    # Partner management
-│   │   ├── staff/       # Staff management
-│   │   └── feedback/    # Feedback center
-│   └── api/             # API routes
-├── components/
-│   ├── ui/              # shadcn/ui base components
-│   └── [feature]/       # Feature-specific components
-├── lib/
-│   ├── db/              # Database queries
-│   ├── api/             # API utilities
-│   └── [feature]/       # Feature-specific logic
-└── types/               # TypeScript types
-\`\`\`
+You have READ-ONLY access to the actual source code. The relevant files from the codebase are included in the context below. Use this real code to:
+1. Understand existing patterns and conventions
+2. Identify similar implementations to follow as examples
+3. Reference actual component names, function signatures, and file paths
+4. Ensure consistency with the codebase's style
 
 ## Design Principles
 - Entity-first approach (Partners and Staff are core entities)
@@ -133,15 +130,16 @@ src/
 - Mobile-responsive with desktop-first design
 - Data comes from database, never hardcoded
 - Reuse existing components (check ui/ first)
+- Follow existing patterns in the codebase
 
 Your job is to analyze the feature request and provide:
-1. A clear approach to implementation
-2. Step-by-step implementation plan
-3. Files to create and modify
-4. Database changes if needed
+1. A clear approach following existing patterns
+2. Step-by-step implementation plan with actual file references
+3. Files to create and modify (use real paths from codebase)
+4. Database changes if needed (with SQL)
 5. Complexity assessment
 
-Be specific and practical. Reference actual file paths following the project structure.
+Be very specific. Reference actual components, functions, and patterns you see in the provided files.
 
 Respond with a JSON object matching this structure:
 {
@@ -165,7 +163,7 @@ Respond with a JSON object matching this structure:
 
   try {
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-3-5-sonnet-20241022',
       max_tokens: 3000,
       system: systemPrompt,
       messages: [

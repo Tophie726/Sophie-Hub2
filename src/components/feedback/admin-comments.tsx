@@ -10,6 +10,9 @@ import {
   Trash2,
   ChevronDown,
   ChevronUp,
+  Paperclip,
+  Pencil,
+  X,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -19,6 +22,14 @@ import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { formatDistanceToNow } from 'date-fns'
+import { DrawingPad } from './drawing-pad'
+
+interface CommentAttachment {
+  type: 'image' | 'drawing' | 'file'
+  url: string
+  name?: string
+  dataUrl?: string
+}
 
 interface Comment {
   id: string
@@ -29,12 +40,16 @@ interface Comment {
   parent_id: string | null
   created_at: string
   replies?: Comment[]
+  attachments?: CommentAttachment[]
 }
 
 interface AdminCommentsProps {
   feedbackId: string
   submitterEmail: string
 }
+
+const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
+const ALLOWED_FILE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf']
 
 export function AdminComments({ feedbackId, submitterEmail }: AdminCommentsProps) {
   const [comments, setComments] = useState<Comment[]>([])
@@ -46,6 +61,9 @@ export function AdminComments({ feedbackId, submitterEmail }: AdminCommentsProps
   const [replyContent, setReplyContent] = useState('')
   const [replyIsInternal, setReplyIsInternal] = useState(false)
   const [expanded, setExpanded] = useState(true)
+  const [attachments, setAttachments] = useState<CommentAttachment[]>([])
+  const [drawingPadOpen, setDrawingPadOpen] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const commentsEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -65,9 +83,55 @@ export function AdminComments({ feedbackId, submitterEmail }: AdminCommentsProps
     }
   }
 
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (!files || files.length === 0) return
+
+    const file = files[0]
+
+    if (!ALLOWED_FILE_TYPES.includes(file.type)) {
+      toast.error('File type not supported. Please use images or PDF.')
+      return
+    }
+
+    if (file.size > MAX_FILE_SIZE) {
+      toast.error('File too large. Maximum size is 5MB.')
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      const dataUrl = reader.result as string
+      setAttachments(prev => [...prev, {
+        type: file.type.startsWith('image/') ? 'image' : 'file',
+        url: dataUrl,
+        name: file.name,
+        dataUrl,
+      }])
+    }
+    reader.readAsDataURL(file)
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+
+  const handleDrawingSave = (imageDataUrl: string) => {
+    setAttachments(prev => [...prev, {
+      type: 'drawing',
+      url: imageDataUrl,
+      name: `Drawing ${prev.filter(a => a.type === 'drawing').length + 1}`,
+      dataUrl: imageDataUrl,
+    }])
+  }
+
+  const handleRemoveAttachment = (index: number) => {
+    setAttachments(prev => prev.filter((_, i) => i !== index))
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!newComment.trim()) return
+    if (!newComment.trim() && attachments.length === 0) return
 
     setSubmitting(true)
     try {
@@ -77,6 +141,11 @@ export function AdminComments({ feedbackId, submitterEmail }: AdminCommentsProps
         body: JSON.stringify({
           content: newComment.trim(),
           is_internal: isInternal,
+          attachments: attachments.map(a => ({
+            type: a.type,
+            url: a.dataUrl || a.url,
+            name: a.name,
+          })),
         }),
       })
 
@@ -84,6 +153,7 @@ export function AdminComments({ feedbackId, submitterEmail }: AdminCommentsProps
 
       setNewComment('')
       setIsInternal(false)
+      setAttachments([])
       fetchComments()
       toast.success(isInternal ? 'Internal note added' : 'Comment added')
     } catch (error) {
@@ -200,6 +270,42 @@ export function AdminComments({ feedbackId, submitterEmail }: AdminCommentsProps
 
           {/* New Comment Form */}
           <form onSubmit={handleSubmit} className="space-y-2 pt-2 border-t">
+            {/* Attachment Preview */}
+            {attachments.length > 0 && (
+              <div className="flex flex-wrap gap-2 pb-2">
+                {attachments.map((att, idx) => (
+                  <div key={idx} className="relative group">
+                    {att.type === 'image' || att.type === 'drawing' ? (
+                      <div className="relative">
+                        <img
+                          src={att.dataUrl || att.url}
+                          alt={att.name || 'Attachment'}
+                          className="h-12 w-12 object-cover rounded border"
+                        />
+                        {att.type === 'drawing' && (
+                          <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[8px] px-1 text-center">
+                            Sketch
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="h-12 px-2 flex items-center gap-1 bg-muted rounded text-[10px]">
+                        <Paperclip className="h-3 w-3 shrink-0" />
+                        <span className="truncate max-w-[60px]">{att.name}</span>
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveAttachment(idx)}
+                      className="absolute -top-1 -right-1 h-4 w-4 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <X className="h-2.5 w-2.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <Textarea
               value={newComment}
               onChange={(e) => setNewComment(e.target.value)}
@@ -225,13 +331,35 @@ export function AdminComments({ feedbackId, submitterEmail }: AdminCommentsProps
                   )}
                 >
                   <Lock className="h-3 w-3" />
-                  Internal note
+                  Internal
                 </Label>
+                <div className="h-4 w-px bg-border mx-1" />
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept={ALLOWED_FILE_TYPES.join(',')}
+                  onChange={handleFileSelect}
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
+                >
+                  <Paperclip className="h-3 w-3" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDrawingPadOpen(true)}
+                  className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
+                >
+                  <Pencil className="h-3 w-3" />
+                </button>
               </div>
               <Button
                 type="submit"
                 size="sm"
-                disabled={submitting || !newComment.trim()}
+                disabled={submitting || (!newComment.trim() && attachments.length === 0)}
               >
                 {submitting ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -244,6 +372,13 @@ export function AdminComments({ feedbackId, submitterEmail }: AdminCommentsProps
               </Button>
             </div>
           </form>
+
+          {/* Drawing Pad Modal */}
+          <DrawingPad
+            open={drawingPadOpen}
+            onOpenChange={setDrawingPadOpen}
+            onSave={handleDrawingSave}
+          />
         </div>
       )}
     </div>
@@ -312,7 +447,38 @@ function CommentThread({
             {timeAgo}
           </span>
         </div>
-        <p className="whitespace-pre-wrap">{comment.content}</p>
+        {comment.content && (
+          <p className="whitespace-pre-wrap">{comment.content}</p>
+        )}
+
+        {/* Comment Attachments */}
+        {comment.attachments && comment.attachments.length > 0 && (
+          <div className="flex flex-wrap gap-2 mt-2">
+            {comment.attachments.map((att, idx) => (
+              <div key={idx}>
+                {att.type === 'image' || att.type === 'drawing' ? (
+                  <a href={att.url} target="_blank" rel="noopener noreferrer">
+                    <img
+                      src={att.url}
+                      alt={att.name || 'Attachment'}
+                      className="max-h-24 rounded border hover:opacity-90 transition-opacity"
+                    />
+                  </a>
+                ) : (
+                  <a
+                    href={att.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 px-2 py-1 bg-muted/50 rounded text-xs hover:bg-muted transition-colors"
+                  >
+                    <Paperclip className="h-3 w-3" />
+                    {att.name || 'File'}
+                  </a>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Actions */}
         <div className="flex items-center gap-2 mt-2">
@@ -365,7 +531,37 @@ function CommentThread({
                   {formatDistanceToNow(new Date(reply.created_at), { addSuffix: true })}
                 </span>
               </div>
-              <p className="whitespace-pre-wrap text-xs">{reply.content}</p>
+              {reply.content && (
+                <p className="whitespace-pre-wrap text-xs">{reply.content}</p>
+              )}
+              {/* Reply Attachments */}
+              {reply.attachments && reply.attachments.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-1.5">
+                  {reply.attachments.map((att, idx) => (
+                    <div key={idx}>
+                      {att.type === 'image' || att.type === 'drawing' ? (
+                        <a href={att.url} target="_blank" rel="noopener noreferrer">
+                          <img
+                            src={att.url}
+                            alt={att.name || 'Attachment'}
+                            className="max-h-16 rounded border hover:opacity-90 transition-opacity"
+                          />
+                        </a>
+                      ) : (
+                        <a
+                          href={att.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1 px-1.5 py-0.5 bg-muted/50 rounded text-[10px] hover:bg-muted transition-colors"
+                        >
+                          <Paperclip className="h-2.5 w-2.5" />
+                          {att.name || 'File'}
+                        </a>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
               <button
                 onClick={() => onDelete(reply.id)}
                 className="text-[10px] text-muted-foreground hover:text-red-500 mt-1.5 flex items-center gap-0.5"

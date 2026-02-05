@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { signOut, useSession } from 'next-auth/react'
 import { motion, AnimatePresence } from 'framer-motion'
+import posthog from 'posthog-js'
 import { cn } from '@/lib/utils'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -209,7 +210,11 @@ function SidebarContent({ onNavigate, layoutId = 'activeNav' }: SidebarContentPr
                 <TooltipTrigger asChild>
                   <button
                     type="button"
-                    onClick={() => signOut({ callbackUrl: `${window.location.origin}/signin` })}
+                    onClick={() => {
+                      // Reset PostHog identity before signing out
+                      posthog.reset()
+                      signOut({ callbackUrl: `${window.location.origin}/signin` })
+                    }}
                     className="shrink-0 rounded-md p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                     aria-label="Sign out"
                   >

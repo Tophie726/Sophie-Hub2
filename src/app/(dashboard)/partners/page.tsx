@@ -19,6 +19,7 @@ import { WeeklyStatusDialog } from '@/components/partners/weekly-status-dialog'
 import { StatusInvestigationDialog } from '@/components/partners/status-investigation-dialog'
 import { HealthBarCompact } from '@/components/partners/health-bar-compact'
 import { HealthHeatmap, clearHeatmapCache } from '@/components/partners/health-heatmap'
+import { AddPartnerDialog } from '@/components/partners/add-partner-dialog'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -601,6 +602,9 @@ export default function PartnersPage() {
   // Status investigation dialog state
   const [investigationDialogPartner, setInvestigationDialogPartner] = useState<Partner | null>(null)
 
+  // Add partner dialog state
+  const [addPartnerOpen, setAddPartnerOpen] = useState(false)
+
   // Field lineage info for tooltips (which sheet/tab/column each field came from)
   const [fieldLineage, setFieldLineage] = useState<Record<string, {
     sourceColumn: string
@@ -819,7 +823,10 @@ export default function PartnersPage() {
           <div className="hidden sm:block">
             <HealthBarCompact />
           </div>
-          <Button className="h-10 md:h-9 gap-2 px-3">
+          <Button
+            className="h-10 md:h-9 gap-2 px-3"
+            onClick={() => setAddPartnerOpen(true)}
+          >
             <Plus className="h-4 w-4" />
             <span className="hidden sm:inline">Add</span>
           </Button>
@@ -1055,6 +1062,13 @@ export default function PartnersPage() {
         open={investigationDialogPartner !== null}
         onOpenChange={(open) => !open && setInvestigationDialogPartner(null)}
         partner={investigationDialogPartner}
+      />
+
+      {/* Add Partner Dialog */}
+      <AddPartnerDialog
+        open={addPartnerOpen}
+        onOpenChange={setAddPartnerOpen}
+        onSuccess={handleRefresh}
       />
     </div>
   )

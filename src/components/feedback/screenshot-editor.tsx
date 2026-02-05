@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Stage, Layer, Image as KonvaImage, Line, Circle, Rect, Text } from 'react-konva'
+import { Stage, Layer, Image as KonvaImage, Line, Circle, Rect, Text, Transformer } from 'react-konva'
 import Konva from 'konva'
 import {
   ZoomIn,
@@ -13,11 +13,12 @@ import {
   Trash2,
   RotateCcw,
   Move,
+  MousePointer2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
-type DrawingTool = 'pen' | 'rectangle' | 'circle' | 'text' | 'pan' | null
+type DrawingTool = 'select' | 'pen' | 'rectangle' | 'circle' | 'text' | 'pan' | null
 
 interface DrawingElement {
   id: string
@@ -58,6 +59,7 @@ export function ScreenshotEditor({ imageUrl, onSave, onCancel }: ScreenshotEdito
   const [isDrawing, setIsDrawing] = useState(false)
   const [currentElement, setCurrentElement] = useState<DrawingElement | null>(null)
   const [stageSize, setStageSize] = useState({ width: 800, height: 600 })
+  const [selectedId, setSelectedId] = useState<string | null>(null)
   const [stagePos, setStagePos] = useState({ x: 0, y: 0 })
   const [isPanning, setIsPanning] = useState(false)
   const [lastPanPos, setLastPanPos] = useState({ x: 0, y: 0 })
@@ -65,47 +67,125 @@ export function ScreenshotEditor({ imageUrl, onSave, onCancel }: ScreenshotEdito
   const stageRef = useRef<Konva.Stage>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const startPointRef = useRef<{ x: number; y: number } | null>(null)
+  const transformerRef = useRef<Konva.Transformer>(null)
+  const shapeRefs = useRef<Map<string, Konva.Shape>>(new Map())
+  const [containerSize, setContainerSize] = useState({ width: 1000, height: 600 })
 
-  // Load image
+  // Measure container size
+  useEffect(() => {
+    const updateContainerSize = () => {
+      if (containerRef.current) {
+        setContainerSize({
+          width: containerRef.current.clientWidth,
+          height: containerRef.current.clientHeight,
+        })
+      }
+    }
+    updateContainerSize()
+    window.addEventListener('resize', updateContainerSize)
+    return () => window.removeEventListener('resize', updateContainerSize)
+  }, [])
+
+  // Load image and calculate initial zoom to full width
   useEffect(() => {
     const img = new window.Image()
     img.src = imageUrl
     img.crossOrigin = 'anonymous'
     img.onload = () => {
       setImage(img)
-      // Use actual image size (up to max container)
-      const maxWidth = Math.min(img.width, 1200)
-      const maxHeight = Math.min(img.height, 700)
-      const ratio = Math.min(maxWidth / img.width, maxHeight / img.height, 1)
+      // Store the actual image dimensions
       setStageSize({
-        width: Math.round(img.width * ratio),
-        height: Math.round(img.height * ratio),
+        width: img.width,
+        height: img.height,
       })
+
+      // Calculate zoom to fill container width (scroll vertically to see more)
+      const container = containerRef.current
+      if (container) {
+        const containerWidth = container.clientWidth
+        const fullWidthZoom = Math.min(containerWidth / img.width, 1) // Don't zoom past 100%
+        setZoom(fullWidthZoom)
+
+        // Position at top-left (scroll down to see more)
+        setStagePos({ x: 0, y: 0 })
+      }
     }
   }, [imageUrl])
 
-  // Handle zoom with keyboard
+  // Handle keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if typing in an input
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+
       if (e.key === '+' || e.key === '=') {
         setZoom(prev => Math.min(prev + 0.25, 3))
       } else if (e.key === '-') {
-        setZoom(prev => Math.max(prev - 0.25, 0.5))
+        setZoom(prev => Math.max(prev - 0.25, 0.25))
       } else if (e.key === '0') {
-        setZoom(1)
-        setStagePos({ x: 0, y: 0 })
+        handleZoomFit()
+      } else if (e.key === '1') {
+        handleZoomReset() // 100%
+      } else if (e.key === 'v' || e.key === 'V') {
+        setTool('select')
+      } else if (e.key === 'Escape') {
+        setSelectedId(null)
+        setTool(null)
+      } else if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId) {
+        // Delete selected element
+        setElements(prev => prev.filter(el => el.id !== selectedId))
+        setSelectedId(null)
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [])
+  }, [stageSize, image, selectedId])
+
+  // Attach transformer to selected shape
+  useEffect(() => {
+    if (selectedId && transformerRef.current) {
+      const node = shapeRefs.current.get(selectedId)
+      if (node) {
+        transformerRef.current.nodes([node])
+        transformerRef.current.getLayer()?.batchDraw()
+      }
+    } else if (transformerRef.current) {
+      transformerRef.current.nodes([])
+    }
+  }, [selectedId])
 
   // Handle zoom
   const handleZoomIn = () => setZoom(prev => Math.min(prev + 0.25, 3))
-  const handleZoomOut = () => setZoom(prev => Math.max(prev - 0.25, 0.5))
+  const handleZoomOut = () => setZoom(prev => Math.max(prev - 0.25, 0.25))
+
+  // Fit to container
+  const handleZoomFit = () => {
+    if (!image || !containerRef.current) return
+    const containerWidth = containerRef.current.clientWidth - 40
+    const containerHeight = containerRef.current.clientHeight - 40
+    const fitZoom = Math.min(
+      containerWidth / stageSize.width,
+      containerHeight / stageSize.height,
+      1
+    )
+    setZoom(fitZoom)
+    const scaledWidth = stageSize.width * fitZoom
+    const scaledHeight = stageSize.height * fitZoom
+    setStagePos({
+      x: (containerRef.current.clientWidth - scaledWidth) / 2,
+      y: (containerRef.current.clientHeight - scaledHeight) / 2,
+    })
+  }
+
+  // Reset to 100% and center
   const handleZoomReset = () => {
+    if (!containerRef.current) return
     setZoom(1)
-    setStagePos({ x: 0, y: 0 })
+    // Center the image at 100%
+    setStagePos({
+      x: (containerRef.current.clientWidth - stageSize.width) / 2,
+      y: (containerRef.current.clientHeight - stageSize.height) / 2,
+    })
   }
 
   // Get pointer position relative to stage (accounting for zoom and pan)
@@ -122,13 +202,81 @@ export function ScreenshotEditor({ imageUrl, onSave, onCancel }: ScreenshotEdito
     }
   }, [zoom, stagePos])
 
+  // Handle clicking on a shape to select it
+  const handleShapeClick = useCallback((id: string) => {
+    if (tool === 'select' || !tool) {
+      setSelectedId(id)
+    }
+  }, [tool])
+
+  // Handle shape drag end - update element position
+  const handleDragEnd = useCallback((id: string, e: Konva.KonvaEventObject<DragEvent>) => {
+    const node = e.target
+    setElements(prev => prev.map(el => {
+      if (el.id !== id) return el
+      return {
+        ...el,
+        x: node.x(),
+        y: node.y(),
+      }
+    }))
+  }, [])
+
+  // Handle transform end - update element size/position
+  const handleTransformEnd = useCallback((id: string, e: Konva.KonvaEventObject<Event>) => {
+    const node = e.target
+    const scaleX = node.scaleX()
+    const scaleY = node.scaleY()
+
+    // Reset scale and apply to dimensions
+    node.scaleX(1)
+    node.scaleY(1)
+
+    setElements(prev => prev.map(el => {
+      if (el.id !== id) return el
+      if (el.type === 'rectangle') {
+        return {
+          ...el,
+          x: node.x(),
+          y: node.y(),
+          width: Math.max(5, (el.width || 0) * scaleX),
+          height: Math.max(5, (el.height || 0) * scaleY),
+        }
+      }
+      if (el.type === 'circle') {
+        return {
+          ...el,
+          x: node.x(),
+          y: node.y(),
+          radius: Math.max(5, (el.radius || 0) * Math.max(scaleX, scaleY)),
+        }
+      }
+      if (el.type === 'text') {
+        return {
+          ...el,
+          x: node.x(),
+          y: node.y(),
+        }
+      }
+      return el
+    }))
+  }, [])
+
   // Handle mouse down
-  const handleMouseDown = useCallback(() => {
+  const handleMouseDown = useCallback((e: Konva.KonvaEventObject<MouseEvent>) => {
+    // Check what was clicked
+    const clickedOnEmpty = e.target === e.target.getStage() || e.target.name() === 'backgroundImage'
+
+    // Click on empty area deselects any selected shape
+    if (clickedOnEmpty) {
+      setSelectedId(null)
+    }
+
     const point = getPointerPosition()
     if (!point) return
 
-    // Handle panning
-    if (tool === 'pan') {
+    // Handle panning - works with pan tool OR no tool on empty space
+    if (tool === 'pan' || (!tool && clickedOnEmpty) || (tool === 'select' && clickedOnEmpty)) {
       setIsPanning(true)
       const stage = stageRef.current
       if (stage) {
@@ -140,7 +288,8 @@ export function ScreenshotEditor({ imageUrl, onSave, onCancel }: ScreenshotEdito
       return
     }
 
-    if (!tool) return
+    // Select mode or no tool - just handle selection (clicking shapes handled by shape onClick)
+    if (tool === 'select' || !tool) return
 
     setIsDrawing(true)
     startPointRef.current = point
@@ -191,8 +340,8 @@ export function ScreenshotEditor({ imageUrl, onSave, onCancel }: ScreenshotEdito
 
   // Handle mouse move
   const handleMouseMove = useCallback(() => {
-    // Handle panning
-    if (isPanning && tool === 'pan') {
+    // Handle panning (works when isPanning is true, regardless of tool)
+    if (isPanning) {
       const stage = stageRef.current
       if (stage) {
         const pointer = stage.getPointerPosition()
@@ -266,7 +415,7 @@ export function ScreenshotEditor({ imageUrl, onSave, onCancel }: ScreenshotEdito
 
     const newScale = e.evt.deltaY < 0
       ? Math.min(oldScale * scaleBy, 3)
-      : Math.max(oldScale / scaleBy, 0.5)
+      : Math.max(oldScale / scaleBy, 0.1)
 
     setZoom(newScale)
     setStagePos({
@@ -289,7 +438,7 @@ export function ScreenshotEditor({ imageUrl, onSave, onCancel }: ScreenshotEdito
   // Save edited image
   const handleSave = () => {
     const stage = stageRef.current
-    if (!stage) return
+    if (!stage || !image) return
 
     // Reset zoom and position for export
     const tempZoom = zoom
@@ -299,8 +448,13 @@ export function ScreenshotEditor({ imageUrl, onSave, onCancel }: ScreenshotEdito
     stage.position({ x: 0, y: 0 })
     stage.batchDraw()
 
+    // Export only the image area, not the entire stage
     const dataUrl = stage.toDataURL({
-      pixelRatio: 2, // Higher quality
+      x: 0,
+      y: 0,
+      width: image.width,
+      height: image.height,
+      pixelRatio: 1, // Use actual resolution
       mimeType: 'image/jpeg',
       quality: 0.92,
     })
@@ -314,9 +468,10 @@ export function ScreenshotEditor({ imageUrl, onSave, onCancel }: ScreenshotEdito
   }
 
   const getCursor = () => {
-    if (tool === 'pan') return isPanning ? 'grabbing' : 'grab'
-    if (tool) return 'crosshair'
-    return 'default'
+    if (isPanning) return 'grabbing'
+    if (tool === 'pan' || !tool) return 'grab'
+    if (tool === 'select') return 'default'
+    return 'crosshair'
   }
 
   return (
@@ -350,6 +505,17 @@ export function ScreenshotEditor({ imageUrl, onSave, onCancel }: ScreenshotEdito
             <ZoomIn className="h-4 w-4" />
           </Button>
         </div>
+
+        {/* Select tool */}
+        <Button
+          variant={tool === 'select' ? 'secondary' : 'ghost'}
+          size="icon"
+          className="h-8 w-8"
+          onClick={() => setTool(tool === 'select' ? null : 'select')}
+          title="Select & Move (V)"
+        >
+          <MousePointer2 className="h-4 w-4" />
+        </Button>
 
         {/* Pan tool */}
         <Button
@@ -468,8 +634,8 @@ export function ScreenshotEditor({ imageUrl, onSave, onCancel }: ScreenshotEdito
       >
         <Stage
           ref={stageRef}
-          width={containerRef.current?.clientWidth || 1000}
-          height={containerRef.current?.clientHeight || 600}
+          width={containerSize.width}
+          height={containerSize.height}
           scaleX={zoom}
           scaleY={zoom}
           x={stagePos.x}
@@ -481,27 +647,32 @@ export function ScreenshotEditor({ imageUrl, onSave, onCancel }: ScreenshotEdito
           onWheel={handleWheel}
         >
           <Layer>
-            {/* Background image */}
+            {/* Background image - use actual image dimensions */}
             {image && (
               <KonvaImage
                 image={image}
-                width={stageSize.width}
-                height={stageSize.height}
+                width={image.width}
+                height={image.height}
+                name="backgroundImage"
               />
             )}
 
             {/* Existing elements */}
             {elements.map(el => {
+              const isDraggable = tool === 'select' || !tool
+
               if (el.type === 'line' && el.points) {
                 return (
                   <Line
                     key={el.id}
                     points={el.points}
                     stroke={el.color}
-                    strokeWidth={3 / zoom} // Maintain visual stroke width
+                    strokeWidth={3 / zoom}
                     tension={0.5}
                     lineCap="round"
                     lineJoin="round"
+                    onClick={() => handleShapeClick(el.id)}
+                    onTap={() => handleShapeClick(el.id)}
                   />
                 )
               }
@@ -509,12 +680,21 @@ export function ScreenshotEditor({ imageUrl, onSave, onCancel }: ScreenshotEdito
                 return (
                   <Rect
                     key={el.id}
+                    ref={(node) => {
+                      if (node) shapeRefs.current.set(el.id, node)
+                      else shapeRefs.current.delete(el.id)
+                    }}
                     x={el.x}
                     y={el.y}
                     width={el.width}
                     height={el.height}
                     stroke={el.color}
                     strokeWidth={3 / zoom}
+                    draggable={isDraggable}
+                    onClick={() => handleShapeClick(el.id)}
+                    onTap={() => handleShapeClick(el.id)}
+                    onDragEnd={(e) => handleDragEnd(el.id, e)}
+                    onTransformEnd={(e) => handleTransformEnd(el.id, e)}
                   />
                 )
               }
@@ -522,11 +702,20 @@ export function ScreenshotEditor({ imageUrl, onSave, onCancel }: ScreenshotEdito
                 return (
                   <Circle
                     key={el.id}
+                    ref={(node) => {
+                      if (node) shapeRefs.current.set(el.id, node)
+                      else shapeRefs.current.delete(el.id)
+                    }}
                     x={el.x}
                     y={el.y}
                     radius={el.radius}
                     stroke={el.color}
                     strokeWidth={3 / zoom}
+                    draggable={isDraggable}
+                    onClick={() => handleShapeClick(el.id)}
+                    onTap={() => handleShapeClick(el.id)}
+                    onDragEnd={(e) => handleDragEnd(el.id, e)}
+                    onTransformEnd={(e) => handleTransformEnd(el.id, e)}
                   />
                 )
               }
@@ -534,12 +723,21 @@ export function ScreenshotEditor({ imageUrl, onSave, onCancel }: ScreenshotEdito
                 return (
                   <Text
                     key={el.id}
+                    ref={(node) => {
+                      if (node) shapeRefs.current.set(el.id, node)
+                      else shapeRefs.current.delete(el.id)
+                    }}
                     x={el.x}
                     y={el.y}
                     text={el.text}
                     fill={el.color}
                     fontSize={16 / zoom}
                     fontStyle="bold"
+                    draggable={isDraggable}
+                    onClick={() => handleShapeClick(el.id)}
+                    onTap={() => handleShapeClick(el.id)}
+                    onDragEnd={(e) => handleDragEnd(el.id, e)}
+                    onTransformEnd={(e) => handleTransformEnd(el.id, e)}
                   />
                 )
               }
@@ -580,6 +778,24 @@ export function ScreenshotEditor({ imageUrl, onSave, onCancel }: ScreenshotEdito
                 )}
               </>
             )}
+
+            {/* Transformer for selected shapes */}
+            <Transformer
+              ref={transformerRef}
+              boundBoxFunc={(oldBox, newBox) => {
+                // Limit minimum size
+                if (newBox.width < 5 || newBox.height < 5) {
+                  return oldBox
+                }
+                return newBox
+              }}
+              anchorSize={8 / zoom}
+              borderStrokeWidth={1 / zoom}
+              anchorStroke="#2563eb"
+              anchorFill="#fff"
+              borderStroke="#2563eb"
+              rotateEnabled={false}
+            />
           </Layer>
         </Stage>
       </div>
@@ -588,9 +804,11 @@ export function ScreenshotEditor({ imageUrl, onSave, onCancel }: ScreenshotEdito
       <p className="text-xs text-muted-foreground text-center">
         {tool === 'pan'
           ? 'Click and drag to pan. Scroll to zoom.'
-          : tool
-            ? `Click and drag to draw. Scroll to zoom.`
-            : 'Select a tool to annotate, or scroll to zoom'}
+          : tool === 'select'
+            ? 'Click shapes to select, drag to move, handles to resize. Press Delete to remove.'
+            : tool
+              ? 'Click and drag to draw. Scroll to zoom.'
+              : 'Drag to pan, scroll to zoom. Select a tool to annotate.'}
       </p>
     </div>
   )
