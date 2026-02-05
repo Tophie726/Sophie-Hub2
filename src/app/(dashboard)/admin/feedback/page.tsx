@@ -46,6 +46,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { FeedbackKanban } from '@/components/feedback/feedback-kanban'
+import { AdminComments } from '@/components/feedback/admin-comments'
 
 type FeedbackType = 'bug' | 'feature' | 'question'
 type FeedbackStatus = 'new' | 'reviewed' | 'in_progress' | 'resolved' | 'wont_fix'
@@ -111,6 +112,7 @@ export default function FeedbackAdminPage() {
   const [analyzing, setAnalyzing] = useState<Record<string, boolean>>({})
   const [summaries, setSummaries] = useState<Record<string, AISummary>>({})
   const [analyses, setAnalyses] = useState<Record<string, AIAnalysis>>({})
+  const [batchSummarizing, setBatchSummarizing] = useState(false)
 
   const handleSummarize = async (id: string) => {
     setSummarizing(prev => ({ ...prev, [id]: true }))
@@ -165,6 +167,54 @@ export default function FeedbackAdminPage() {
       toast.error(error instanceof Error ? error.message : 'Failed to analyze')
     } finally {
       setAnalyzing(prev => ({ ...prev, [id]: false }))
+    }
+  }
+
+  // Batch AI: Summarize all visible items that don't have summaries
+  const handleBatchSummarize = async () => {
+    const itemsToSummarize = feedback.filter(item => !summaries[item.id] && !item.ai_summary)
+    if (itemsToSummarize.length === 0) {
+      toast.info('All items already have AI summaries')
+      return
+    }
+
+    setBatchSummarizing(true)
+    let successCount = 0
+    let failCount = 0
+
+    for (const item of itemsToSummarize) {
+      try {
+        setSummarizing(prev => ({ ...prev, [item.id]: true }))
+        const res = await fetch('/api/ai/summarize-feedback', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ feedbackId: item.id }),
+        })
+        const json = await res.json()
+        if (!res.ok) {
+          failCount++
+          // Check if it's a service unavailable error (no API key)
+          if (json.error?.code === 'SERVICE_UNAVAILABLE') {
+            toast.error('AI not configured. Add your Anthropic API key to .env.local')
+            break
+          }
+          continue
+        }
+        setSummaries(prev => ({ ...prev, [item.id]: { summary: json.data?.summary } }))
+        successCount++
+      } catch {
+        failCount++
+      } finally {
+        setSummarizing(prev => ({ ...prev, [item.id]: false }))
+      }
+    }
+
+    setBatchSummarizing(false)
+    if (successCount > 0) {
+      toast.success(`Summarized ${successCount} item${successCount > 1 ? 's' : ''}`)
+    }
+    if (failCount > 0 && successCount > 0) {
+      toast.error(`${failCount} failed`)
     }
   }
 
@@ -242,7 +292,7 @@ export default function FeedbackAdminPage() {
         description="Admin view for managing and triaging user feedback"
       >
         <div className="flex items-center gap-2 md:gap-4">
-          {/* AI Toggle */}
+          {/* AI Toggle + Batch Actions */}
           <div className="flex items-center gap-2 px-2 md:px-3 py-1.5 rounded-lg bg-purple-500/10 border border-purple-500/20">
             <Sparkles className="h-4 w-4 text-purple-500" />
             <Label htmlFor="ai-toggle" className="text-sm font-medium text-purple-700 dark:text-purple-300 cursor-pointer hidden md:inline">
@@ -255,6 +305,26 @@ export default function FeedbackAdminPage() {
               className="data-[state=checked]:bg-purple-500"
             />
           </div>
+
+          {/* Batch AI Button - only show when AI enabled */}
+          {aiEnabled && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleBatchSummarize}
+              disabled={batchSummarizing || loading}
+              className="h-10 md:h-9 border-purple-500/30 text-purple-600 hover:bg-purple-500/10"
+            >
+              {batchSummarizing ? (
+                <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+              ) : (
+                <Wand2 className="h-4 w-4 md:mr-1.5" />
+              )}
+              <span className="hidden md:inline">
+                {batchSummarizing ? 'Processing...' : 'Summarize All'}
+              </span>
+            </Button>
+          )}
 
           <Button
             variant="outline"
@@ -487,22 +557,37 @@ function FeedbackCard({
   const Icon = typeConfig.icon
   const [showFullAnalysis, setShowFullAnalysis] = useState(false)
 
+  // Check if this card has AI enhancement
+  const hasAI = !!summary || !!analysis
+  const posthogUrl = item.posthog_session_id
+    ? `https://us.posthog.com/replay/${item.posthog_session_id}`
+    : null
+
   return (
-    <Card className="hover:shadow-md transition-shadow">
+    <Card className={cn(
+      'hover:shadow-md transition-shadow',
+      hasAI && 'ring-1 ring-purple-500/30 bg-purple-500/[0.02]'
+    )}>
       <CardContent className="p-4">
         <div className="flex items-start gap-4">
-          <div className={cn('h-10 w-10 rounded-lg flex items-center justify-center shrink-0', typeConfig.color)}>
+          <div className={cn('h-10 w-10 rounded-lg flex items-center justify-center shrink-0 relative', typeConfig.color)}>
             <Icon className="h-5 w-5" />
+            {hasAI && (
+              <div className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-purple-500 flex items-center justify-center">
+                <Sparkles className="h-2.5 w-2.5 text-white" />
+              </div>
+            )}
           </div>
 
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <h4 className="font-medium truncate">
-                  {item.title || item.description.slice(0, 60)}
+                {/* Show AI summary as title if available, otherwise original */}
+                <h4 className="font-medium truncate flex items-center gap-2">
+                  {summary ? summary.summary.split('.')[0] : (item.title || item.description.slice(0, 60))}
                 </h4>
                 <p className="text-sm text-muted-foreground line-clamp-2 mt-1">
-                  {item.description}
+                  {summary ? item.description : item.description}
                 </p>
               </div>
 
@@ -523,17 +608,28 @@ function FeedbackCard({
                   Screenshot
                 </span>
               )}
-              {item.posthog_session_id && (
-                <span className="text-purple-500">Has session replay</span>
+              {posthogUrl && (
+                <a
+                  href={posthogUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="flex items-center gap-1 text-purple-500 hover:text-purple-600 hover:underline"
+                >
+                  <ExternalLink className="h-3 w-3" />
+                  Session replay
+                </a>
               )}
             </div>
 
-            {/* AI Summary */}
+            {/* AI Summary - compact inline display */}
             {summary && (
               <div className="mt-3 p-2.5 rounded-lg bg-purple-500/5 border border-purple-500/20">
                 <div className="flex items-start gap-2">
                   <Sparkles className="h-3.5 w-3.5 text-purple-500 mt-0.5 shrink-0" />
-                  <p className="text-sm text-purple-700 dark:text-purple-300 flex-1">{summary.summary}</p>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-purple-700 dark:text-purple-300">{summary.summary}</p>
+                  </div>
                   {/* Out of date indicator */}
                   {item.ai_summary_at && item.content_updated_at &&
                     new Date(item.content_updated_at) > new Date(item.ai_summary_at) && (
@@ -545,7 +641,7 @@ function FeedbackCard({
               </div>
             )}
 
-            {/* AI Analysis */}
+            {/* AI Analysis - expandable with quick preview */}
             {analysis && (
               <div className="mt-3 p-2.5 rounded-lg bg-amber-500/5 border border-amber-500/20">
                 <button
@@ -553,18 +649,23 @@ function FeedbackCard({
                   className="flex items-center gap-2 w-full text-left"
                 >
                   <Wrench className="h-3.5 w-3.5 text-amber-500 shrink-0" />
-                  <span className="text-sm font-medium text-amber-700 dark:text-amber-300 flex-1">
-                    {item.type === 'bug' ? 'Solution Found' : 'Implementation Plan'}
-                  </span>
+                  <div className="flex-1 min-w-0">
+                    <span className="text-sm font-medium text-amber-700 dark:text-amber-300">
+                      {item.type === 'bug' ? 'Solution: ' : 'Plan: '}
+                    </span>
+                    <span className="text-sm text-muted-foreground">
+                      {analysis.summary.length > 80 ? analysis.summary.slice(0, 80) + '...' : analysis.summary}
+                    </span>
+                  </div>
                   {/* Out of date indicator */}
                   {item.ai_analysis_at && item.content_updated_at &&
                     new Date(item.content_updated_at) > new Date(item.ai_analysis_at) && (
-                    <Badge variant="outline" className="text-[10px] border-orange-500/50 text-orange-600">
+                    <Badge variant="outline" className="text-[10px] border-orange-500/50 text-orange-600 shrink-0">
                       outdated
                     </Badge>
                   )}
                   <Badge variant="outline" className={cn(
-                    'text-[10px]',
+                    'text-[10px] shrink-0',
                     analysis.confidence === 'high' && 'border-green-500/50 text-green-600',
                     analysis.confidence === 'medium' && 'border-amber-500/50 text-amber-600',
                     analysis.confidence === 'low' && 'border-red-500/50 text-red-600'
@@ -572,18 +673,14 @@ function FeedbackCard({
                     {analysis.confidence}
                   </Badge>
                   {showFullAnalysis ? (
-                    <ChevronUp className="h-4 w-4 text-amber-500" />
+                    <ChevronUp className="h-4 w-4 text-amber-500 shrink-0" />
                   ) : (
-                    <ChevronDown className="h-4 w-4 text-amber-500" />
+                    <ChevronDown className="h-4 w-4 text-amber-500 shrink-0" />
                   )}
                 </button>
 
                 {showFullAnalysis && (
                   <div className="mt-2 pt-2 border-t border-amber-500/20 space-y-2 text-sm">
-                    <div>
-                      <span className="font-medium text-foreground">Summary: </span>
-                      <span className="text-muted-foreground">{analysis.summary}</span>
-                    </div>
                     <div>
                       <span className="font-medium text-foreground">
                         {item.type === 'bug' ? 'Cause: ' : 'Approach: '}
@@ -1068,6 +1165,12 @@ function FeedbackDetailDialog({
               </div>
             )}
           </div>
+
+          {/* Comments Section */}
+          <AdminComments
+            feedbackId={item.id}
+            submitterEmail={item.submitted_by_email}
+          />
 
           {/* Status Update */}
           <div className="flex flex-wrap items-center gap-2 md:gap-3 pt-4 border-t">
