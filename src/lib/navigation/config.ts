@@ -13,7 +13,6 @@ import {
   Database,
   Building2,
   Package,
-  Settings,
   GitPullRequest,
   type LucideIcon,
 } from 'lucide-react'
@@ -58,7 +57,6 @@ export const navigation: NavSection[] = [
       { name: 'Data Enrichment', href: '/admin/data-enrichment', icon: Database, highlight: true },
       { name: 'Change Approval', href: '/admin/change-approval', icon: GitPullRequest },
       { name: 'Products', href: '/admin/products', icon: Package },
-      { name: 'Settings', href: '/admin/settings', icon: Settings },
     ],
   },
 ]

@@ -541,15 +541,7 @@ export function HealthHeatmap({ statusFilter = [], search = '' }: HealthHeatmapP
   const nameColWidth = 180
 
   if (isLoading) {
-    return (
-      <HeatmapShimmer
-        rows={25}
-        columns={weeksToShow > 100 ? 100 : weeksToShow}
-        cellSize={cellSize}
-        cellGap={cellGap}
-        nameColWidth={nameColWidth}
-      />
-    )
+    return <HeatmapShimmer />
   }
 
   if (error) {

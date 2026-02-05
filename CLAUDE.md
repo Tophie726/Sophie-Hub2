@@ -448,6 +448,16 @@ The actual sync was unaffected (data integrity preserved), but it was confusing 
 - ✅ **Admin Repair Endpoint** - Fix broken column mappings
   - `POST /api/admin/repair-mappings` - Fetches headers from sheets, repairs DB
   - `GET /api/admin/repair-mappings` - Check repair status without fixing
+- ✅ **Simplified Dashboard** - Streamlined to focus on core metrics
+  - Removed Data Sources card, Data Enrichment section, Connected Sources
+  - Shows only: Active Partners, Staff Members, Health Distribution
+  - Two-column grid layout for primary stats
+- ✅ **Column Preferences Persistence** - Partners page remembers column settings
+  - `localStorage` keys: `partners-visible-columns`, `partners-column-order`
+  - Column visibility persists across sessions
+  - Column order preserved (foundation for future drag-and-drop)
+- ✅ **Fixed Shimmer Corners** - Rounded corners on loading skeletons
+  - Added `overflow-hidden` to shimmer wrapper container
 
 **Pending:**
 - ⚠️ Real-time progress feedback in UI (WebSocket or polling)

@@ -478,6 +478,10 @@ function PartnerRow({ partner, columns, visibleColumns, onSync, onWeeklyClick, o
   )
 }
 
+// localStorage keys for persisting column preferences
+const VISIBLE_COLUMNS_STORAGE_KEY = 'partners-visible-columns'
+const COLUMN_ORDER_STORAGE_KEY = 'partners-column-order'
+
 export default function PartnersPage() {
   const searchParams = useSearchParams()
   const router = useRouter()
@@ -507,9 +511,24 @@ export default function PartnersPage() {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
   const [total, setTotal] = useState(0)
   const [hasMore, setHasMore] = useState(false)
-  const [visibleColumns, setVisibleColumns] = useState<Set<string>>(
-    () => new Set(CORE_COLUMNS.filter(c => c.defaultVisible).map(c => c.key))
-  )
+  const [visibleColumns, setVisibleColumns] = useState<Set<string>>(() => {
+    // Try to restore from localStorage
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem(VISIBLE_COLUMNS_STORAGE_KEY)
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved) as string[]
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            return new Set(parsed)
+          }
+        } catch {
+          // Invalid JSON, use defaults
+        }
+      }
+    }
+    // Fall back to defaults
+    return new Set(CORE_COLUMNS.filter(c => c.defaultVisible).map(c => c.key))
+  })
 
   // Weekly status dialog state
   const [weeklyDialogPartner, setWeeklyDialogPartner] = useState<Partner | null>(null)
@@ -533,7 +552,33 @@ export default function PartnersPage() {
   const allColumns = useMemo(() => [...CORE_COLUMNS, ...sourceDataColumns], [sourceDataColumns])
 
   // Column order state - preserves user's ordering preference
-  const [columnOrder, setColumnOrder] = useState<string[]>(() => allColumns.map(c => c.key))
+  const [columnOrder, setColumnOrder] = useState<string[]>(() => {
+    // Try to restore from localStorage
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem(COLUMN_ORDER_STORAGE_KEY)
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved) as string[]
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            return parsed
+          }
+        } catch {
+          // Invalid JSON, use defaults
+        }
+      }
+    }
+    return allColumns.map(c => c.key)
+  })
+
+  // Persist visible columns to localStorage
+  useEffect(() => {
+    localStorage.setItem(VISIBLE_COLUMNS_STORAGE_KEY, JSON.stringify(Array.from(visibleColumns)))
+  }, [visibleColumns])
+
+  // Persist column order to localStorage
+  useEffect(() => {
+    localStorage.setItem(COLUMN_ORDER_STORAGE_KEY, JSON.stringify(columnOrder))
+  }, [columnOrder])
 
   // Update column order when new columns are discovered
   useEffect(() => {
@@ -755,8 +800,10 @@ export default function PartnersPage() {
             search={debouncedSearch}
           />
         ) : loading ? (
-          <div className="rounded-xl border bg-card p-1">
-            <ShimmerGrid variant="table" rows={8} columns={6} />
+          <div className="rounded-xl border bg-card overflow-hidden">
+            <div className="p-3">
+              <ShimmerGrid variant="table" rows={8} columns={6} />
+            </div>
           </div>
         ) : partners.length === 0 ? (
           <Card className="border-dashed">

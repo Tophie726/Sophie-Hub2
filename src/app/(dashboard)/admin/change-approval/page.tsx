@@ -2,7 +2,7 @@
 
 import { Suspense, useState, useEffect, useCallback } from 'react'
 import { PageHeader } from '@/components/layout/page-header'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import {
   GitPullRequest,
@@ -15,12 +15,17 @@ import {
   Package,
   ChevronDown,
   HelpCircle,
+  RefreshCw,
 } from 'lucide-react'
 import { WorkflowCard } from '@/components/help'
 import { SyncButton } from '@/components/sync'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
-import { motion, AnimatePresence } from 'framer-motion'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 
 export default function ChangeApprovalPage() {
   return (
@@ -168,6 +173,7 @@ function ChangeApprovalContent() {
   }
 
   const totalPending = stats ? stats.pending + stats.approved : 0
+  const isSyncing = syncingEntities.size > 0
 
   return (
     <div className="min-h-screen">
@@ -175,17 +181,57 @@ function ChangeApprovalContent() {
         title="Change Approval"
         description="Review and approve data changes before they're applied"
       >
-        {!showHelp && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => toggleHelp(true)}
-            className="text-muted-foreground hover:text-foreground"
-          >
-            <HelpCircle className="h-4 w-4 mr-1.5" />
-            <span className="text-xs">How it works</span>
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {!showHelp && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => toggleHelp(true)}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <HelpCircle className="h-4 w-4 mr-1.5" />
+              <span className="text-xs">How it works</span>
+            </Button>
+          )}
+
+          {/* Sync Dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" disabled={isSyncing || entitiesLoading}>
+                <RefreshCw className={cn('h-4 w-4 mr-1.5', isSyncing && 'animate-spin')} />
+                Sync Data
+                <ChevronDown className="h-3 w-3 ml-1.5 opacity-50" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-72">
+              <div className="p-2">
+                <p className="text-xs text-muted-foreground mb-3">
+                  Pull latest data from connected sources
+                </p>
+                {entitiesLoading ? (
+                  <div className="flex items-center justify-center py-4">
+                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  </div>
+                ) : entities.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    No syncable sources configured
+                  </p>
+                ) : (
+                  <div className="space-y-1">
+                    {entities.map((entity) => (
+                      <EntitySyncRow
+                        key={entity.entity}
+                        entity={entity}
+                        syncing={syncingEntities.has(entity.entity)}
+                        onSync={() => handleSyncEntity(entity)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </PageHeader>
 
       <div className="p-4 md:p-8 max-w-5xl">
@@ -198,10 +244,6 @@ function ChangeApprovalContent() {
         ) : (
           <ApprovalHub
             stats={stats}
-            entities={entities}
-            entitiesLoading={entitiesLoading}
-            syncingEntities={syncingEntities}
-            onSyncEntity={handleSyncEntity}
             showHelp={showHelp}
             onCloseHelp={() => toggleHelp(false)}
           />
@@ -213,25 +255,15 @@ function ChangeApprovalContent() {
 
 interface ApprovalHubProps {
   stats: ApprovalStats
-  entities: SyncableEntity[]
-  entitiesLoading: boolean
-  syncingEntities: Set<string>
-  onSyncEntity: (entity: SyncableEntity) => void
   showHelp: boolean
   onCloseHelp: () => void
 }
 
 function ApprovalHub({
   stats,
-  entities,
-  entitiesLoading,
-  syncingEntities,
-  onSyncEntity,
   showHelp,
   onCloseHelp,
 }: ApprovalHubProps) {
-  const [syncExpanded, setSyncExpanded] = useState(false)
-
   return (
     <div className="space-y-8">
       {/* How It Works - shown at top when visible */}
@@ -293,59 +325,6 @@ function ApprovalHub({
           </p>
         </CardContent>
       </Card>
-
-      {/* Optional: Manual Sync Section (Collapsible) */}
-      {entities.length > 0 && (
-        <Card>
-          <CardHeader
-            className="flex flex-row items-center justify-between space-y-0 cursor-pointer"
-            onClick={() => setSyncExpanded(!syncExpanded)}
-          >
-            <div>
-              <CardTitle className="text-sm font-medium">Manual Sync</CardTitle>
-              <p className="text-xs text-muted-foreground mt-1">
-                Data syncs automatically. Use this if you need fresh data now.
-              </p>
-            </div>
-            <ChevronDown className={cn(
-              'h-4 w-4 text-muted-foreground transition-transform',
-              syncExpanded && 'rotate-180'
-            )} />
-          </CardHeader>
-
-          <AnimatePresence initial={false}>
-            {syncExpanded && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.2 }}
-                className="overflow-hidden"
-              >
-                <CardContent className="pt-0">
-                  {entitiesLoading ? (
-                    <div className="flex items-center justify-center py-4">
-                      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {entities.map((entity) => (
-                        <EntitySyncRow
-                          key={entity.entity}
-                          entity={entity}
-                          syncing={syncingEntities.has(entity.entity)}
-                          onSync={() => onSyncEntity(entity)}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </Card>
-      )}
-
     </div>
   )
 }
