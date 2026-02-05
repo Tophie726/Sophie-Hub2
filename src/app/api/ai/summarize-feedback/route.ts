@@ -70,9 +70,8 @@ export async function POST(request: NextRequest) {
   let anthropicKey: string
   try {
     anthropicKey = await getAnthropicApiKey()
-    console.log('Got Anthropic API key:', anthropicKey ? `${anthropicKey.slice(0, 10)}...` : 'EMPTY')
   } catch (keyError) {
-    console.error('Failed to get Anthropic API key:', keyError)
+    console.error('Failed to get Anthropic API key')
     return apiError(
       'SERVICE_UNAVAILABLE',
       'AI is not configured. Add your Anthropic API key in Settings → API Keys.',

@@ -171,9 +171,8 @@ export async function POST(request: NextRequest) {
   let anthropicKey: string
   try {
     anthropicKey = await getAnthropicApiKey()
-    console.log('[analyze-bug] Anthropic API key found, length:', anthropicKey.length)
   } catch (keyError) {
-    console.error('[analyze-bug] Anthropic API key error:', keyError)
+    console.error('[analyze-bug] Anthropic API key not configured')
     return apiError(
       'SERVICE_UNAVAILABLE',
       'AI analysis is not configured. Add your Anthropic API key in Settings → Advanced.',
