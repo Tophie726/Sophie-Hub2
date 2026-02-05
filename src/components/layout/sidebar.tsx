@@ -23,6 +23,7 @@ import {
 import { useMobileMenu } from './mobile-menu-context'
 import { getNavigationForRole, type NavSection } from '@/lib/navigation/config'
 import type { Role } from '@/lib/auth/roles'
+import { FeedbackButton } from '@/components/feedback'
 
 // Get initials from name
 function getInitials(name?: string | null): string {
@@ -183,8 +184,9 @@ function SidebarContent({ onNavigate, layoutId = 'activeNav' }: SidebarContentPr
             </div>
           </Link>
 
-          {/* Settings & Logout */}
+          {/* Feedback, Settings & Logout */}
           <div className="flex items-center">
+            <FeedbackButton compact />
             <TooltipProvider delayDuration={300}>
               <Tooltip>
                 <TooltipTrigger asChild>

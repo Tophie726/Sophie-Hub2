@@ -293,10 +293,10 @@ const statusOptions = [
 ]
 
 const sortOptions = [
-  { value: 'brand_name', label: 'Brand Name' },
-  { value: 'created_at', label: 'Date Added' },
-  { value: 'onboarding_date', label: 'Onboarding Date' },
-  { value: 'tier', label: 'Tier' },
+  { value: 'onboarding_date', label: 'Newest First', defaultOrder: 'desc' as const },
+  { value: 'brand_name', label: 'Brand Name (A-Z)', defaultOrder: 'asc' as const },
+  { value: 'tier', label: 'Tier', defaultOrder: 'asc' as const },
+  { value: 'created_at', label: 'Date Added', defaultOrder: 'desc' as const },
 ]
 
 // Column dropdown item - clean, minimal design with hover-reveal reorder
@@ -526,8 +526,8 @@ export default function PartnersPage() {
       router.push('/partners', { scroll: false })
     }
   }, [router, showHeatmap])
-  const [sort, setSort] = useState('brand_name')
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
+  const [sort, setSort] = useState('onboarding_date')
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const [total, setTotal] = useState(0)
   const [hasMore, setHasMore] = useState(false)
   const [visibleColumns, setVisibleColumns] = useState<Set<string>>(() => {
@@ -804,7 +804,12 @@ export default function PartnersPage() {
         sortOptions={sortOptions}
         currentSort={sort}
         sortOrder={sortOrder}
-        onSortChange={(s, o) => { setSort(s); setSortOrder(o) }}
+        onSortChange={(s, o) => {
+          // Use the option's default order if switching to a new sort
+          const option = sortOptions.find(opt => opt.value === s)
+          setSort(s)
+          setSortOrder(o ?? option?.defaultOrder ?? 'asc')
+        }}
         resultCount={partners.length}
         totalCount={total}
         placeholder="Search brand, client, or code..."
@@ -900,7 +905,9 @@ export default function PartnersPage() {
                                 setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
                               } else {
                                 setSort(sortKey)
-                                setSortOrder('asc')
+                                // Date columns default to desc (newest first), text to asc
+                                const isDateCol = sortKey === 'onboarding_date' || sortKey === 'created_at' || sortKey === 'updated_at'
+                                setSortOrder(isDateCol ? 'desc' : 'asc')
                               }
                             }}
                             className={`flex items-center gap-1 hover:text-foreground transition-colors px-2 ${col.align === 'right' ? 'justify-end' : ''}`}
