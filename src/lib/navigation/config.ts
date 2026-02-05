@@ -14,6 +14,7 @@ import {
   Building2,
   Package,
   GitPullRequest,
+  MessageSquare,
   type LucideIcon,
 } from 'lucide-react'
 import { type Role, ROLES, isRoleAtLeast } from '@/lib/auth/roles'
@@ -57,6 +58,7 @@ export const navigation: NavSection[] = [
       { name: 'Data Enrichment', href: '/admin/data-enrichment', icon: Database, highlight: true },
       { name: 'Change Approval', href: '/admin/change-approval', icon: GitPullRequest },
       { name: 'Products', href: '/admin/products', icon: Package },
+      { name: 'Feedback', href: '/admin/feedback', icon: MessageSquare },
     ],
   },
 ]

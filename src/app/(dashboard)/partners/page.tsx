@@ -21,18 +21,10 @@ import { HealthHeatmap, clearHeatmapCache } from '@/components/partners/health-h
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuCheckboxItem,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip'
 import { useDebounce } from '@/lib/hooks/use-debounce'
 
 
@@ -391,14 +383,14 @@ function PartnerRow({ partner, columns, visibleColumns, onSync, onWeeklyClick, o
   }
 
   return (
-    <div className="flex items-center py-3.5 hover:bg-orange-500/5 dark:hover:bg-orange-500/10 transition-colors group">
+    <div className="flex items-center py-3.5 hover:bg-muted/30 transition-colors group">
       {/* Brand name - sticky left, clickable link */}
       <Link
         href={`/partners/${partner.id}`}
-        className="sticky left-0 z-10 bg-card group-hover:bg-orange-500/5 dark:group-hover:bg-orange-500/10 pl-5 pr-4 shrink-0 cursor-pointer transition-colors shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]"
+        className="sticky left-0 z-10 bg-card group-hover:bg-muted/30 pl-5 pr-4 shrink-0 cursor-pointer transition-colors"
         style={{ width: 180, minWidth: 180 }}
       >
-        <span className="font-medium text-sm truncate block hover:underline hover:text-orange-600 dark:hover:text-orange-400 transition-colors">
+        <span className="font-medium text-sm truncate block hover:text-primary transition-colors">
           {partner.brand_name}
         </span>
         {/* Mobile: show client name below brand */}
@@ -619,13 +611,6 @@ export default function PartnersPage() {
       .map(key => colMap.get(key))
       .filter((c): c is ColumnDef => c !== undefined)
   }, [allColumns, columnOrder])
-
-  // Columns ordered for the dropdown: visible first, then hidden
-  const dropdownOrderedColumns = useMemo(() => {
-    const visible = orderedColumns.filter(c => visibleColumns.has(c.key))
-    const hidden = orderedColumns.filter(c => !visibleColumns.has(c.key))
-    return { visible, hidden }
-  }, [orderedColumns, visibleColumns])
 
   const toggleColumn = (key: string) => {
     setVisibleColumns(prev => {
@@ -878,7 +863,7 @@ export default function PartnersPage() {
                           setSortOrder('asc')
                         }
                       }}
-                      className="sticky left-0 z-10 bg-card pl-5 pr-4 shrink-0 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] flex items-center gap-1 hover:text-foreground transition-colors"
+                      className="sticky left-0 z-10 bg-card pl-5 pr-4 shrink-0 flex items-center gap-1 hover:text-foreground transition-colors"
                       style={{ width: 180, minWidth: 180 }}
                     >
                       Brand

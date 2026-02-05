@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
   Tooltip,
@@ -81,12 +80,9 @@ export function HealthBarCompact({ onBucketClick }: HealthBarCompactProps) {
     }
   }
 
+  // Don't show anything while loading - avoids redundant spinner
   if (isLoading) {
-    return (
-      <div className="flex items-center gap-2 text-muted-foreground">
-        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-      </div>
-    )
+    return null
   }
 
   if (!data) return null
