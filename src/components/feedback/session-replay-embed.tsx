@@ -36,7 +36,7 @@ const PROJECT_ID = '306226'
  * Embedded PostHog session replay viewer with events inspector
  *
  * Features:
- * - Embedded replay iframe (requires sharing to be enabled in PostHog)
+ * - Embedded replay iframe (auto-enables sharing via PostHog API)
  * - Events timeline showing user actions
  * - Link to full PostHog view
  */
@@ -47,9 +47,43 @@ export function SessionReplayEmbed({ sessionId, defaultExpanded = false }: Sessi
   const [eventsError, setEventsError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'replay' | 'events'>('replay')
 
+  // Embed state
+  const [embedUrl, setEmbedUrl] = useState<string | null>(null)
+  const [loadingEmbed, setLoadingEmbed] = useState(false)
+  const [embedError, setEmbedError] = useState<string | null>(null)
+
   const posthogUrl = sessionId
     ? `https://us.posthog.com/project/${PROJECT_ID}/replay/${sessionId}`
     : null
+
+  // Fetch embed URL by enabling sharing via our API
+  const fetchEmbedUrl = useCallback(async () => {
+    if (!sessionId || embedUrl) return
+
+    setLoadingEmbed(true)
+    setEmbedError(null)
+
+    try {
+      const res = await fetch('/api/posthog/share-recording', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId }),
+      })
+
+      if (!res.ok) {
+        const json = await res.json()
+        throw new Error(json.error?.message || 'Failed to enable sharing')
+      }
+
+      const json = await res.json()
+      setEmbedUrl(json.data?.embedUrl || null)
+    } catch (error) {
+      console.error('Failed to get embed URL:', error)
+      setEmbedError(error instanceof Error ? error.message : 'Failed to load replay')
+    } finally {
+      setLoadingEmbed(false)
+    }
+  }, [sessionId, embedUrl])
 
   const fetchEvents = useCallback(async () => {
     if (!sessionId) return
@@ -58,7 +92,6 @@ export function SessionReplayEmbed({ sessionId, defaultExpanded = false }: Sessi
     setEventsError(null)
 
     try {
-      // Fetch events for this session via our API proxy
       const res = await fetch(`/api/posthog/session-events?sessionId=${sessionId}`)
 
       if (!res.ok) {
@@ -75,6 +108,13 @@ export function SessionReplayEmbed({ sessionId, defaultExpanded = false }: Sessi
       setLoadingEvents(false)
     }
   }, [sessionId])
+
+  // Fetch embed URL when expanded and replay tab is active
+  useEffect(() => {
+    if (expanded && activeTab === 'replay' && !embedUrl && !loadingEmbed) {
+      fetchEmbedUrl()
+    }
+  }, [expanded, activeTab, embedUrl, loadingEmbed, fetchEmbedUrl])
 
   // Fetch events when expanded and events tab is active
   useEffect(() => {
@@ -99,7 +139,6 @@ export function SessionReplayEmbed({ sessionId, defaultExpanded = false }: Sessi
   }
 
   const formatEventName = (event: string) => {
-    // Make event names more readable
     return event
       .replace('$', '')
       .replace(/_/g, ' ')
@@ -174,25 +213,55 @@ export function SessionReplayEmbed({ sessionId, defaultExpanded = false }: Sessi
 
           {/* Tab Content */}
           {activeTab === 'replay' && (
-            <div className="p-8 flex flex-col items-center justify-center text-center">
-              <div className="h-16 w-16 rounded-full bg-purple-500/10 flex items-center justify-center mb-4">
-                <Play className="h-8 w-8 text-purple-500" />
-              </div>
-              <h4 className="font-medium mb-2">Watch Session Recording</h4>
-              <p className="text-sm text-muted-foreground mb-4 max-w-sm">
-                See exactly what the user experienced - their clicks, scrolls, and the bug in action.
-              </p>
-              <Button asChild className="bg-purple-600 hover:bg-purple-700">
-                <a
-                  href={posthogUrl || '#'}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <Play className="h-4 w-4 mr-2" />
-                  Open in PostHog
-                  <ExternalLink className="h-3 w-3 ml-2" />
-                </a>
-              </Button>
+            <div className="relative">
+              {loadingEmbed ? (
+                <div className="aspect-video flex items-center justify-center bg-muted/20">
+                  <div className="text-center">
+                    <Loader2 className="h-8 w-8 animate-spin text-purple-500 mx-auto mb-2" />
+                    <p className="text-sm text-muted-foreground">Loading replay...</p>
+                  </div>
+                </div>
+              ) : embedError ? (
+                <div className="aspect-video flex flex-col items-center justify-center bg-muted/20">
+                  <AlertTriangle className="h-8 w-8 text-amber-500 mb-2" />
+                  <p className="text-sm text-muted-foreground mb-3">{embedError}</p>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setEmbedError(null)
+                        fetchEmbedUrl()
+                      }}
+                    >
+                      <RefreshCw className="h-3 w-3 mr-1" />
+                      Retry
+                    </Button>
+                    <Button asChild size="sm" className="bg-purple-600 hover:bg-purple-700">
+                      <a href={posthogUrl || '#'} target="_blank" rel="noopener noreferrer">
+                        Open in PostHog
+                        <ExternalLink className="h-3 w-3 ml-1" />
+                      </a>
+                    </Button>
+                  </div>
+                </div>
+              ) : embedUrl ? (
+                <div className="aspect-video">
+                  <iframe
+                    src={embedUrl}
+                    className="w-full h-full border-0"
+                    allow="fullscreen"
+                    title="PostHog Session Replay"
+                  />
+                </div>
+              ) : (
+                <div className="aspect-video flex items-center justify-center bg-muted/20">
+                  <div className="text-center">
+                    <Play className="h-8 w-8 text-muted-foreground mx-auto mb-2 opacity-50" />
+                    <p className="text-sm text-muted-foreground">Replay not available</p>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

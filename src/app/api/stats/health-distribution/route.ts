@@ -64,11 +64,12 @@ function matchStatusToBucket(
 /**
  * Extract the latest weekly status from partner source_data
  * Looks for columns matching pattern: "M/D/YY\nWeek N"
+ * Returns both the status and the date it was recorded
  */
 function getLatestWeeklyStatus(
   sourceData: Record<string, Record<string, Record<string, unknown>>> | null
-): string | null {
-  if (!sourceData) return null
+): { status: string | null; date: Date | null } {
+  if (!sourceData) return { status: null, date: null }
 
   let latestDate: Date | null = null
   let latestStatus: string | null = null
@@ -107,7 +108,7 @@ function getLatestWeeklyStatus(
     }
   }
 
-  return latestStatus
+  return { status: latestStatus, date: latestDate }
 }
 
 /**
@@ -159,14 +160,26 @@ export async function GET() {
     }
 
     // Count partners per bucket based on latest weekly status
+    // Exclude churned partners whose status is more than 2 weeks old
     const unmappedStatuses = new Map<string, number>()
+    const twoWeeksAgo = new Date()
+    twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14)
+
+    let includedCount = 0
 
     for (const partner of partners || []) {
       const sourceData = partner.source_data as Record<string, Record<string, Record<string, unknown>>> | null
-      const latestStatus = getLatestWeeklyStatus(sourceData)
+      const { status: latestStatus, date: statusDate } = getLatestWeeklyStatus(sourceData)
 
       const bucket = matchStatusToBucket(latestStatus, mappings || [])
+
+      // Skip old churned partners - they're not relevant to current health
+      if (bucket === 'churned' && statusDate && statusDate < twoWeeksAgo) {
+        continue
+      }
+
       distribution[bucket]++
+      includedCount++
 
       // Track unmapped statuses
       if (bucket === 'unknown' && latestStatus) {
@@ -190,7 +203,9 @@ export async function GET() {
     return apiSuccess({
       distribution,
       buckets,
-      total: partners?.length || 0,
+      total: includedCount,
+      totalPartners: partners?.length || 0, // Including old churned
+      excludedChurned: (partners?.length || 0) - includedCount,
       unmappedCount: distribution.unknown,
       unmappedStatuses: unmapped.slice(0, 10), // Top 10 unmapped
       lastCalculated: new Date().toISOString(),
