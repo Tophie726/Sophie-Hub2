@@ -775,6 +775,69 @@ transform_config: {
 
 ---
 
+## Error Handling & Resilience
+
+Sophie Hub uses a multi-layered approach to error handling to prevent crashes and provide good user experience.
+
+### Error Boundary Layers
+
+| Layer | File | Catches | Notes |
+|-------|------|---------|-------|
+| React Component Errors | `src/components/error-boundary.tsx` | Runtime errors in React components | Used in `main-layout.tsx` |
+| Route-Level Errors | `src/app/error.tsx` | Errors in route segments | Shows friendly UI with retry button |
+| Root Layout Errors | `src/app/global-error.tsx` | Errors in root layout | Includes own `<html>` and `<body>` |
+
+### What Error Boundaries DON'T Catch
+
+- **Compile-time/syntax errors** — These break the build before React runs
+- **Event handler errors** — Use try/catch inside handlers
+- **Async errors** — Use try/catch or `.catch()` on promises
+- **Server-side errors** — Need server-side error handling
+
+### Usage
+
+```tsx
+// ErrorBoundary wraps sections that might fail
+import { ErrorBoundary } from '@/components/error-boundary'
+
+<ErrorBoundary>
+  <RiskyComponent />
+</ErrorBoundary>
+
+// With custom fallback
+<ErrorBoundary fallback={<div>Something went wrong</div>}>
+  <RiskyComponent />
+</ErrorBoundary>
+
+// With error logging callback
+<ErrorBoundary onError={(error, info) => logToSentry(error, info)}>
+  <RiskyComponent />
+</ErrorBoundary>
+```
+
+### Pre-Deployment Safety
+
+To catch compile-time errors before they reach production:
+
+1. **Always run `npm run build`** before pushing to main
+2. **Vercel preview deploys** catch errors before production
+3. **Future: Pre-commit hooks** with husky can enforce lint/build checks
+
+### API Error Handling
+
+All API routes use standardized error responses:
+
+```typescript
+import { ApiErrors } from '@/lib/api/response'
+
+// In catch blocks
+return ApiErrors.database(error.message)
+return ApiErrors.internal()
+return ApiErrors.unauthorized()
+```
+
+---
+
 ## Dark Mode
 
 Sophie Hub supports light, dark, and system theme modes.
