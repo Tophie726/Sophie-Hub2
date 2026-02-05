@@ -46,6 +46,7 @@ import {
 } from '@/components/ui/select'
 import { FeedbackKanban } from '@/components/feedback/feedback-kanban'
 import { AdminComments } from '@/components/feedback/admin-comments'
+import { SessionReplayEmbed } from '@/components/feedback/session-replay-embed'
 
 type FeedbackType = 'bug' | 'feature' | 'question'
 type FeedbackStatus = 'new' | 'reviewed' | 'in_progress' | 'resolved' | 'wont_fix'
@@ -938,11 +939,6 @@ function FeedbackDetailDialog({
   const typeConfig = TYPE_CONFIG[item.type]
   const Icon = typeConfig.icon
 
-  // Build PostHog session replay URL if we have a session ID
-  const posthogUrl = item.posthog_session_id
-    ? `https://us.posthog.com/replay/${item.posthog_session_id}`
-    : null
-
   return (
     <Dialog open={!!item} onOpenChange={() => onClose()}>
       <DialogContent className="max-w-[95vw] md:max-w-[700px] max-h-[85vh] overflow-y-auto">
@@ -979,21 +975,8 @@ function FeedbackDetailDialog({
             </div>
           )}
 
-          {/* Session Replay */}
-          {posthogUrl && (
-            <div>
-              <h4 className="text-sm font-medium mb-1">Session Replay</h4>
-              <a
-                href={posthogUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 text-sm text-purple-500 hover:text-purple-600"
-              >
-                View in PostHog
-                <ExternalLink className="h-3 w-3" />
-              </a>
-            </div>
-          )}
+          {/* Session Replay - Embedded */}
+          <SessionReplayEmbed sessionId={item.posthog_session_id} />
 
           {/* Browser Info */}
           {item.browser_info && (

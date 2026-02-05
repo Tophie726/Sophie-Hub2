@@ -34,6 +34,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { useDebounce } from '@/lib/hooks/use-debounce'
+import { usePartnerSearch } from '@/lib/hooks/use-partner-search'
 
 
 // Extended partner type that includes source_data and computed status
@@ -614,6 +615,17 @@ export default function PartnersPage() {
 
   const debouncedSearch = useDebounce(search, 300)
 
+  // Client-side fuzzy search for instant filtering of loaded partners
+  const { results: filteredPartners } = usePartnerSearch({
+    partners,
+    searchQuery: search,
+    minChars: 2,
+    fuzzy: 0.2,
+  })
+
+  // Use filtered results when searching locally, otherwise use all partners
+  const displayedPartners = search.length >= 2 ? filteredPartners : partners
+
   // Discover additional columns from source_data
   const sourceDataColumns = useMemo(() => extractSourceDataColumns(partners), [partners])
 
@@ -848,7 +860,7 @@ export default function PartnersPage() {
           setSort(s)
           setSortOrder(o ?? option?.defaultOrder ?? 'asc')
         }}
-        resultCount={partners.length}
+        resultCount={displayedPartners.length}
         totalCount={total}
         placeholder="Search brand, client, or code..."
       />
@@ -866,19 +878,21 @@ export default function PartnersPage() {
               <ShimmerGrid variant="table" rows={8} columns={6} />
             </div>
           </div>
-        ) : partners.length === 0 ? (
+        ) : displayedPartners.length === 0 ? (
           <Card className="border-dashed">
             <CardContent className="flex flex-col items-center justify-center py-16">
               <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-500/10 mb-6">
                 <Building2 className="h-8 w-8 text-blue-500" />
               </div>
               <h2 className="text-xl font-semibold mb-2">
-                {debouncedSearch || statusFilter.length > 0
+                {search || statusFilter.length > 0
                   ? 'No partners match your filters'
                   : 'No partners yet'}
               </h2>
               <p className="text-muted-foreground text-center max-w-md mb-6">
-                {debouncedSearch || statusFilter.length > 0
+                {search && partners.length > 0
+                  ? `No matches found in ${partners.length} loaded partners. Try a different search term.`
+                  : search || statusFilter.length > 0
                   ? 'Try adjusting your search or filters to find what you\'re looking for.'
                   : 'Partners will appear here as you map fields through Data Enrichment. Connect a Google Sheet, map your columns, and sync — data flows in automatically.'}
               </p>
@@ -1014,7 +1028,7 @@ export default function PartnersPage() {
                 }}
               >
                 <div className="divide-y divide-border/60 rounded-b-xl min-w-fit">
-                  {partners.map(partner => (
+                  {displayedPartners.map(partner => (
                     <PartnerRow
                       key={partner.id}
                       partner={partner}

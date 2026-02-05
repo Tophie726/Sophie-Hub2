@@ -3,6 +3,9 @@
 import { useState, useCallback } from 'react'
 import { useTheme } from 'next-themes'
 import { Button } from '@/components/ui/button'
+
+// Excalidraw CSS is required for the component to render properly
+import '@excalidraw/excalidraw/index.css'
 import {
   Dialog,
   DialogContent,
