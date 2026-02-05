@@ -9,6 +9,9 @@ const POSTHOG_HOST = 'https://us.posthog.com'
  * POST /api/posthog/share-recording
  * Enable sharing for a PostHog session recording and return the embed URL
  *
+ * Per PostHog docs: use personal_api_key as query param, not header
+ * https://posthog.com/docs/session-replay/sharing
+ *
  * Body:
  * - sessionId: The PostHog session ID
  */
@@ -35,12 +38,13 @@ export async function POST(request: Request) {
       return apiError('SERVICE_UNAVAILABLE', 'PostHog API key not configured', 503)
     }
 
-    // First, check if sharing is already enabled for this recording
-    const checkUrl = `${POSTHOG_HOST}/api/projects/${PROJECT_ID}/session_recordings/${sessionId}/sharing`
+    // Build URL with personal_api_key as query param (per PostHog docs)
+    const baseUrl = `${POSTHOG_HOST}/api/projects/${PROJECT_ID}/session_recordings/${sessionId}/sharing`
+    const urlWithKey = `${baseUrl}?personal_api_key=${encodeURIComponent(apiKey)}`
 
-    const checkRes = await fetch(checkUrl, {
+    // First, check if sharing is already enabled for this recording
+    const checkRes = await fetch(urlWithKey, {
       headers: {
-        Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
     })
@@ -58,23 +62,45 @@ export async function POST(request: Request) {
       }
     }
 
-    // Create a new sharing token
-    const createRes = await fetch(checkUrl, {
-      method: 'POST',
+    // Enable sharing using PATCH (per PostHog docs)
+    const enableRes = await fetch(urlWithKey, {
+      method: 'PATCH',
       headers: {
-        Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ enabled: true }),
     })
 
-    if (!createRes.ok) {
-      const errorText = await createRes.text()
-      console.error('PostHog sharing API error:', createRes.status, errorText)
-      return apiError('EXTERNAL_API_ERROR', 'Failed to enable sharing for this recording', 502)
+    if (!enableRes.ok) {
+      const errorText = await enableRes.text()
+      console.error('PostHog sharing PATCH error:', enableRes.status, errorText)
+
+      // Try POST as fallback (some API versions use POST)
+      const createRes = await fetch(urlWithKey, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ enabled: true }),
+      })
+
+      if (!createRes.ok) {
+        const createErrorText = await createRes.text()
+        console.error('PostHog sharing POST error:', createRes.status, createErrorText)
+        return apiError('EXTERNAL_API_ERROR', 'Failed to enable sharing for this recording', 502)
+      }
+
+      const shareData = await createRes.json()
+      if (shareData.access_token) {
+        return apiSuccess({
+          embedUrl: `${POSTHOG_HOST}/embedded/${shareData.access_token}`,
+          accessToken: shareData.access_token,
+          cached: false,
+        })
+      }
     }
 
-    const shareData = await createRes.json()
+    const shareData = await enableRes.json()
 
     if (!shareData.access_token) {
       console.error('No access_token in PostHog response:', shareData)

@@ -977,7 +977,30 @@ function FeedbackDetailDialog({
             </div>
           )}
 
-          {/* Session Replay - Embedded */}
+          {/* Screenshot - User's report */}
+          {item.screenshot_url && (
+            <div>
+              <h4 className="text-sm font-medium mb-1">Screenshot</h4>
+              <div className="relative rounded-lg border bg-muted/30 overflow-hidden">
+                <img
+                  src={item.screenshot_url}
+                  alt="Bug screenshot"
+                  className="w-full max-h-[300px] object-contain cursor-pointer hover:opacity-90 transition-opacity"
+                  onClick={() => {
+                    const win = window.open()
+                    if (win) {
+                      win.document.write(`<img src="${item.screenshot_url}" style="max-width: 100%;">`)
+                    }
+                  }}
+                />
+                <p className="text-xs text-muted-foreground text-center py-1 bg-muted/50">
+                  Click to view full size
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Session Replay - Video of what happened */}
           <SessionReplayEmbed sessionId={item.posthog_session_id} />
 
           {/* Browser Info */}
@@ -991,30 +1014,6 @@ function FeedbackDetailDialog({
                     {String(value)}
                   </div>
                 ))}
-              </div>
-            </div>
-          )}
-
-          {/* Screenshot */}
-          {item.screenshot_url && (
-            <div>
-              <h4 className="text-sm font-medium mb-1">Screenshot</h4>
-              <div className="relative rounded-lg border bg-muted/30 overflow-hidden">
-                <img
-                  src={item.screenshot_url}
-                  alt="Bug screenshot"
-                  className="w-full max-h-[300px] object-contain cursor-pointer hover:opacity-90 transition-opacity"
-                  onClick={() => {
-                    // Open image in new tab for full view
-                    const win = window.open()
-                    if (win) {
-                      win.document.write(`<img src="${item.screenshot_url}" style="max-width: 100%;">`)
-                    }
-                  }}
-                />
-                <p className="text-xs text-muted-foreground text-center py-1 bg-muted/50">
-                  Click to view full size
-                </p>
               </div>
             </div>
           )}
