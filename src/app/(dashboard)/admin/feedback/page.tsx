@@ -584,10 +584,8 @@ function FeedbackCard({
   // AI view is enabled only if both page-level AND card-level toggles are on
   const showAIView = aiEnabled && showAIViewLocal
 
-  // Determine what to show based on AI toggle
-  const displayTitle = (hasAI && showAIView && summary)
-    ? summary.summary.split('.')[0]
-    : (item.title || item.description.slice(0, 60))
+  // Title is always the original - truncated if too long
+  const displayTitle = item.title || item.description.slice(0, 60) + (item.description.length > 60 ? '...' : '')
 
   return (
     <Card
@@ -624,12 +622,9 @@ function FeedbackCard({
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                {/* Show AI summary as title if available and enabled, otherwise original */}
-                <h4 className="font-medium truncate flex items-center gap-2">
+                {/* Title is always the original user content */}
+                <h4 className="font-medium truncate">
                   {displayTitle}
-                  {hasAI && !showAIView && (
-                    <span className="text-xs text-muted-foreground">(original)</span>
-                  )}
                 </h4>
                 <p className="text-sm text-muted-foreground line-clamp-2 mt-1">
                   {item.description}

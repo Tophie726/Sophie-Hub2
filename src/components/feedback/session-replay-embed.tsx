@@ -51,11 +51,6 @@ export function SessionReplayEmbed({ sessionId, defaultExpanded = false }: Sessi
     ? `https://us.posthog.com/project/${PROJECT_ID}/replay/${sessionId}`
     : null
 
-  // Embed URL uses the shared replay format
-  const embedUrl = sessionId
-    ? `https://us.posthog.com/embedded/${sessionId}?noInspector=true`
-    : null
-
   const fetchEvents = useCallback(async () => {
     if (!sessionId) return
 
@@ -179,30 +174,25 @@ export function SessionReplayEmbed({ sessionId, defaultExpanded = false }: Sessi
 
           {/* Tab Content */}
           {activeTab === 'replay' && (
-            <div className="aspect-video bg-black/5 dark:bg-black/20 relative">
-              {embedUrl ? (
-                <iframe
-                  src={embedUrl}
-                  className="w-full h-full border-0"
-                  allow="fullscreen"
-                  title="PostHog Session Replay"
-                />
-              ) : (
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="text-center text-muted-foreground">
-                    <Play className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                    <p className="text-sm">Replay not available</p>
-                    <a
-                      href={posthogUrl || '#'}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-purple-500 hover:underline mt-1 inline-block"
-                    >
-                      View in PostHog →
-                    </a>
-                  </div>
-                </div>
-              )}
+            <div className="p-8 flex flex-col items-center justify-center text-center">
+              <div className="h-16 w-16 rounded-full bg-purple-500/10 flex items-center justify-center mb-4">
+                <Play className="h-8 w-8 text-purple-500" />
+              </div>
+              <h4 className="font-medium mb-2">Watch Session Recording</h4>
+              <p className="text-sm text-muted-foreground mb-4 max-w-sm">
+                See exactly what the user experienced - their clicks, scrolls, and the bug in action.
+              </p>
+              <Button asChild className="bg-purple-600 hover:bg-purple-700">
+                <a
+                  href={posthogUrl || '#'}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Play className="h-4 w-4 mr-2" />
+                  Open in PostHog
+                  <ExternalLink className="h-3 w-3 ml-2" />
+                </a>
+              </Button>
             </div>
           )}
 
