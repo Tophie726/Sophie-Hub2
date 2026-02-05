@@ -1,5 +1,5 @@
 import { getAdminClient } from '@/lib/supabase/admin'
-import { requireAuth } from '@/lib/auth/api-auth'
+import { requireAuth, canAccessPartner } from '@/lib/auth/api-auth'
 import { apiSuccess, ApiErrors } from '@/lib/api/response'
 import { deduplicateLineage, type FieldLineageRow } from '@/types/lineage'
 
@@ -10,6 +10,7 @@ const supabase = getAdminClient()
  *
  * Get a single partner with assignments, ASINs, and recent weekly statuses.
  * Runs 4 queries in parallel for performance.
+ * Requires authentication and partner access check (admin or assigned staff).
  */
 export async function GET(
   _request: Request,
@@ -20,6 +21,12 @@ export async function GET(
 
   try {
     const { id } = await params
+
+    // Verify the user has access to this specific partner
+    const hasAccess = await canAccessPartner(auth.user.id, auth.user.role, id)
+    if (!hasAccess) {
+      return ApiErrors.forbidden('You do not have access to this partner')
+    }
 
     // Run all queries in parallel
     const [partnerResult, assignmentsResult, asinsResult, statusesResult, lineageResult] = await Promise.all([

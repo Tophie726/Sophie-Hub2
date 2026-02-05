@@ -1,6 +1,6 @@
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth/config'
-import { requireAuth } from '@/lib/auth/api-auth'
+import { requireAuth, canAccessPartner } from '@/lib/auth/api-auth'
 import { apiSuccess, ApiErrors } from '@/lib/api/response'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { getConnector, hasConnector, type GoogleSheetConnectorConfig, type ConnectorTypeId } from '@/lib/connectors'
@@ -45,6 +45,12 @@ export async function POST(
 
   try {
     const { id } = await params
+
+    // Verify the user has access to this specific partner
+    const hasAccess = await canAccessPartner(auth.user.id, auth.user.role, id)
+    if (!hasAccess) {
+      return ApiErrors.forbidden('You do not have access to this partner')
+    }
 
     // 1. Get the partner with current source_data
     const { data: partner, error: partnerError } = await supabase

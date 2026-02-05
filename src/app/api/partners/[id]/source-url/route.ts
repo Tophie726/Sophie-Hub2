@@ -1,6 +1,6 @@
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth/config'
-import { requireAuth } from '@/lib/auth/api-auth'
+import { requireAuth, canAccessPartner } from '@/lib/auth/api-auth'
 import { apiSuccess, ApiErrors } from '@/lib/api/response'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { google } from 'googleapis'
@@ -65,6 +65,12 @@ export async function GET(
 
   if (!partnerId) {
     return ApiErrors.notFound('Partner ID')
+  }
+
+  // Verify the user has access to this specific partner
+  const hasAccess = await canAccessPartner(auth.user.id, auth.user.role, partnerId)
+  if (!hasAccess) {
+    return ApiErrors.forbidden('You do not have access to this partner')
   }
 
   const session = await getServerSession(authOptions)
