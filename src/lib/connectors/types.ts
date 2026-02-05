@@ -17,6 +17,7 @@
 export type ConnectorTypeId =
   | 'google_sheet'
   | 'google_form'
+  | 'bigquery'
   | 'api'
   | 'csv'
   // Future connectors:
@@ -75,12 +76,29 @@ export interface CsvConnectorConfig {
 }
 
 /**
+ * Configuration for BigQuery connector
+ * Used for querying Amazon advertising/sales data
+ */
+export interface BigQueryConnectorConfig {
+  type: 'bigquery'
+  /** GCP project ID (e.g., 'sophie-society-reporting') */
+  project_id: string
+  /** BigQuery dataset ID (e.g., 'pbi') */
+  dataset_id: string
+  /** Optional: specific view/table to query */
+  view_name?: string
+  /** Field containing partner identifier (default: 'client_name') */
+  partner_field?: string
+}
+
+/**
  * Discriminated union of all connector configurations
  * Use this when storing/retrieving connector config from the database
  */
 export type ConnectorConfig =
   | GoogleSheetConnectorConfig
   | GoogleFormConnectorConfig
+  | BigQueryConnectorConfig
   | ApiConnectorConfig
   | CsvConnectorConfig
 
@@ -275,6 +293,15 @@ export function isCsvConfig(
   config: ConnectorConfig
 ): config is CsvConnectorConfig {
   return config.type === 'csv'
+}
+
+/**
+ * Type guard to check if a config is for BigQuery
+ */
+export function isBigQueryConfig(
+  config: ConnectorConfig
+): config is BigQueryConnectorConfig {
+  return config.type === 'bigquery'
 }
 
 // =============================================================================

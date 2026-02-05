@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { FileSpreadsheet, FileText, FileQuestion, Loader2 } from 'lucide-react'
+import { FileSpreadsheet, FileText, FileQuestion, Database, Loader2 } from 'lucide-react'
 import { CategoryCard } from './category-card'
 
 interface DataSourceStats {
@@ -12,7 +12,7 @@ interface DataSourceStats {
 }
 
 interface CategoryHubProps {
-  onSelectCategory: (category: 'sheets' | 'forms' | 'docs') => void
+  onSelectCategory: (category: 'sheets' | 'forms' | 'docs' | 'bigquery') => void
 }
 
 const easeOut: [number, number, number, number] = [0.22, 1, 0.36, 1]
@@ -81,6 +81,15 @@ export function CategoryHub({ onSelectCategory }: CategoryHubProps) {
           bgColor="bg-green-500/10"
           stats={sheetsStats || undefined}
           onClick={() => onSelectCategory('sheets')}
+        />
+
+        <CategoryCard
+          title="BigQuery"
+          description="Amazon advertising and sales data from BigQuery"
+          icon={Database}
+          iconColor="text-blue-600"
+          bgColor="bg-blue-500/10"
+          onClick={() => onSelectCategory('bigquery')}
         />
 
         <CategoryCard

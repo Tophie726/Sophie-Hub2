@@ -5,10 +5,11 @@ import { useSearchParams, useRouter } from 'next/navigation'
 import { PageHeader } from '@/components/layout/page-header'
 import { CategoryHub, SourceBrowser } from '@/components/data-enrichment/browser'
 import { DataFlowMap } from '@/components/data-enrichment/lineage'
+import { PartnerMapping } from '@/components/data-enrichment/bigquery'
 import { Button } from '@/components/ui/button'
-import { Network } from 'lucide-react'
+import { Network, ArrowLeft } from 'lucide-react'
 
-type DataBrowserView = 'hub' | 'sheets-overview' | 'sheets-browser' | 'forms' | 'docs' | 'flow-map'
+type DataBrowserView = 'hub' | 'sheets-overview' | 'sheets-browser' | 'bigquery' | 'forms' | 'docs' | 'flow-map'
 
 // Wrap in Suspense so useSearchParams() works on direct URL navigation
 export default function DataEnrichmentPage() {
@@ -25,47 +26,44 @@ function DataEnrichmentContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
 
-  // Read initial state from URL params, then localStorage fallback
-  const getInitialState = () => {
-    // URL params take priority
+  // Get initial state from URL params only (localStorage read deferred to useEffect)
+  const getInitialFromUrl = () => {
     const urlView = searchParams.get('view') as DataBrowserView | null
     const urlSourceId = searchParams.get('source')
     const urlTabId = searchParams.get('tab')
 
-    if (urlView || urlSourceId || urlTabId) {
-      return {
-        view: urlView || 'hub',
-        sourceId: urlSourceId,
-        tabId: urlTabId,
-      }
+    return {
+      view: urlView || 'hub' as DataBrowserView,
+      sourceId: urlSourceId,
+      tabId: urlTabId,
     }
+  }
 
-    // Fallback to localStorage
-    if (typeof window !== 'undefined') {
+  const initial = getInitialFromUrl()
+
+  // Data Browser view state (initialized from URL, localStorage applied in useEffect)
+  const [browserView, setBrowserView] = useState<DataBrowserView>(initial.view)
+  const [selectedSourceId, setSelectedSourceId] = useState<string | null>(initial.sourceId)
+  const [selectedTabId, setSelectedTabId] = useState<string | null>(initial.tabId)
+  const [isHydrated, setIsHydrated] = useState(false)
+
+  // Restore from localStorage after hydration (only if no URL params)
+  useEffect(() => {
+    if (!initial.view || initial.view === 'hub') {
       try {
         const stored = localStorage.getItem(STORAGE_KEY)
         if (stored) {
           const parsed = JSON.parse(stored)
-          return {
-            view: (parsed.view as DataBrowserView) || 'hub',
-            sourceId: parsed.sourceId || null,
-            tabId: parsed.tabId || null,
-          }
+          if (parsed.view) setBrowserView(parsed.view)
+          if (parsed.sourceId) setSelectedSourceId(parsed.sourceId)
+          if (parsed.tabId) setSelectedTabId(parsed.tabId)
         }
       } catch {
         // Ignore parse errors
       }
     }
-
-    return { view: 'hub' as DataBrowserView, sourceId: null, tabId: null }
-  }
-
-  const initial = getInitialState()
-
-  // Data Browser view state (initialized from URL or localStorage)
-  const [browserView, setBrowserView] = useState<DataBrowserView>(initial.view)
-  const [selectedSourceId, setSelectedSourceId] = useState<string | null>(initial.sourceId)
-  const [selectedTabId, setSelectedTabId] = useState<string | null>(initial.tabId)
+    setIsHydrated(true)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Sync state to URL when it changes
   const updateURL = useCallback((view: DataBrowserView, sourceId: string | null, tabId: string | null) => {
@@ -101,11 +99,13 @@ function DataEnrichmentContent() {
   }, [browserView, selectedSourceId, selectedTabId, updateURL])
 
   // Handle category selection from the hub
-  const handleSelectCategory = (category: 'sheets' | 'forms' | 'docs') => {
+  const handleSelectCategory = (category: 'sheets' | 'forms' | 'docs' | 'bigquery') => {
     if (category === 'sheets') {
       // Go directly to SourceBrowser - it has its own modal and handles everything
       setSelectedSourceId(null)
       setBrowserView('sheets-browser')
+    } else if (category === 'bigquery') {
+      setBrowserView('bigquery')
     } else {
       setBrowserView(category)
     }
@@ -158,6 +158,32 @@ function DataEnrichmentContent() {
             key="flow-map"
             onBack={() => setBrowserView('hub')}
           />
+        )}
+
+        {/* BigQuery View */}
+        {browserView === 'bigquery' && (
+          <div className="p-4 md:p-8">
+            <div className="max-w-4xl mx-auto space-y-6">
+              <div className="flex items-center gap-4">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setBrowserView('hub')}
+                  className="h-9 px-2"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </Button>
+                <div>
+                  <h2 className="text-2xl font-bold">BigQuery Integration</h2>
+                  <p className="text-muted-foreground">Map BigQuery clients to Sophie Hub partners</p>
+                </div>
+              </div>
+
+              <div className="rounded-lg border bg-card p-6">
+                <PartnerMapping />
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Forms View - Coming Soon */}

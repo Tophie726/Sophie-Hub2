@@ -34,6 +34,7 @@ export type {
   ConnectorConfig,
   GoogleSheetConnectorConfig,
   GoogleFormConnectorConfig,
+  BigQueryConnectorConfig,
   ApiConnectorConfig,
   CsvConnectorConfig,
   // Metadata
@@ -55,6 +56,7 @@ export {
   // Type guards
   isGoogleSheetConfig,
   isGoogleFormConfig,
+  isBigQueryConfig,
   isApiConfig,
   isCsvConfig,
 } from './types'
@@ -83,6 +85,7 @@ export {
 // =============================================================================
 
 export { GoogleSheetsConnector, googleSheetsConnector } from './google-sheets'
+export { BigQueryConnector, bigQueryConnector, UNIFIED_VIEWS } from './bigquery'
 
 // =============================================================================
 // Auto-Register Connectors
@@ -90,11 +93,18 @@ export { GoogleSheetsConnector, googleSheetsConnector } from './google-sheets'
 
 import { registerConnector } from './registry'
 import { googleSheetsConnector } from './google-sheets'
+import { bigQueryConnector } from './bigquery'
 
-// Register the Google Sheets connector on module load
-// This ensures it's available immediately when the module is imported
+// Register connectors on module load
+// This ensures they're available immediately when the module is imported
 try {
   registerConnector(googleSheetsConnector)
+} catch {
+  // Already registered (module was imported multiple times)
+}
+
+try {
+  registerConnector(bigQueryConnector)
 } catch {
   // Already registered (module was imported multiple times)
 }
