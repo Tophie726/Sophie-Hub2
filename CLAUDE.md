@@ -175,7 +175,23 @@ All other data is either:
 | Animation | Framer Motion |
 | Database | Supabase (PostgreSQL) |
 | Auth | NextAuth.js + Google OAuth |
-| External APIs | Google Sheets API (primary data source) |
+| Data Fetching | TanStack Query |
+| Forms | React Hook Form + Zod |
+| Search | MiniSearch (fuzzy client-side) |
+| Drawing | Excalidraw (MIT) |
+| External APIs | Google Sheets API, Anthropic API |
+
+### Key Libraries (All MIT/Apache 2.0 - Free for Commercial Use)
+
+| Library | Purpose |
+|---------|---------|
+| `@tanstack/react-query` | Data fetching, caching, sync |
+| `@excalidraw/excalidraw` | Drawing/whiteboard for feedback |
+| `minisearch` | Fast fuzzy search for partners/staff |
+| `sonner` | Toast notifications |
+| `date-fns` | Date manipulation |
+| `zod` | Schema validation |
+| `html2canvas` | Screenshot capture |
 
 ## Project Structure
 

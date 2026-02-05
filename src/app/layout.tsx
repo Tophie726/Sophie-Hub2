@@ -4,6 +4,7 @@ import "./globals.css";
 import { SessionProvider } from "@/components/providers/session-provider";
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import { PostHogProvider } from "@/components/providers/posthog-provider";
+import { QueryProvider } from "@/components/providers/query-provider";
 import { Toaster } from "@/components/ui/toaster";
 import { SessionMonitor } from "@/components/providers/session-monitor";
 
@@ -41,13 +42,15 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <ThemeProvider>
-          <PostHogProvider>
-            <SessionProvider>
-              <SessionMonitor />
-              {children}
-              <Toaster />
-            </SessionProvider>
-          </PostHogProvider>
+          <QueryProvider>
+            <PostHogProvider>
+              <SessionProvider>
+                <SessionMonitor />
+                {children}
+                <Toaster />
+              </SessionProvider>
+            </PostHogProvider>
+          </QueryProvider>
         </ThemeProvider>
       </body>
     </html>
