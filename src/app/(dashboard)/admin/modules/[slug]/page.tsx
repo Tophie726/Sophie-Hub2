@@ -9,7 +9,6 @@ import { cn } from '@/lib/utils'
 import { PageHeader } from '@/components/layout/page-header'
 import { DashboardList } from '@/components/modules/dashboard-list'
 import { UsageDashboard } from '@/components/modules/usage-dashboard'
-import { UsagePreview } from '@/components/modules/usage-preview'
 import { PortfolioCard } from '@/components/modules/portfolio-card'
 import type { Module } from '@/types/modules'
 
@@ -134,15 +133,10 @@ export default function ModuleDetailPage() {
           {/* Dashboards tab */}
           {activeTab === 'dashboards' && (
             <div className="space-y-6">
-              {/* Mini usage preview card */}
-              {isAmazonReporting && (
-                <UsagePreview
-                  moduleSlug={params.slug}
-                  onViewDetails={() => setActiveTab('usage')}
-                />
-              )}
               {/* Portfolio overview card */}
-              <PortfolioCard moduleSlug={params.slug} />
+              {isAmazonReporting && (
+                <PortfolioCard moduleSlug={params.slug} />
+              )}
               <DashboardList module={module} />
             </div>
           )}
