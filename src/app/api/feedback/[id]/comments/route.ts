@@ -10,10 +10,11 @@ const AttachmentSchema = z.object({
   url: z.string().refine(
     (url) => {
       const lower = url.toLowerCase().trim()
-      if (lower.startsWith('javascript:') || lower.startsWith('vbscript:') || lower.startsWith('data:text/html')) return false
-      return lower.startsWith('http://') || lower.startsWith('https://') || lower.startsWith('data:')
+      if (lower.startsWith('http://') || lower.startsWith('https://')) return true
+      if (lower.startsWith('data:image/') || lower.startsWith('data:application/pdf')) return true
+      return false
     },
-    { message: 'URL must use http, https, or data scheme (no scripts)' }
+    { message: 'URL must use http/https or be a data:image/data:pdf URI' }
   ),
   name: z.string().optional(),
 })

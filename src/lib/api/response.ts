@@ -151,11 +151,13 @@ export const ApiErrors = {
   rateLimited: (message = 'Too many requests') =>
     apiError(ErrorCodes.RATE_LIMITED, message, 429),
 
-  internal: (message = 'An unexpected error occurred') =>
-    apiError(ErrorCodes.INTERNAL_ERROR, message, 500),
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  internal: (..._args: unknown[]) =>
+    apiError(ErrorCodes.INTERNAL_ERROR, 'An unexpected error occurred', 500),
 
-  database: (message = 'Database error') =>
-    apiError(ErrorCodes.DATABASE_ERROR, message, 500),
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  database: (..._args: unknown[]) =>
+    apiError(ErrorCodes.DATABASE_ERROR, 'Database error', 500),
 
   externalApi: (service: string, message?: string) =>
     apiError(ErrorCodes.EXTERNAL_API_ERROR, message || `${service} API error`, 502),

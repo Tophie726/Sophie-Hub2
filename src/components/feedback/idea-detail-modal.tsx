@@ -30,10 +30,8 @@ import { DrawingPad } from './drawing-pad'
 
 function safeHref(url: string): string {
   const lower = url.toLowerCase().trim()
-  if (lower.startsWith('http://') || lower.startsWith('https://') || lower.startsWith('data:')) {
-    if (lower.startsWith('data:text/html')) return '#'
-    return url
-  }
+  if (lower.startsWith('http://') || lower.startsWith('https://')) return url
+  if (lower.startsWith('data:image/') || lower.startsWith('data:application/pdf')) return url
   return '#'
 }
 
