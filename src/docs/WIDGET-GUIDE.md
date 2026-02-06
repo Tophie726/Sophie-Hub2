@@ -157,12 +157,43 @@ alignment — left | center | right
 
 ### Widget Size Options
 
-All widget types can be resized after selecting their type:
+Widgets can be resized in two ways:
+
+1. **During creation** — Set initial size in the widget config dialog
+2. **Drag-to-resize** — In edit mode, grab the bottom-right corner handle and drag to snap to grid
 
 | Dimension | Options |
 |-----------|---------|
 | Width (col_span) | 1 column, 2 columns, 3 columns, 4 columns (full width) |
 | Height (row_span) | 1 row, 2 rows, 3 rows |
+
+The drag-resize handle appears on hover in edit mode as a subtle grip icon. During drag, a pill label shows the target size (e.g., "3x2") and the widget has a blue ring preview. On release, the widget snaps to the nearest grid increment.
+
+### Preset Widgets
+
+The widget config dialog includes a "Start from Preset" section with 18 production-ready widget configurations organized into 3 templates:
+
+**Executive Overview** (6 presets):
+Total Sales Revenue, Total Units Ordered, Total Ad Spend, ROAS, Sales Trend, Revenue vs Ad Spend
+
+**PPC Performance** (6 presets):
+SP Ad Spend, SP ACOS, SP Impressions, SP Clicks vs Orders, SP Campaign Breakdown, SD Spend vs Sales
+
+**Product Analytics** (6 presets):
+Sessions, Refund Rate, Sessions Trend, Refunds Over Time, ASIN Performance, Match Type Revenue
+
+Clicking a preset pre-fills the widget type, title, view, metrics, and all config options. Users can still customize everything after selecting a preset. Presets are defined in `src/lib/bigquery/widget-presets.ts`.
+
+### Multi-View PPC Queries
+
+When creating a PPC widget (SP, SD, or SB view), a **Campaign Types** selector appears with three toggle chips:
+- Sponsored Products (SP)
+- Sponsored Display (SD)
+- Sponsored Brands (SB)
+
+Selecting multiple campaign types causes the widget to query each view in parallel and sum/merge the results client-side. This enables "Total Ad Spend across all campaign types" in a single widget.
+
+The `ppc_views` config field stores the selected views (e.g., `['sp', 'sd']`). When only one view is selected, the widget behaves as before.
 
 ---
 
@@ -530,6 +561,23 @@ BigQuery queries are expensive. The query API enforces rate limits per user to p
 
 These metrics are derived client-side from the raw columns returned by BigQuery. They are not stored as columns in BigQuery and cannot be selected in widget config dropdowns.
 
+### Using Computed Metrics in Widgets
+
+Computed metrics are configured via the `computed` field in `MetricWidgetConfig`:
+
+```typescript
+computed: {
+  formula: 'acos' | 'roas' | 'tacos' | 'cpc' | 'ctr' | 'cvr'
+  numerator: string    // column name (e.g., 'ppc_spend')
+  denominator: string  // column name (e.g., 'ppc_sales')
+  multiply?: number    // optional multiplier (100 for percentages)
+}
+```
+
+The widget fetches both the numerator and denominator columns, then computes the ratio client-side. Division by zero displays an em dash ("--") instead of crashing.
+
+Preset widgets for ACOS and ROAS already have the `computed` field pre-configured. Custom computed metrics can be created by setting this field manually in the widget config.
+
 ### ACOS (Advertising Cost of Sales)
 
 ```
@@ -779,5 +827,7 @@ To add an entirely new BigQuery view:
 |--------|---------|------|-----------|
 | ACOS | `(spend / sales) * 100` | % | Lower = better |
 | ROAS | `sales / spend` | ratio | Higher = better |
-| Conversion Rate | `(orders / clicks) * 100` | % | Higher = better |
+| TACoS | `(ad_spend / total_sales) * 100` | % | Lower = better |
 | CPC | `spend / clicks` | $ | Lower = better |
+| CTR | `(clicks / impressions) * 100` | % | Higher = better |
+| CVR | `(orders / clicks) * 100` | % | Higher = better |
