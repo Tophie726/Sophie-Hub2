@@ -10,6 +10,7 @@ import type { DashboardWithChildren } from '@/types/modules'
 export default function DashboardBuilderPage() {
   const params = useParams()
   const dashboardId = params.dashboardId as string
+  const moduleSlug = params.slug as string
 
   const [dashboard, setDashboard] = useState<DashboardWithChildren | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -67,7 +68,7 @@ export default function DashboardBuilderPage() {
   return (
     <DashboardBuilder
       dashboard={dashboard}
-      moduleSlug="amazon-reporting"
+      moduleSlug={moduleSlug}
     />
   )
 }
