@@ -8,8 +8,12 @@ import { z } from 'zod'
 const AttachmentSchema = z.object({
   type: z.enum(['image', 'drawing', 'file']),
   url: z.string().refine(
-    (url) => url.startsWith('https://') || url.startsWith('http://') || url.startsWith('data:image/'),
-    { message: 'URL must use http, https, or data:image scheme' }
+    (url) => {
+      const lower = url.toLowerCase().trim()
+      if (lower.startsWith('javascript:') || lower.startsWith('vbscript:') || lower.startsWith('data:text/html')) return false
+      return lower.startsWith('http://') || lower.startsWith('https://') || lower.startsWith('data:')
+    },
+    { message: 'URL must use http, https, or data scheme (no scripts)' }
   ),
   name: z.string().optional(),
 })

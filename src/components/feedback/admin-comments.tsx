@@ -30,7 +30,11 @@ import {
 } from '@/components/ui/dialog'
 
 function safeHref(url: string): string {
-  if (url.startsWith('https://') || url.startsWith('http://') || url.startsWith('data:image/')) return url
+  const lower = url.toLowerCase().trim()
+  if (lower.startsWith('http://') || lower.startsWith('https://') || lower.startsWith('data:')) {
+    if (lower.startsWith('data:text/html')) return '#'
+    return url
+  }
   return '#'
 }
 
