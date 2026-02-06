@@ -239,7 +239,11 @@ export async function POST(request: NextRequest) {
 
     // Execute
     const bq = new BigQuery({ projectId: BIGQUERY.PROJECT_ID })
-    const [job] = await bq.createQueryJob({ query, params })
+    const [job] = await bq.createQueryJob({
+      query,
+      params,
+      labels: { source: 'sophie-hub', view: view },
+    })
     const [rows] = await job.getQueryResults()
 
     // Fire-and-forget: log usage without blocking response

@@ -2,9 +2,10 @@
  * GET /api/bigquery/usage?period=30d
  *
  * Returns BigQuery usage and cost data for the admin dashboard.
- * Combines two data sources:
- *   1. INFORMATION_SCHEMA.JOBS_BY_PROJECT — ground-truth daily totals
- *   2. bigquery_query_logs (Supabase) — per-partner attribution
+ * Combines three data sources:
+ *   1. INFORMATION_SCHEMA.JOBS_BY_PROJECT — ground-truth daily totals (excludes cached)
+ *   2. INFORMATION_SCHEMA.JOBS_BY_PROJECT — source breakdown by labels/user_email
+ *   3. bigquery_query_logs (Supabase) — Sophie Hub per-partner attribution
  *
  * Admin-only. Cached for 1 hour.
  */
@@ -17,7 +18,7 @@ import { ROLES } from '@/lib/auth/roles'
 import { apiSuccess, apiError, ApiErrors } from '@/lib/api/response'
 import { BIGQUERY } from '@/lib/constants'
 import { getCachedUsage, setCachedUsage } from '@/lib/bigquery/usage-cache'
-import type { UsageData, UsageOverview, DailyCost, AccountUsage } from '@/types/usage'
+import type { UsageData, UsageOverview, DailyCost, SourceBreakdown, AccountUsage } from '@/types/usage'
 
 const supabase = getAdminClient()
 
@@ -53,9 +54,10 @@ export async function GET(request: NextRequest) {
   const startDateStr = startDate.toISOString().split('T')[0]
 
   try {
-    // Run both data sources in parallel
-    const [infoSchemaResult, supabaseResult] = await Promise.allSettled([
+    // Run all three data sources in parallel
+    const [infoSchemaResult, sourceResult, supabaseResult] = await Promise.allSettled([
       fetchInfoSchemaStats(days),
+      fetchSourceBreakdown(days),
       fetchSupabaseStats(startDateStr),
     ])
 
@@ -66,6 +68,12 @@ export async function GET(request: NextRequest) {
     if (infoSchemaResult.status === 'fulfilled') {
       dailyCosts = infoSchemaResult.value.dailyCosts
       infoSchemaTotals = infoSchemaResult.value.totals
+    }
+
+    // Source breakdown
+    let sourceBreakdown: SourceBreakdown[] = []
+    if (sourceResult.status === 'fulfilled') {
+      sourceBreakdown = sourceResult.value
     }
 
     // Supabase logs: per-partner breakdown
@@ -88,6 +96,7 @@ export async function GET(request: NextRequest) {
     const data: UsageData = {
       overview,
       dailyCosts,
+      sourceBreakdown,
       accountUsage,
       cached_at: new Date().toISOString(),
     }
@@ -102,7 +111,7 @@ export async function GET(request: NextRequest) {
 }
 
 // =============================================================================
-// INFORMATION_SCHEMA queries (ground-truth)
+// INFORMATION_SCHEMA: daily cost trend + totals (excludes cached queries)
 // =============================================================================
 
 async function fetchInfoSchemaStats(days: number): Promise<{
@@ -123,11 +132,15 @@ async function fetchInfoSchemaStats(days: number): Promise<{
       AND job_type = 'QUERY'
       AND state = 'DONE'
       AND error_result IS NULL
+      AND cache_hit != true
     GROUP BY query_date
     ORDER BY query_date ASC
   `
 
-  const [job] = await bq.createQueryJob({ query })
+  const [job] = await bq.createQueryJob({
+    query,
+    labels: { source: 'sophie-hub', purpose: 'usage-dashboard' },
+  })
   const [rows] = await job.getQueryResults()
 
   let totalCost = 0
@@ -159,7 +172,80 @@ async function fetchInfoSchemaStats(days: number): Promise<{
 }
 
 // =============================================================================
-// Supabase query logs (per-partner attribution)
+// INFORMATION_SCHEMA: source breakdown (by job labels + user_email)
+// =============================================================================
+
+/**
+ * Categorize queries by source using BigQuery job labels and user_email.
+ *
+ * Sophie Hub queries are tagged with labels.source = 'sophie-hub'.
+ * Other sources are identified by user_email patterns:
+ *   - Service accounts with 'daton' → Daton pipeline
+ *   - Service accounts with 'powerbi' or 'looker' → Power BI / BI tools
+ *   - Regular @sophiesociety.com emails → Console / Manual
+ *   - Everything else → Other
+ */
+async function fetchSourceBreakdown(days: number): Promise<SourceBreakdown[]> {
+  const bq = new BigQuery({ projectId: BIGQUERY.PROJECT_ID })
+
+  // Query that categorizes by source using labels and user_email
+  const query = `
+    SELECT
+      CASE
+        WHEN labels IS NOT NULL AND EXISTS(
+          SELECT 1 FROM UNNEST(labels) l WHERE l.key = 'source' AND l.value = 'sophie-hub'
+        ) THEN 'Sophie Hub'
+        WHEN LOWER(user_email) LIKE '%daton%' THEN 'Daton Pipeline'
+        WHEN LOWER(user_email) LIKE '%powerbi%'
+          OR LOWER(user_email) LIKE '%looker%'
+          OR LOWER(user_email) LIKE '%tableau%'
+          THEN 'BI Tools'
+        WHEN LOWER(user_email) LIKE '%@sophiesociety%'
+          OR LOWER(user_email) LIKE '%@sophie-society%'
+          THEN 'Console (Team)'
+        ELSE 'Other'
+      END as source_category,
+      COUNT(*) as query_count,
+      SUM(total_bytes_processed) as total_bytes,
+      SUM(total_bytes_processed) / 1099511627776 * 5.0 as estimated_cost
+    FROM \`region-us\`.INFORMATION_SCHEMA.JOBS_BY_PROJECT
+    WHERE
+      creation_time >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL ${days} DAY)
+      AND job_type = 'QUERY'
+      AND state = 'DONE'
+      AND error_result IS NULL
+      AND cache_hit != true
+    GROUP BY source_category
+    ORDER BY estimated_cost DESC
+  `
+
+  const [job] = await bq.createQueryJob({
+    query,
+    labels: { source: 'sophie-hub', purpose: 'usage-dashboard' },
+  })
+  const [rows] = await job.getQueryResults()
+
+  // Calculate total for percentage
+  let grandTotal = 0
+  const raw = rows.map((row) => {
+    const cost = Number(row.estimated_cost ?? 0)
+    grandTotal += cost
+    return {
+      source: String(row.source_category ?? 'Other'),
+      query_count: Number(row.query_count ?? 0),
+      total_bytes: Number(row.total_bytes ?? 0),
+      estimated_cost: cost,
+    }
+  })
+
+  return raw.map((r) => ({
+    ...r,
+    pct: grandTotal > 0 ? (r.estimated_cost / grandTotal) * 100 : 0,
+  }))
+}
+
+// =============================================================================
+// Supabase query logs (Sophie Hub per-partner attribution)
 // =============================================================================
 
 async function fetchSupabaseStats(startDate: string): Promise<{

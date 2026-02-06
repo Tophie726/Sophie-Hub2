@@ -14,7 +14,7 @@ import { DollarSign, Activity, Database, Users, ArrowUp, ArrowDown } from 'lucid
 import { cn } from '@/lib/utils'
 import { ShimmerBar, ShimmerGrid } from '@/components/ui/shimmer-grid'
 import { formatCurrency, formatNumber, formatCompact, formatDateShort, formatBytes } from '@/lib/reporting/formatters'
-import type { UsageData, AccountUsage } from '@/types/usage'
+import type { UsageData, AccountUsage, SourceBreakdown } from '@/types/usage'
 
 interface UsageDashboardProps {
   moduleSlug: string
@@ -29,6 +29,23 @@ const PERIODS: { value: Period; label: string }[] = [
   { value: '30d', label: '30d' },
   { value: '90d', label: '90d' },
 ]
+
+/** Colors for source breakdown bars */
+const SOURCE_COLORS: Record<string, string> = {
+  'Sophie Hub': 'bg-blue-500',
+  'Daton Pipeline': 'bg-amber-500',
+  'BI Tools': 'bg-purple-500',
+  'Console (Team)': 'bg-emerald-500',
+  'Other': 'bg-gray-400',
+}
+
+const SOURCE_DOT_COLORS: Record<string, string> = {
+  'Sophie Hub': 'bg-blue-500',
+  'Daton Pipeline': 'bg-amber-500',
+  'BI Tools': 'bg-purple-500',
+  'Console (Team)': 'bg-emerald-500',
+  'Other': 'bg-gray-400',
+}
 
 interface TooltipPayloadEntry {
   value: number
@@ -61,11 +78,10 @@ function ChartTooltip({
           {formatCurrency(payload[0].value)}
         </span>
       </div>
-      {payload[0] && (
+      {payload[1] && (
         <div className="flex items-center gap-2 mt-0.5">
           <span className="text-xs text-muted-foreground">Queries:</span>
           <span className="text-xs" style={{ fontVariantNumeric: 'tabular-nums' }}>
-            {/* cost payload's sibling is queries — access from chart data */}
             {formatNumber(payload[1]?.value ?? 0)}
           </span>
         </div>
@@ -171,7 +187,7 @@ function UsageDashboardInner() {
         <div>
           <h2 className="text-base font-semibold text-foreground">Data Usage & Cost</h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            BigQuery query costs and per-account breakdown
+            BigQuery project costs across all sources
           </p>
         </div>
         <div className="flex items-center rounded-lg p-0.5" style={{ boxShadow: '0 0 0 1px rgba(0,0,0,0.08)' }}>
@@ -214,119 +230,135 @@ function UsageDashboardInner() {
       {/* Data loaded */}
       {!isLoading && !error && data && (
         <>
-          {/* Metric cards */}
+          {/* Metric cards — total project costs */}
           <div className="grid grid-cols-2 gap-3 md:gap-4 md:grid-cols-4">
             <MetricCard
               icon={<DollarSign className="h-4 w-4" />}
-              label="Est. Cost"
+              label="Total Cost"
               value={formatCurrency(data.overview.total_cost_usd)}
+              subtitle={`${data.overview.period_days}d billable`}
               color="text-green-600 dark:text-green-400"
             />
             <MetricCard
               icon={<Activity className="h-4 w-4" />}
               label="Queries"
               value={formatNumber(data.overview.total_queries)}
+              subtitle="excl. cached"
               color="text-blue-600 dark:text-blue-400"
             />
             <MetricCard
               icon={<Database className="h-4 w-4" />}
               label="Data Scanned"
               value={formatBytes(data.overview.total_bytes_processed)}
+              subtitle="billable bytes"
               color="text-purple-600 dark:text-purple-400"
             />
             <MetricCard
               icon={<Users className="h-4 w-4" />}
-              label="Active Accounts"
+              label="Hub Accounts"
               value={formatNumber(data.overview.unique_accounts)}
+              subtitle="via Sophie Hub"
               color="text-orange-600 dark:text-orange-400"
             />
           </div>
 
-          {/* Cost trend chart */}
-          {data.dailyCosts.length > 0 && (
-            <div
-              className="rounded-xl p-4 md:p-6"
-              style={{ boxShadow: '0 0 0 1px rgba(0,0,0,0.08)' }}
-            >
-              <p className="text-sm font-medium text-foreground mb-4 text-wrap-balance">
-                Daily Cost Trend
-              </p>
-              <ResponsiveContainer width="100%" height={200}>
-                <AreaChart
-                  data={data.dailyCosts}
-                  margin={{ top: 4, right: 4, bottom: 0, left: 0 }}
-                >
-                  <defs>
-                    <linearGradient id="usage-gradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
-                      <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0.02} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid
-                    strokeDasharray="3 3"
-                    stroke="hsl(var(--border))"
-                    strokeOpacity={0.4}
-                    vertical={false}
-                  />
-                  <XAxis
-                    dataKey="date"
-                    tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
-                    tickLine={false}
-                    axisLine={{ stroke: 'hsl(var(--border))', strokeOpacity: 0.4 }}
-                    tickFormatter={(d: string) => formatDateShort(d)}
-                  />
-                  <YAxis
-                    tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
-                    tickLine={false}
-                    axisLine={false}
-                    tickFormatter={(v: number) => `$${formatCompact(v)}`}
-                    width={60}
-                  />
-                  <Tooltip
-                    content={<ChartTooltip />}
-                    cursor={{ stroke: 'hsl(var(--border))', strokeWidth: 1 }}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="cost"
-                    stroke="hsl(var(--primary))"
-                    strokeWidth={2}
-                    fill="url(#usage-gradient)"
-                    dot={false}
-                    activeDot={{ r: 4, strokeWidth: 2 }}
-                    animationDuration={300}
-                    animationEasing="ease-out"
-                  />
-                  {/* Hidden series so tooltip can access queries */}
-                  <Area
-                    type="monotone"
-                    dataKey="queries"
-                    stroke="transparent"
-                    fill="transparent"
-                    dot={false}
-                    activeDot={false}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          )}
+          {/* Source breakdown + Daily cost trend — side by side on desktop */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Source breakdown */}
+            <SourceBreakdownCard sources={data.sourceBreakdown} />
 
-          {/* Account usage table */}
+            {/* Cost trend chart */}
+            {data.dailyCosts.length > 0 && (
+              <div
+                className="rounded-xl p-4 md:p-6"
+                style={{ boxShadow: '0 0 0 1px rgba(0,0,0,0.08)' }}
+              >
+                <p className="text-sm font-medium text-foreground mb-4 text-wrap-balance">
+                  Daily Cost Trend
+                </p>
+                <ResponsiveContainer width="100%" height={200}>
+                  <AreaChart
+                    data={data.dailyCosts}
+                    margin={{ top: 4, right: 4, bottom: 0, left: 0 }}
+                  >
+                    <defs>
+                      <linearGradient id="usage-gradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
+                        <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0.02} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      stroke="hsl(var(--border))"
+                      strokeOpacity={0.4}
+                      vertical={false}
+                    />
+                    <XAxis
+                      dataKey="date"
+                      tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
+                      tickLine={false}
+                      axisLine={{ stroke: 'hsl(var(--border))', strokeOpacity: 0.4 }}
+                      tickFormatter={(d: string) => formatDateShort(d)}
+                    />
+                    <YAxis
+                      tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
+                      tickLine={false}
+                      axisLine={false}
+                      tickFormatter={(v: number) => `$${formatCompact(v)}`}
+                      width={60}
+                      domain={[0, 'auto']}
+                    />
+                    <Tooltip
+                      content={<ChartTooltip />}
+                      cursor={{ stroke: 'hsl(var(--border))', strokeWidth: 1 }}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="cost"
+                      stroke="hsl(var(--primary))"
+                      strokeWidth={2}
+                      fill="url(#usage-gradient)"
+                      dot={false}
+                      activeDot={{ r: 4, strokeWidth: 2 }}
+                      animationDuration={300}
+                      animationEasing="ease-out"
+                    />
+                    {/* Hidden series so tooltip can access queries */}
+                    <Area
+                      type="monotone"
+                      dataKey="queries"
+                      stroke="transparent"
+                      fill="transparent"
+                      dot={false}
+                      activeDot={false}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </div>
+
+          {/* Sophie Hub per-brand table */}
           <div
             className="rounded-xl overflow-hidden"
             style={{ boxShadow: '0 0 0 1px rgba(0,0,0,0.08)' }}
           >
             <div className="p-4 md:p-6 pb-0 md:pb-0">
               <div className="flex items-center justify-between mb-3">
-                <p className="text-sm font-medium text-foreground text-wrap-balance">
-                  Top Accounts by Cost
-                </p>
+                <div>
+                  <p className="text-sm font-medium text-foreground text-wrap-balance">
+                    Sophie Hub — Per Brand
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Queries made through partner dashboards
+                  </p>
+                </div>
                 {sortedAccounts.length > 0 && (
                   <span
                     className="text-xs text-muted-foreground"
                     style={{ fontVariantNumeric: 'tabular-nums' }}
                   >
-                    {sortedAccounts.length} account{sortedAccounts.length !== 1 ? 's' : ''}
+                    {sortedAccounts.length} brand{sortedAccounts.length !== 1 ? 's' : ''}
                   </span>
                 )}
               </div>
@@ -335,7 +367,7 @@ function UsageDashboardInner() {
             {sortedAccounts.length === 0 ? (
               <div className="px-4 md:px-6 pb-6 pt-2">
                 <p className="text-sm text-muted-foreground text-center py-8">
-                  Account-level breakdown will appear as partners use their dashboards.
+                  Per-brand breakdown will appear as partners use their dashboards.
                 </p>
               </div>
             ) : (
@@ -344,7 +376,7 @@ function UsageDashboardInner() {
                   <thead>
                     <tr className="border-b">
                       <th className="text-left px-4 md:px-6 py-2 font-medium text-muted-foreground whitespace-nowrap">
-                        Account
+                        Brand
                       </th>
                       <SortableHeader
                         label="Queries"
@@ -406,11 +438,13 @@ function MetricCard({
   icon,
   label,
   value,
+  subtitle,
   color,
 }: {
   icon: React.ReactNode
   label: string
   value: string
+  subtitle?: string
   color: string
 }) {
   return (
@@ -430,6 +464,81 @@ function MetricCard({
       >
         {value}
       </p>
+      {subtitle && (
+        <p className="text-[11px] text-muted-foreground/70 mt-0.5">{subtitle}</p>
+      )}
+    </div>
+  )
+}
+
+function SourceBreakdownCard({ sources }: { sources: SourceBreakdown[] }) {
+  if (!sources.length) {
+    return (
+      <div
+        className="rounded-xl p-4 md:p-6"
+        style={{ boxShadow: '0 0 0 1px rgba(0,0,0,0.08)' }}
+      >
+        <p className="text-sm font-medium text-foreground mb-4">Cost by Source</p>
+        <p className="text-sm text-muted-foreground text-center py-8">
+          Source breakdown unavailable.
+        </p>
+      </div>
+    )
+  }
+
+  const maxPct = Math.max(...sources.map((s) => s.pct), 1)
+
+  return (
+    <div
+      className="rounded-xl p-4 md:p-6"
+      style={{ boxShadow: '0 0 0 1px rgba(0,0,0,0.08)' }}
+    >
+      <p className="text-sm font-medium text-foreground mb-4">Cost by Source</p>
+
+      {/* Stacked bar visualization */}
+      <div className="flex rounded-full overflow-hidden h-3 mb-5">
+        {sources.map((s) => (
+          <div
+            key={s.source}
+            className={cn('transition-all', SOURCE_COLORS[s.source] || 'bg-gray-400')}
+            style={{ width: `${Math.max(s.pct, 1)}%` }}
+            title={`${s.source}: ${s.pct.toFixed(1)}%`}
+          />
+        ))}
+      </div>
+
+      {/* Source rows */}
+      <div className="space-y-3">
+        {sources.map((s) => (
+          <div key={s.source} className="flex items-center gap-3">
+            <div className={cn('h-2.5 w-2.5 rounded-full flex-shrink-0', SOURCE_DOT_COLORS[s.source] || 'bg-gray-400')} />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm font-medium text-foreground truncate">
+                  {s.source}
+                </span>
+                <span
+                  className="text-sm font-medium text-foreground flex-shrink-0"
+                  style={{ fontVariantNumeric: 'tabular-nums' }}
+                >
+                  {formatCurrency(s.estimated_cost)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-2 mt-0.5">
+                <div className="flex-1 h-1.5 rounded-full bg-muted max-w-[160px]">
+                  <div
+                    className={cn('h-full rounded-full transition-all', SOURCE_COLORS[s.source] || 'bg-gray-400')}
+                    style={{ width: `${(s.pct / maxPct) * 100}%`, opacity: 0.6 }}
+                  />
+                </div>
+                <span className="text-xs text-muted-foreground flex-shrink-0" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                  {formatNumber(s.query_count)} queries · {s.pct.toFixed(0)}%
+                </span>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
@@ -544,16 +653,35 @@ function UsageLoadingState() {
         ))}
       </div>
 
-      {/* Chart shimmer */}
-      <div
-        className="rounded-xl p-4 md:p-6"
-        style={{ boxShadow: '0 0 0 1px rgba(0,0,0,0.08)' }}
-      >
-        <ShimmerBar width={140} height={14} className="mb-4" />
+      {/* Source + Chart shimmers side by side */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div
-          className="w-full rounded-lg overflow-hidden bg-gradient-to-r from-muted/40 via-muted/15 to-muted/40 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite]"
-          style={{ height: 200 }}
-        />
+          className="rounded-xl p-4 md:p-6"
+          style={{ boxShadow: '0 0 0 1px rgba(0,0,0,0.08)' }}
+        >
+          <ShimmerBar width={120} height={14} className="mb-4" />
+          <div className="space-y-4">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="flex items-center gap-3">
+                <div className="h-2.5 w-2.5 rounded-full bg-muted" />
+                <div className="flex-1">
+                  <ShimmerBar width={180} height={14} />
+                  <ShimmerBar width={120} height={10} className="mt-1.5" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div
+          className="rounded-xl p-4 md:p-6"
+          style={{ boxShadow: '0 0 0 1px rgba(0,0,0,0.08)' }}
+        >
+          <ShimmerBar width={140} height={14} className="mb-4" />
+          <div
+            className="w-full rounded-lg overflow-hidden bg-gradient-to-r from-muted/40 via-muted/15 to-muted/40 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite]"
+            style={{ height: 200 }}
+          />
+        </div>
       </div>
 
       {/* Table shimmer */}
