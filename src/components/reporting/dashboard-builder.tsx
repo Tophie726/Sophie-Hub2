@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback } from 'react'
 import { Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -28,9 +28,27 @@ interface DashboardBuilderProps {
   moduleSlug: string
 }
 
+function migrateDashboard(d: DashboardWithChildren): { dashboard: DashboardWithChildren; didMigrate: boolean } {
+  let didMigrate = false
+  const sections = d.sections.map((s) => {
+    const migrated = migrateAutoPlacedWidgets(s.widgets)
+    if (migrated !== s.widgets) {
+      didMigrate = true
+      return { ...s, widgets: migrated }
+    }
+    return s
+  })
+  return {
+    dashboard: didMigrate ? { ...d, sections } : d,
+    didMigrate,
+  }
+}
+
 export function DashboardBuilder({ dashboard: initial, moduleSlug }: DashboardBuilderProps) {
-  const [dashboard, setDashboard] = useState(initial)
-  const [hasChanges, setHasChanges] = useState(false)
+  // Migrate synchronously so first render has valid grid positions
+  const [migrationResult] = useState(() => migrateDashboard(initial))
+  const [dashboard, setDashboard] = useState(migrationResult.dashboard)
+  const [hasChanges, setHasChanges] = useState(migrationResult.didMigrate)
   const [isSaving, setIsSaving] = useState(false)
   const [isEditMode, setIsEditMode] = useState(false)
   const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile'>('desktop')
@@ -46,28 +64,6 @@ export function DashboardBuilder({ dashboard: initial, moduleSlug }: DashboardBu
   const [configDialogOpen, setConfigDialogOpen] = useState(false)
   const [editingWidget, setEditingWidget] = useState<DashboardWidget | null>(null)
   const [targetSectionId, setTargetSectionId] = useState<string | null>(null)
-
-  // Migrate legacy widgets (all at grid_column=1, grid_row=1) to proper grid positions
-  useEffect(() => {
-    let migrated = false
-    setDashboard((prev) => {
-      const newSections = prev.sections.map((s) => {
-        const migratedWidgets = migrateAutoPlacedWidgets(s.widgets)
-        if (migratedWidgets !== s.widgets) {
-          migrated = true
-          return { ...s, widgets: migratedWidgets }
-        }
-        return s
-      })
-      if (migrated) {
-        return { ...prev, sections: newSections }
-      }
-      return prev
-    })
-    if (migrated) {
-      setHasChanges(true)
-    }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   function markChanged() {
     setHasChanges(true)

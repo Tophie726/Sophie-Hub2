@@ -147,8 +147,8 @@ export function WidgetWrapper({
         boxShadow: '0 0 0 1px rgba(0,0,0,0.08)',
       }
     : {
-        gridColumn: `${widget.grid_column} / span ${displayCols}`,
-        gridRow: `${widget.grid_row} / span ${displayRows}`,
+        gridColumn: `${Math.max(1, widget.grid_column)} / span ${displayCols}`,
+        gridRow: `${Math.max(1, widget.grid_row)} / span ${displayRows}`,
         boxShadow: isBeingDragged
           ? '0 8px 32px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.08)'
           : '0 0 0 1px rgba(0,0,0,0.08)',

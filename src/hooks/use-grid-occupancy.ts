@@ -17,8 +17,10 @@ function cellKey(col: number, row: number): string {
 export function buildOccupancyMap(widgets: DashboardWidget[]): OccupancyMap {
   const map: OccupancyMap = new Map()
   for (const w of widgets) {
-    for (let c = w.grid_column; c < w.grid_column + w.col_span; c++) {
-      for (let r = w.grid_row; r < w.grid_row + w.row_span; r++) {
+    const col = Math.max(1, w.grid_column)
+    const row = Math.max(1, w.grid_row)
+    for (let c = col; c < col + w.col_span; c++) {
+      for (let r = row; r < row + w.row_span; r++) {
         map.set(cellKey(c, r), w.id)
       }
     }
@@ -145,10 +147,10 @@ export function migrateAutoPlacedWidgets(widgets: DashboardWidget[]): DashboardW
 
 function getMaxOccupiedRow(map: OccupancyMap): number {
   let max = 0
-  for (const key of map.keys()) {
+  map.forEach((_, key) => {
     const row = parseInt(key.split(',')[1], 10)
     if (row > max) max = row
-  }
+  })
   return max
 }
 
