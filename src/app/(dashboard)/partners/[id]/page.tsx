@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
 import { toast } from 'sonner'
+import { useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft,
   Building2,
@@ -27,6 +28,7 @@ import { FieldGroupSection } from '@/components/entities/field-group-section'
 import { StaffAssignmentCard } from '@/components/entities/staff-assignment-card'
 import { WeeklyStatusTab } from '@/components/partners/weekly-status-tab'
 import { BigQueryDataPanel } from '@/components/data-enrichment/bigquery/bigquery-data-panel'
+import { usePartnerDetailQuery } from '@/lib/hooks/use-partners-query'
 import type { PartnerDetail } from '@/types/entities'
 import type { FieldLineageMap } from '@/types/lineage'
 
@@ -45,30 +47,15 @@ export default function PartnerDetailPage() {
   const initialTab = (searchParams.get('tab') as TabId) || 'overview'
   const validTab = TABS.some(t => t.id === initialTab) ? initialTab : 'overview'
 
-  const [partner, setPartner] = useState<PartnerDetail | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const queryClient = useQueryClient()
+  const { data: partner, isLoading: loading, error: queryError } = usePartnerDetailQuery(id) as {
+    data: PartnerDetail | null | undefined
+    isLoading: boolean
+    error: Error | null
+  }
+  const error = queryError?.message || null
   const [activeTab, setActiveTab] = useState<TabId>(validTab)
   const [isSyncing, setIsSyncing] = useState(false)
-
-  const fetchPartner = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/partners/${id}`)
-      const json = await res.json()
-
-      if (!res.ok) {
-        setError(json.error?.message || 'Failed to load partner')
-        return
-      }
-
-      setPartner(json.data?.partner || null)
-    } catch (err) {
-      console.error('Failed to fetch partner:', err)
-      setError('Failed to load partner')
-    } finally {
-      setLoading(false)
-    }
-  }, [id])
 
   // Sync this partner's data from the source sheet
   const handleSync = async () => {
@@ -87,8 +74,7 @@ export default function PartnerDetailPage() {
       const data = json.data
       if (data?.synced) {
         toast.success(data.message || 'Partner synced successfully')
-        // Refresh partner data
-        await fetchPartner()
+        queryClient.invalidateQueries({ queryKey: ['partners', 'detail', id] })
       } else {
         toast.warning(data?.message || 'Partner not found in source sheet')
       }
@@ -99,10 +85,6 @@ export default function PartnerDetailPage() {
       setIsSyncing(false)
     }
   }
-
-  useEffect(() => {
-    if (id) fetchPartner()
-  }, [id, fetchPartner])
 
   if (loading) {
     return (

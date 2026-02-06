@@ -113,6 +113,10 @@ export async function GET() {
           'slack_id', 'staff_code'
         ]
       }
+    }, {
+      headers: {
+        'Cache-Control': 'private, max-age=60, stale-while-revalidate=300',
+      },
     })
   } catch (error) {
     console.error('Error fetching table stats:', error)

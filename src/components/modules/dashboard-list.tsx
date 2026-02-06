@@ -1,11 +1,13 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useQueryClient } from '@tanstack/react-query'
 import { Loader2, Plus, LayoutDashboard } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { Button } from '@/components/ui/button'
 import { CreateDashboardDialog } from './create-dashboard-dialog'
+import { useDashboardsQuery } from '@/lib/hooks/use-module-query'
 import type { Module, Dashboard } from '@/types/modules'
 
 interface DashboardWithMeta extends Dashboard {
@@ -19,29 +21,17 @@ interface DashboardListProps {
 
 export function DashboardList({ module }: DashboardListProps) {
   const router = useRouter()
-  const [dashboards, setDashboards] = useState<DashboardWithMeta[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const queryClient = useQueryClient()
+  const { data: dashboardsRaw, isLoading, error: queryError } = useDashboardsQuery(module.id)
+  const dashboards = (dashboardsRaw || []) as DashboardWithMeta[]
+  const error = queryError ? queryError.message : null
   const [createOpen, setCreateOpen] = useState(false)
 
-  useEffect(() => {
-    async function fetchDashboards() {
-      try {
-        const response = await fetch(`/api/modules/dashboards?module_id=${module.id}`)
-        if (!response.ok) throw new Error('Failed to fetch dashboards')
-        const json = await response.json()
-        setDashboards(json.data?.dashboards || json.dashboards || [])
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load dashboards')
-      } finally {
-        setIsLoading(false)
-      }
-    }
-    fetchDashboards()
-  }, [module.id])
-
   function handleCreated(dashboard: Dashboard) {
-    setDashboards((prev) => [...prev, dashboard as DashboardWithMeta])
+    queryClient.setQueryData(
+      ['modules', 'dashboards', module.id],
+      (old: DashboardWithMeta[] | undefined) => [...(old || []), dashboard as DashboardWithMeta]
+    )
   }
 
   // Separate templates and partner dashboards

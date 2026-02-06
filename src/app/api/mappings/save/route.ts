@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { requirePermission } from '@/lib/auth/api-auth'
 import { apiSuccess, apiValidationError, ApiErrors } from '@/lib/api/response'
+import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
 import { SaveMappingSchemaV2 } from '@/lib/validations/schemas'
 import { DEFAULT_WEEKLY_PATTERN } from '@/types/enrichment'
 import { getConnectorRegistry } from '@/lib/connectors'
@@ -15,6 +16,11 @@ const supabase = getAdminClient()
 export async function POST(request: NextRequest) {
   const auth = await requirePermission('data-enrichment:write')
   if (!auth.authenticated) return auth.response
+
+  const rateLimit = checkRateLimit(auth.user.id, 'mappings:save', RATE_LIMITS.STRICT)
+  if (!rateLimit.allowed) {
+    return ApiErrors.rateLimited('Too many mapping saves. Please wait before trying again.')
+  }
 
   try {
     const body = await request.json()

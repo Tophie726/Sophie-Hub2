@@ -137,6 +137,19 @@ export function DashboardBuilder({ dashboard: initial, moduleSlug }: DashboardBu
   }
 
   function handleDeleteWidget(widgetId: string) {
+    // Capture widget for undo before removing
+    let deletedWidget: DashboardWidget | undefined
+    let deletedFromSectionId: string | undefined
+    for (const s of dashboard.sections) {
+      const w = s.widgets.find((w) => w.id === widgetId)
+      if (w) {
+        deletedWidget = w
+        deletedFromSectionId = s.id
+        break
+      }
+    }
+
+    // Optimistic removal
     setDashboard((prev) => ({
       ...prev,
       sections: prev.sections.map((s) => ({
@@ -145,7 +158,26 @@ export function DashboardBuilder({ dashboard: initial, moduleSlug }: DashboardBu
       })),
     }))
     markChanged()
-    toast.success('Widget removed')
+
+    toast('Widget removed', {
+      action: {
+        label: 'Undo',
+        onClick: () => {
+          if (deletedWidget && deletedFromSectionId) {
+            setDashboard((prev) => ({
+              ...prev,
+              sections: prev.sections.map((s) =>
+                s.id === deletedFromSectionId
+                  ? { ...s, widgets: [...s.widgets, deletedWidget!] }
+                  : s
+              ),
+            }))
+            markChanged()
+          }
+        },
+      },
+      duration: 5000,
+    })
   }
 
   function handleWidgetSave(widgetType: WidgetType, title: string, config: WidgetConfig, colSpan: number, rowSpan: number) {
@@ -364,8 +396,8 @@ export function DashboardBuilder({ dashboard: initial, moduleSlug }: DashboardBu
                 className="w-full border-dashed active:scale-[0.97]"
                 onClick={handleAddSection}
               >
-                <Plus className="h-4 w-4 mr-1.5" />
-                Add Section
+                <Plus className="h-4 w-4 sm:mr-1.5" />
+                <span className="hidden sm:inline">Add Section</span>
               </Button>
             </div>
           )}

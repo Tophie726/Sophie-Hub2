@@ -1,13 +1,10 @@
 'use client'
 
-import { motion } from 'framer-motion'
 import { Menu } from 'lucide-react'
 import { Sidebar } from './sidebar'
 import { MobileMenuProvider, useMobileMenu } from './mobile-menu-context'
 import { ErrorBoundary } from '@/components/error-boundary'
 import { captureError } from '@/lib/posthog'
-
-const easeOut: [number, number, number, number] = [0.22, 1, 0.36, 1]
 
 interface MainLayoutProps {
   children: React.ReactNode
@@ -17,7 +14,7 @@ function MobileHeader() {
   const { toggle } = useMobileMenu()
 
   return (
-    <div className="md:hidden fixed top-0 left-0 right-0 h-14 z-40 border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <div className="md:hidden fixed top-0 left-0 right-0 h-14 z-40 border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 pt-safe">
       <div className="flex items-center h-full px-4 gap-3">
         <button
           onClick={toggle}
@@ -43,12 +40,7 @@ function MainLayoutContent({ children }: MainLayoutProps) {
       <Sidebar />
       <MobileHeader />
       <main className="pl-0 md:pl-64">
-        <motion.div
-          initial={false}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, ease: easeOut }}
-          className="min-h-screen pt-14 md:pt-0"
-        >
+        <div className="min-h-screen pt-14 md:pt-0">
           <ErrorBoundary
             onError={(error, errorInfo) => {
               captureError(error, { componentStack: errorInfo.componentStack })
@@ -56,7 +48,7 @@ function MainLayoutContent({ children }: MainLayoutProps) {
           >
             {children}
           </ErrorBoundary>
-        </motion.div>
+        </div>
       </main>
     </div>
   )

@@ -84,7 +84,7 @@ export function ModuleCard({ module }: ModuleCardProps) {
               )}
             </div>
             {module.description && (
-              <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
+              <p className="text-xs md:text-sm text-muted-foreground mt-1 line-clamp-2">
                 {module.description}
               </p>
             )}

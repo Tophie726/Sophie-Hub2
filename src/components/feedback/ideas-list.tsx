@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useMemo } from 'react'
 import { Search, Loader2, Lightbulb, Bug, HelpCircle, Filter } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -14,6 +14,8 @@ import {
 import { IdeaCard } from './idea-card'
 import { cn } from '@/lib/utils'
 import { useDebounce } from '@/lib/hooks/use-debounce'
+import { useIdeasQuery } from '@/lib/hooks/use-feedback-query'
+import { useQueryClient } from '@tanstack/react-query'
 
 type FeedbackType = 'bug' | 'feature' | 'question'
 type FeedbackStatus = 'new' | 'reviewed' | 'in_progress' | 'resolved' | 'wont_fix'
@@ -50,8 +52,6 @@ const TYPE_FILTERS = [
  * Filterable and sortable list of feedback ideas.
  */
 export function IdeasList({ onSubmitIdea, isAdmin = false, initialOpenId }: IdeasListProps) {
-  const [ideas, setIdeas] = useState<FeedbackItem[]>([])
-  const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState<FeedbackType | 'all'>('all')
   const [sortBy, setSortBy] = useState<SortOption>('votes')
@@ -61,44 +61,30 @@ export function IdeasList({ onSubmitIdea, isAdmin = false, initialOpenId }: Idea
 
   const debouncedSearch = useDebounce(search, 300)
 
-  const fetchIdeas = useCallback(async () => {
-    setLoading(true)
-    try {
-      const params = new URLSearchParams()
-      if (typeFilter !== 'all') params.set('type', typeFilter)
-      params.set('sort', sortBy)
-      if (showMine) params.set('mine', 'true')
+  const queryClient = useQueryClient()
 
-      const res = await fetch(`/api/feedback?${params}`)
-      if (!res.ok) throw new Error('Failed to fetch')
+  const queryParams = {
+    type: typeFilter !== 'all' ? typeFilter : undefined,
+    sort: sortBy,
+    mine: showMine || undefined,
+  }
+  const { data: rawIdeas = [], isLoading: loading } = useIdeasQuery(queryParams)
 
-      const json = await res.json()
-      let items: FeedbackItem[] = json.data?.feedback || []
+  // Client-side search filter (for title and description)
+  const ideas = useMemo(() => {
+    if (!debouncedSearch) return rawIdeas as FeedbackItem[]
+    const searchLower = debouncedSearch.toLowerCase()
+    return (rawIdeas as FeedbackItem[]).filter(item =>
+      (item.title?.toLowerCase().includes(searchLower)) ||
+      item.description.toLowerCase().includes(searchLower)
+    )
+  }, [rawIdeas, debouncedSearch])
 
-      // Client-side search filter (for title and description)
-      if (debouncedSearch) {
-        const searchLower = debouncedSearch.toLowerCase()
-        items = items.filter(item =>
-          (item.title?.toLowerCase().includes(searchLower)) ||
-          item.description.toLowerCase().includes(searchLower)
-        )
-      }
-
-      setIdeas(items)
-    } catch (error) {
-      console.error('Failed to fetch ideas:', error)
-    } finally {
-      setLoading(false)
-    }
-  }, [typeFilter, sortBy, showMine, debouncedSearch])
-
-  useEffect(() => {
-    fetchIdeas()
-  }, [fetchIdeas])
+  const queryKey = ['feedback', 'ideas', { type: queryParams.type, sort: queryParams.sort, mine: queryParams.mine }]
 
   const handleVoteChange = (id: string, newCount: number, hasVoted: boolean) => {
-    setIdeas(prev =>
-      prev.map(item =>
+    queryClient.setQueryData(queryKey, (old: FeedbackItem[] | undefined) =>
+      (old || []).map(item =>
         item.id === id
           ? { ...item, vote_count: newCount, has_voted: hasVoted }
           : item
@@ -107,8 +93,8 @@ export function IdeasList({ onSubmitIdea, isAdmin = false, initialOpenId }: Idea
   }
 
   const handleStatusChange = (id: string, newStatus: FeedbackStatus) => {
-    setIdeas(prev =>
-      prev.map(item =>
+    queryClient.setQueryData(queryKey, (old: FeedbackItem[] | undefined) =>
+      (old || []).map(item =>
         item.id === id
           ? { ...item, status: newStatus }
           : item
@@ -132,7 +118,7 @@ export function IdeasList({ onSubmitIdea, isAdmin = false, initialOpenId }: Idea
         </div>
 
         {/* Type filter */}
-        <div className="flex items-center gap-1 bg-muted/50 rounded-lg p-1 overflow-x-auto">
+        <div className="flex items-center gap-1 bg-muted/50 rounded-lg p-1 overflow-x-auto scrollbar-hide">
           {TYPE_FILTERS.map(filter => {
             const Icon = filter.icon
             const isActive = typeFilter === filter.value
@@ -141,14 +127,14 @@ export function IdeasList({ onSubmitIdea, isAdmin = false, initialOpenId }: Idea
                 key={filter.value}
                 onClick={() => setTypeFilter(filter.value as FeedbackType | 'all')}
                 className={cn(
-                  'flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors whitespace-nowrap',
+                  'flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors whitespace-nowrap h-10 md:h-auto active:scale-[0.97]',
                   isActive
                     ? 'bg-background shadow-sm text-foreground'
                     : 'text-muted-foreground hover:text-foreground'
                 )}
               >
                 {Icon && <Icon className="h-3.5 w-3.5" />}
-                {filter.label}
+                <span className={cn(Icon ? 'hidden sm:inline' : '')}>{filter.label}</span>
               </button>
             )
           })}

@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
 import { Loader2, ClipboardList, Hammer, CheckCircle2 } from 'lucide-react'
 import { RoadmapCard } from './roadmap-card'
 import { cn } from '@/lib/utils'
+import { useRoadmapQuery } from '@/lib/hooks/use-feedback-query'
+import { useQueryClient } from '@tanstack/react-query'
 
 type FeedbackStatus = 'reviewed' | 'in_progress' | 'resolved'
 
@@ -55,31 +56,13 @@ const COLUMNS: RoadmapColumn[] = [
  * Kanban-style roadmap board showing planned, in-progress, and shipped items.
  */
 export function RoadmapBoard() {
-  const [items, setItems] = useState<RoadmapItem[]>([])
-  const [loading, setLoading] = useState(true)
-
-  const fetchRoadmap = useCallback(async () => {
-    setLoading(true)
-    try {
-      const res = await fetch('/api/feedback?roadmap=true&sort=votes')
-      if (!res.ok) throw new Error('Failed to fetch')
-
-      const json = await res.json()
-      setItems(json.data?.feedback || [])
-    } catch (error) {
-      console.error('Failed to fetch roadmap:', error)
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    fetchRoadmap()
-  }, [fetchRoadmap])
+  const { data: rawItems = [], isLoading: loading } = useRoadmapQuery()
+  const items = rawItems as RoadmapItem[]
+  const queryClient = useQueryClient()
 
   const handleVoteChange = (id: string, newCount: number, hasVoted: boolean) => {
-    setItems(prev =>
-      prev.map(item =>
+    queryClient.setQueryData(['feedback', 'roadmap'], (old: RoadmapItem[] | undefined) =>
+      (old || []).map(item =>
         item.id === id
           ? { ...item, vote_count: newCount, has_voted: hasVoted }
           : item
@@ -109,16 +92,16 @@ export function RoadmapBoard() {
               column.bgColor
             )}>
               <Icon className={cn('h-4 w-4', column.color)} />
-              <span className="font-medium text-sm">{column.label}</span>
+              <span className="font-medium text-xs md:text-sm">{column.label}</span>
               <span className="ml-auto text-xs text-muted-foreground bg-background/50 px-1.5 py-0.5 rounded">
                 {columnItems.length}
               </span>
             </div>
 
             {/* Column content */}
-            <div className="flex-1 border border-t-0 rounded-b-lg p-2 space-y-2 min-h-[200px] bg-muted/20">
+            <div className="flex-1 border border-t-0 rounded-b-lg p-2 space-y-2 min-h-[80px] md:min-h-[200px] bg-muted/20">
               {columnItems.length === 0 ? (
-                <div className="flex items-center justify-center h-full text-sm text-muted-foreground py-8">
+                <div className="flex items-center justify-center h-full text-sm text-muted-foreground py-4 md:py-8">
                   {column.status === 'reviewed' && 'No planned items'}
                   {column.status === 'in_progress' && 'Nothing in progress'}
                   {column.status === 'resolved' && 'No shipped items yet'}

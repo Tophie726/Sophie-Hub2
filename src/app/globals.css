@@ -160,6 +160,11 @@
 
 
 
+/* Prevent 300ms tap delay on interactive elements */
+button, a, [role="button"], input, select, textarea {
+  touch-action: manipulation;
+}
+
 @layer base {
   * {
     @apply border-border;

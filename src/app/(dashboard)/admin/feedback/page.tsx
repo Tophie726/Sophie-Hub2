@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import { useFeedbackAdminQuery } from '@/lib/hooks/use-feedback-query'
 import { PageHeader } from '@/components/layout/page-header'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -101,12 +103,17 @@ interface AIAnalysis {
 }
 
 export default function FeedbackAdminPage() {
-  const [feedback, setFeedback] = useState<FeedbackItem[]>([])
-  const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<FeedbackType | 'all'>('all')
   const [statusFilter, setStatusFilter] = useState<FeedbackStatus | 'all'>('all')
   const [selectedItem, setSelectedItem] = useState<FeedbackItem | null>(null)
   const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list')
+
+  const queryClient = useQueryClient()
+  const { data: feedbackRaw, isLoading: loading } = useFeedbackAdminQuery({
+    type: filter === 'all' ? undefined : filter,
+    status: statusFilter === 'all' ? undefined : statusFilter,
+  })
+  const feedback = (feedbackRaw || []) as FeedbackItem[]
 
   // AI state - persisted in localStorage
   const [aiEnabled, setAiEnabled] = useState(false)
@@ -132,6 +139,24 @@ export default function FeedbackAdminPage() {
       localStorage.setItem('admin-feedback-ai-enabled', aiEnabled.toString())
     }
   }, [aiEnabled, mounted])
+
+  // Initialize AI state from cached data when feedback loads
+  useEffect(() => {
+    if (feedback.length > 0) {
+      const cachedSummaries: Record<string, AISummary> = {}
+      const cachedAnalyses: Record<string, AIAnalysis> = {}
+      for (const item of feedback) {
+        if (item.ai_summary) {
+          cachedSummaries[item.id] = { summary: item.ai_summary }
+        }
+        if (item.ai_analysis) {
+          cachedAnalyses[item.id] = item.ai_analysis
+        }
+      }
+      setSummaries(cachedSummaries)
+      setAnalyses(cachedAnalyses)
+    }
+  }, [feedback])
 
   const handleSummarize = async (id: string) => {
     setSummarizing(prev => ({ ...prev, [id]: true }))
@@ -238,10 +263,12 @@ export default function FeedbackAdminPage() {
   }
 
   const handleStatusChange = async (id: string, newStatus: FeedbackStatus) => {
-    // Optimistically update the UI
-    setFeedback(prev => prev.map(item =>
-      item.id === id ? { ...item, status: newStatus } : item
-    ))
+    // Optimistically update cache
+    queryClient.setQueryData(
+      ['feedback', 'admin', { type: filter === 'all' ? undefined : filter, status: statusFilter === 'all' ? undefined : statusFilter }],
+      (old: FeedbackItem[] | undefined) =>
+        old?.map(item => item.id === id ? { ...item, status: newStatus } : item)
+    )
 
     try {
       const res = await fetch(`/api/feedback/${id}/status`, {
@@ -255,47 +282,13 @@ export default function FeedbackAdminPage() {
     } catch {
       // Revert on error
       toast.error('Failed to update status')
-      fetchFeedback()
+      queryClient.invalidateQueries({ queryKey: ['feedback', 'admin'] })
     }
   }
 
-  const fetchFeedback = useCallback(async () => {
-    setLoading(true)
-    try {
-      const params = new URLSearchParams()
-      if (filter !== 'all') params.set('type', filter)
-      if (statusFilter !== 'all') params.set('status', statusFilter)
-
-      const res = await fetch(`/api/feedback?${params}`)
-      if (!res.ok) throw new Error('Failed to fetch feedback')
-      const json = await res.json()
-      const items = json.data?.feedback || []
-      setFeedback(items)
-
-      // Initialize AI state from cached data
-      const cachedSummaries: Record<string, AISummary> = {}
-      const cachedAnalyses: Record<string, AIAnalysis> = {}
-      for (const item of items) {
-        if (item.ai_summary) {
-          cachedSummaries[item.id] = { summary: item.ai_summary }
-        }
-        if (item.ai_analysis) {
-          cachedAnalyses[item.id] = item.ai_analysis
-        }
-      }
-      setSummaries(cachedSummaries)
-      setAnalyses(cachedAnalyses)
-    } catch (error) {
-      console.error('Failed to fetch feedback:', error)
-      toast.error('Failed to load feedback')
-    } finally {
-      setLoading(false)
-    }
-  }, [filter, statusFilter])
-
-  useEffect(() => {
-    fetchFeedback()
-  }, [fetchFeedback])
+  const fetchFeedback = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['feedback', 'admin'] })
+  }, [queryClient])
 
   const counts = {
     total: feedback.length,
@@ -384,7 +377,7 @@ export default function FeedbackAdminPage() {
 
         {/* Filters */}
         <div className="flex flex-wrap items-center gap-2 md:gap-3 mb-4 md:mb-6">
-          <div className="flex items-center gap-0.5 md:gap-1 bg-muted/50 rounded-lg p-1 overflow-x-auto">
+          <div className="flex items-center gap-0.5 md:gap-1 bg-muted/50 rounded-lg p-1 overflow-x-auto scrollbar-hide">
             <FilterTab
               label="All"
               active={filter === 'all'}
@@ -457,7 +450,7 @@ export default function FeedbackAdminPage() {
             <button
               onClick={() => setViewMode('list')}
               className={cn(
-                'p-2 rounded-md transition-colors',
+                'p-2.5 md:p-2 rounded-md transition-colors active:scale-[0.97]',
                 viewMode === 'list'
                   ? 'bg-background shadow-sm text-foreground'
                   : 'text-muted-foreground hover:text-foreground'
@@ -469,7 +462,7 @@ export default function FeedbackAdminPage() {
             <button
               onClick={() => setViewMode('kanban')}
               className={cn(
-                'p-2 rounded-md transition-colors',
+                'p-2.5 md:p-2 rounded-md transition-colors active:scale-[0.97]',
                 viewMode === 'kanban'
                   ? 'bg-background shadow-sm text-foreground'
                   : 'text-muted-foreground hover:text-foreground'
@@ -647,7 +640,7 @@ function FeedbackCard({
               >
                 <SelectTrigger
                   className={cn(
-                    'w-[110px] h-8 text-xs shrink-0',
+                    'w-[90px] md:w-[110px] h-8 text-xs shrink-0',
                     STATUS_CONFIG[item.status].color
                   )}
                   onClick={(e) => e.stopPropagation()}
@@ -692,11 +685,11 @@ function FeedbackCard({
 
             {/* AI Summary - compact inline display (only when AI view enabled) */}
             {summary && showAIView && (
-              <div className="mt-3 p-2.5 rounded-lg bg-purple-500/5 border border-purple-500/20">
+              <div className="mt-3 p-2.5 rounded-lg bg-purple-500/5 border border-purple-500/20 overflow-hidden">
                 <div className="flex items-start gap-2">
                   <Sparkles className="h-3.5 w-3.5 text-purple-500 mt-0.5 shrink-0" />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm text-purple-700 dark:text-purple-300">{summary.summary}</p>
+                    <p className="text-sm text-purple-700 dark:text-purple-300 break-words">{summary.summary}</p>
                   </div>
                   {/* Out of date indicator */}
                   {item.ai_summary_at && item.content_updated_at &&
@@ -711,7 +704,7 @@ function FeedbackCard({
 
             {/* AI Analysis - expandable with quick preview (only when AI view enabled) */}
             {analysis && showAIView && (
-              <div className="mt-3 p-2.5 rounded-lg bg-amber-500/5 border border-amber-500/20">
+              <div className="mt-3 p-2.5 rounded-lg bg-amber-500/5 border border-amber-500/20 overflow-hidden">
                 <button
                   onClick={(e) => { e.stopPropagation(); setShowFullAnalysis(!showFullAnalysis) }}
                   className="flex items-center gap-2 w-full text-left"
@@ -749,22 +742,22 @@ function FeedbackCard({
 
                 {showFullAnalysis && (
                   <div className="mt-2 pt-2 border-t border-amber-500/20 space-y-2 text-sm">
-                    <div>
+                    <div className="break-words">
                       <span className="font-medium text-foreground">
                         {item.type === 'bug' ? 'Cause: ' : 'Approach: '}
                       </span>
                       <span className="text-muted-foreground">{analysis.likelyCause}</span>
                     </div>
-                    <div>
+                    <div className="break-words overflow-hidden">
                       <span className="font-medium text-foreground">
                         {item.type === 'bug' ? 'Fix: ' : 'Steps: '}
                       </span>
-                      <pre className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap">{analysis.suggestedFix}</pre>
+                      <pre className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap break-words">{analysis.suggestedFix}</pre>
                     </div>
                     {analysis.affectedFiles.length > 0 && (
-                      <div>
+                      <div className="break-words overflow-hidden">
                         <span className="font-medium text-foreground">Files: </span>
-                        <span className="text-muted-foreground font-mono text-xs">
+                        <span className="text-muted-foreground font-mono text-xs break-all">
                           {analysis.affectedFiles.join(', ')}
                         </span>
                       </div>
@@ -1413,7 +1406,7 @@ function FilterTab({
     <button
       onClick={onClick}
       className={cn(
-        'flex items-center gap-1.5 px-2.5 md:px-3 py-2.5 md:py-2 text-sm font-medium rounded-md transition-colors',
+        'flex items-center gap-1.5 px-2.5 md:px-3 py-2.5 md:py-2 text-sm font-medium rounded-md transition-colors active:scale-[0.97]',
         active
           ? 'bg-background shadow-sm text-foreground'
           : 'text-muted-foreground hover:text-foreground'

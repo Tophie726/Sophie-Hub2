@@ -146,7 +146,9 @@ export async function GET(request: Request) {
       has_voted: userVotes.has(f.id),
     }))
 
-    return apiSuccess({ feedback: feedbackWithVotes })
+    return apiSuccess({ feedback: feedbackWithVotes }, 200, {
+      'Cache-Control': 'private, max-age=30, stale-while-revalidate=120',
+    })
   } catch (error) {
     console.error('Error in GET /api/feedback:', error)
     return ApiErrors.internal()

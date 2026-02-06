@@ -47,6 +47,7 @@ import {
 } from '@/components/ui/popover'
 import { useDebounce } from '@/lib/hooks/use-debounce'
 import { usePartnerSearch } from '@/lib/hooks/use-partner-search'
+import { usePartnersQuery } from '@/lib/hooks/use-partners-query'
 
 
 // Extended partner type that includes source_data and computed status
@@ -637,19 +638,41 @@ function PartnerRow({ partner, columns, visibleColumns, onSync, onWeeklyClick, o
   }
 
   return (
-    <div className="flex items-center py-3.5 hover:bg-muted/30 transition-colors group min-w-max">
-      {/* Brand name - sticky left, clickable link */}
+    <div className="flex items-center py-3 hover:bg-muted/30 transition-colors group md:w-max rounded-lg md:rounded-none bg-transparent">
+      {/* Brand name - sticky left on desktop, flex-fill on mobile */}
       <Link
         href={`/partners/${partner.id}`}
-        className="sticky left-0 z-10 bg-card group-hover:bg-accent pl-5 pr-4 shrink-0 cursor-pointer transition-colors"
-        style={{ width: 180, minWidth: 180, boxShadow: '2px 0 4px -2px rgba(0,0,0,0.08)' }}
+        className="md:sticky md:left-0 z-10 bg-card group-hover:bg-accent pl-5 pr-4 flex-1 md:flex-none min-w-0 md:min-w-[180px] md:w-[180px] md:shrink-0 cursor-pointer transition-colors"
       >
         <span className="font-medium text-sm truncate block hover:text-primary transition-colors">
           {partner.brand_name}
         </span>
-        {/* Mobile: show client name below brand */}
+        {/* Mobile: show client name + visible column values */}
         <div className="md:hidden text-xs text-muted-foreground mt-0.5 truncate">
-          {partner.client_name || 'No client contact'}
+          {(() => {
+            const parts: string[] = []
+            if (partner.client_name) parts.push(partner.client_name)
+            // Show visible column values as compact inline info
+            for (const col of columns) {
+              if (!visibleColumns.has(col.key)) continue
+              // Skip columns that have special rendering or are already shown
+              if (col.key === 'status' || col.key === 'weekly' || col.key === 'client_name') continue
+              let val: string | null = null
+              if (col.source === 'source_data' && col.sourceKey) {
+                const v = getSourceDataValue(partner, col.sourceKey)
+                if (v !== '--') val = v
+              } else if (col.render) {
+                // Skip rendered columns on mobile compact view
+                continue
+              } else {
+                const raw = partner[col.key]
+                if (raw !== null && raw !== undefined && raw !== '') val = String(raw)
+              }
+              if (val) parts.push(val)
+              if (parts.length >= 3) break // Max 3 items to avoid clutter
+            }
+            return parts.join(' · ') || 'No client contact'
+          })()}
         </div>
       </Link>
 
@@ -709,7 +732,7 @@ function PartnerRow({ partner, columns, visibleColumns, onSync, onWeeklyClick, o
       })}
 
       {/* Mobile status + chevron */}
-      <Link href={`/partners/${partner.id}`} className="flex md:hidden items-center gap-2 shrink-0 pr-4">
+      <Link href={`/partners/${partner.id}`} className="flex md:hidden items-center gap-2 shrink-0 pr-4 active:scale-[0.97]">
         <StatusBadge status={partner.status} entity="partners" />
         <ChevronRight className="h-4 w-4 text-muted-foreground" />
       </Link>
@@ -755,12 +778,7 @@ export default function PartnersPage() {
   const searchParams = useSearchParams()
   const router = useRouter()
 
-  const [partners, setPartners] = useState<Partner[]>([])
-  const [loading, setLoading] = useState(true)
-  const [isFiltering, setIsFiltering] = useState(false) // Subtle indicator for filter changes
   const [isRefreshing, setIsRefreshing] = useState(false) // For manual refresh
-  // const [loadingMore, setLoadingMore] = useState(false) // Reserved for future infinite scroll
-  const initialLoadDone = useRef(false)
   // Refs for scroll sync between header and content
   const headerScrollRef = useRef<HTMLDivElement>(null)
   const contentScrollRef = useRef<HTMLDivElement>(null)
@@ -781,8 +799,6 @@ export default function PartnersPage() {
   }, [router, showHeatmap])
   const [sort, setSort] = useState('onboarding_date')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
-  const [total, setTotal] = useState(0)
-  // const [hasMore, setHasMore] = useState(false) // Reserved for future infinite scroll
   // Pagination state
   const [pageSize, setPageSize] = useState(50)
   const [currentPage, setCurrentPage] = useState(1)
@@ -847,6 +863,25 @@ export default function PartnersPage() {
   }>>({})
 
   const debouncedSearch = useDebounce(search, 300)
+
+  // Fetch partners via TanStack Query
+  const {
+    data: partnersData,
+    isLoading: loading,
+    isFetching,
+    refetch: refetchPartners,
+  } = usePartnersQuery({
+    search: debouncedSearch || undefined,
+    status: statusFilter.length > 0 ? statusFilter : undefined,
+    sort,
+    order: sortOrder,
+    limit: pageSize,
+    offset: (currentPage - 1) * pageSize,
+  })
+
+  const partners: Partner[] = useMemo(() => partnersData?.partners ?? [], [partnersData?.partners])
+  const total = partnersData?.total ?? 0
+  const isFiltering = isFetching && !loading
 
   // Client-side fuzzy search for instant filtering of loaded partners
   const { results: filteredPartners } = usePartnerSearch({
@@ -956,48 +991,6 @@ export default function PartnersPage() {
     })
   }
 
-  const fetchPartners = useCallback(async (page = currentPage, size = pageSize) => {
-    if (!initialLoadDone.current) {
-      // Only show full shimmer on initial load
-      setLoading(true)
-    } else {
-      // On filter changes, show subtle indicator but keep current data visible
-      setIsFiltering(true)
-    }
-
-    try {
-      const params = new URLSearchParams()
-      if (debouncedSearch) params.set('search', debouncedSearch)
-      if (statusFilter.length) params.set('status', statusFilter.join(','))
-      params.set('sort', sort)
-      params.set('order', sortOrder)
-      params.set('limit', String(size))
-      params.set('offset', String((page - 1) * size))
-
-      const res = await fetch(`/api/partners?${params}`)
-      const json = await res.json()
-      const data = json.data
-
-      if (data) {
-        setPartners(data.partners)
-        setTotal(data.total)
-        // setHasMore(data.has_more) // Reserved for future infinite scroll
-        initialLoadDone.current = true
-      }
-    } catch (error) {
-      console.error('Failed to fetch partners:', error)
-    } finally {
-      setLoading(false)
-      // setLoadingMore(false) // Reserved for future infinite scroll
-      setIsFiltering(false)
-    }
-  }, [debouncedSearch, statusFilter, sort, sortOrder, currentPage, pageSize])
-
-  // Fetch on filter/search/sort change
-  useEffect(() => {
-    fetchPartners()
-  }, [fetchPartners])
-
   // Fetch field lineage info (which sheet/tab/column each field came from)
   const fetchFieldLineage = useCallback(async () => {
     try {
@@ -1033,7 +1026,6 @@ export default function PartnersPage() {
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page)
-    fetchPartners(page, pageSize)
     // Scroll to top of table
     window.scrollTo({ top: 200, behavior: 'smooth' })
   }
@@ -1041,7 +1033,6 @@ export default function PartnersPage() {
   const handlePageSizeChange = (size: number) => {
     setPageSize(size)
     setCurrentPage(1)
-    fetchPartners(1, size)
   }
 
   // Manual refresh - clears cache and re-fetches
@@ -1050,7 +1041,7 @@ export default function PartnersPage() {
     // Clear the heatmap cache
     clearHeatmapCache()
     await Promise.all([
-      fetchPartners(),
+      refetchPartners(),
       fetchFieldLineage(),
     ])
     setIsRefreshing(false)
@@ -1070,8 +1061,8 @@ export default function PartnersPage() {
       const data = json.data
       if (data?.synced) {
         toast.success(`${brandName} synced from sheet`)
-        // Update the partner in our local state with fresh data
-        await fetchPartners()
+        // Re-fetch partners with fresh data
+        await refetchPartners()
       } else {
         toast.warning(data?.message || 'Partner not found in source sheet')
       }
@@ -1140,9 +1131,46 @@ export default function PartnersPage() {
         placeholder="Search brand, client, or code..."
       />
 
+      {/* Mobile column picker - shown below toolbar on small screens */}
+      <div className="md:hidden flex items-center justify-between px-4 pt-2 pb-1">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs">
+              <Settings2 className="h-3.5 w-3.5" />
+              Columns
+              {visibleColumns.size > 0 && (
+                <span className="ml-0.5 px-1.5 py-0.5 rounded-full bg-foreground/10 text-[10px] tabular-nums">
+                  {visibleColumns.size}
+                </span>
+              )}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-64 max-h-[420px] overflow-y-auto z-50 p-1.5">
+            <TooltipProvider delayDuration={300}>
+              <Reorder.Group
+                axis="y"
+                values={columnOrder}
+                onReorder={setColumnOrder}
+                className="space-y-0.5"
+              >
+                {orderedColumns.map((col) => (
+                  <DraggableColumnItem
+                    key={col.key}
+                    col={col}
+                    isVisible={visibleColumns.has(col.key)}
+                    fieldLineage={fieldLineage}
+                    onToggle={() => toggleColumn(col.key)}
+                  />
+                ))}
+              </Reorder.Group>
+            </TooltipProvider>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
       {/* Active column filter chips */}
       {Object.keys(columnFilters).length > 0 && (
-        <div className="px-6 md:px-8 pt-2 flex items-center gap-2 flex-wrap">
+        <div className="px-4 md:px-8 pt-2 flex items-center gap-2 flex-wrap">
           <span className="text-xs text-muted-foreground">Column filters:</span>
           {Object.entries(columnFilters).map(([key, values]) => {
             const col = CORE_COLUMNS.find(c => c.key === key)
@@ -1172,7 +1200,7 @@ export default function PartnersPage() {
         </div>
       )}
 
-      <div className="p-6 md:p-8">
+      <div className="p-4 md:p-8">
         {/* Heatmap View */}
         {showHeatmap ? (
           <HealthHeatmap
@@ -1222,7 +1250,7 @@ export default function PartnersPage() {
                   ref={headerScrollRef}
                   className="overflow-hidden"
                 >
-                  <div className="hidden md:flex items-center py-2.5 text-[11px] font-medium text-muted-foreground uppercase tracking-wider min-w-max">
+                  <div className="hidden md:flex items-center py-2.5 text-[11px] font-medium text-muted-foreground uppercase tracking-wider w-max">
                     {/* Brand header - sticky left, sortable */}
                     <button
                       onClick={() => {
@@ -1348,10 +1376,10 @@ export default function PartnersPage() {
               {/* Table content - separate scroll container synced with header */}
               <div
                 ref={contentScrollRef}
-                className="overflow-x-auto"
+                className="overflow-x-auto scrollbar-hide"
                 onScroll={handleContentScroll}
               >
-                <div className="divide-y divide-border/60 rounded-b-xl min-w-max">
+                <div className="divide-y divide-border/60 rounded-b-xl">
                   {displayedPartners.map(partner => (
                     <PartnerRow
                       key={partner.id}
@@ -1398,7 +1426,7 @@ export default function PartnersPage() {
                       size="sm"
                       onClick={() => handlePageChange(currentPage - 1)}
                       disabled={currentPage <= 1 || isFiltering}
-                      className="h-8 px-2"
+                      className="h-9 w-9 md:h-8 md:w-auto px-2 active:scale-[0.97]"
                     >
                       <ChevronLeft className="h-4 w-4" />
                     </Button>
@@ -1444,7 +1472,7 @@ export default function PartnersPage() {
                             size="sm"
                             onClick={() => handlePageChange(page)}
                             disabled={isFiltering}
-                            className="h-8 w-8 p-0"
+                            className="h-9 w-9 md:h-8 md:w-8 p-0 active:scale-[0.97]"
                           >
                             {page}
                           </Button>
@@ -1457,7 +1485,7 @@ export default function PartnersPage() {
                       size="sm"
                       onClick={() => handlePageChange(currentPage + 1)}
                       disabled={currentPage >= totalPages || isFiltering}
-                      className="h-8 px-2"
+                      className="h-9 w-9 md:h-8 md:w-auto px-2 active:scale-[0.97]"
                     >
                       <ChevronRight className="h-4 w-4" />
                     </Button>

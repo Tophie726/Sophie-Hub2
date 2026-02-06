@@ -167,14 +167,14 @@ export function DateCohortPicker({ dateRange, onChange }: DateCohortPickerProps)
                     type="date"
                     value={customStart}
                     onChange={(e) => setCustomStart(e.target.value)}
-                    className="h-7 flex-1 text-xs"
+                    className="h-7 flex-1 text-base md:text-xs"
                   />
                   <span className="text-xs text-muted-foreground">to</span>
                   <Input
                     type="date"
                     value={customEnd}
                     onChange={(e) => setCustomEnd(e.target.value)}
-                    className="h-7 flex-1 text-xs"
+                    className="h-7 flex-1 text-base md:text-xs"
                   />
                 </div>
                 <button

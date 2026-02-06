@@ -4,6 +4,8 @@ import { useSession } from 'next-auth/react'
 import { useTheme } from 'next-themes'
 import { useEffect, useState, useCallback } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
+import { useQuery } from '@tanstack/react-query'
+import { useAuthMe } from '@/lib/hooks/use-auth-me'
 import { PageHeader } from '@/components/layout/page-header'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
@@ -120,8 +122,9 @@ export default function SettingsPage() {
   const router = useRouter()
 
   const [mounted, setMounted] = useState(false)
-  const [isAdmin, setIsAdmin] = useState(false)
-  const [isCheckingAdmin, setIsCheckingAdmin] = useState(true)
+  const { data: authUser } = useAuthMe()
+  const isAdmin = authUser?.isAdmin || false
+  const isCheckingAdmin = authUser === undefined
   const [activeTab, setActiveTab] = useState<TabId>(() => {
     const tab = searchParams.get('tab')
     if (tab && TABS.some(t => t.id === tab)) {
@@ -130,13 +133,22 @@ export default function SettingsPage() {
     return 'profile'
   })
 
-  // My Tickets state
-  const [myTickets, setMyTickets] = useState<FeedbackItem[]>([])
-  const [ticketsLoading, setTicketsLoading] = useState(false)
+  // My Tickets via TanStack Query
   const [ticketFilter, setTicketFilter] = useState<'all' | 'bug' | 'feature' | 'question'>('all')
   const [selectedTicket, setSelectedTicket] = useState<FeedbackItem | null>(null)
   const [ticketComments, setTicketComments] = useState<TicketComment[]>([])
   const [commentsLoading, setCommentsLoading] = useState(false)
+
+  const { data: myTickets = [], isLoading: ticketsLoading } = useQuery<FeedbackItem[]>({
+    queryKey: ['feedback', 'mine'],
+    queryFn: async () => {
+      const res = await fetch('/api/feedback?mine=true')
+      if (!res.ok) return []
+      const json = await res.json()
+      return json.data?.feedback || []
+    },
+    enabled: activeTab === 'changelog',
+  })
 
   // API Key state
   const [apiSettings, setApiSettings] = useState<ApiKeySetting[]>([
@@ -171,22 +183,6 @@ export default function SettingsPage() {
     router.replace(url.pathname + url.search, { scroll: false })
   }
 
-  // Fetch my tickets
-  const fetchMyTickets = useCallback(async () => {
-    setTicketsLoading(true)
-    try {
-      const res = await fetch('/api/feedback?mine=true')
-      if (res.ok) {
-        const json = await res.json()
-        setMyTickets(json.data?.feedback || [])
-      }
-    } catch (error) {
-      console.error('Failed to fetch tickets:', error)
-    } finally {
-      setTicketsLoading(false)
-    }
-  }, [])
-
   // Fetch comments for a ticket
   const fetchTicketComments = useCallback(async (ticketId: string) => {
     setCommentsLoading(true)
@@ -210,55 +206,45 @@ export default function SettingsPage() {
     fetchTicketComments(ticket.id)
   }, [fetchTicketComments])
 
-  const initialize = useCallback(async () => {
-    try {
-      const authResponse = await fetch('/api/auth/me')
-      if (authResponse.ok) {
-        const authData = await authResponse.json()
-        const userIsAdmin = authData.user?.isAdmin || false
-        setIsAdmin(userIsAdmin)
-
-        if (userIsAdmin) {
-          const settingsResponse = await fetch('/api/admin/settings')
-          if (settingsResponse.ok) {
-            const json = await settingsResponse.json()
-            const data = json.data || json
-            if (data.settings) {
-              setApiSettings(prev => prev.map(setting => {
-                const saved = data.settings.find((s: { key: string }) => s.key === setting.key)
-                if (saved) {
-                  return {
-                    ...setting,
-                    isSet: saved.is_set,
-                    maskedValue: saved.masked_value,
-                    lastUpdated: saved.updated_at,
-                  }
-                }
-                return setting
-              }))
-            }
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Failed to initialize settings:', error)
-    } finally {
-      setIsCheckingAdmin(false)
-      setIsLoadingSettings(false)
-    }
+  // Fetch admin settings when auth resolves
+  useEffect(() => {
+    setMounted(true)
   }, [])
 
   useEffect(() => {
-    setMounted(true)
-    initialize()
-  }, [initialize])
-
-  // Fetch tickets when changelog tab is active
-  useEffect(() => {
-    if (activeTab === 'changelog' && myTickets.length === 0) {
-      fetchMyTickets()
+    if (!isAdmin || isCheckingAdmin) {
+      setIsLoadingSettings(false)
+      return
     }
-  }, [activeTab, myTickets.length, fetchMyTickets])
+    async function fetchAdminSettings() {
+      try {
+        const settingsResponse = await fetch('/api/admin/settings')
+        if (settingsResponse.ok) {
+          const json = await settingsResponse.json()
+          const data = json.data || json
+          if (data.settings) {
+            setApiSettings(prev => prev.map(setting => {
+              const saved = data.settings.find((s: { key: string }) => s.key === setting.key)
+              if (saved) {
+                return {
+                  ...setting,
+                  isSet: saved.is_set,
+                  maskedValue: saved.masked_value,
+                  lastUpdated: saved.updated_at,
+                }
+              }
+              return setting
+            }))
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch admin settings:', error)
+      } finally {
+        setIsLoadingSettings(false)
+      }
+    }
+    fetchAdminSettings()
+  }, [isAdmin, isCheckingAdmin])
 
   const handleSaveApiKey = async (settingKey: string) => {
     if (!inputValue.trim()) {

@@ -1,5 +1,6 @@
 import { requirePermission } from '@/lib/auth/api-auth'
 import { apiSuccess, ApiErrors } from '@/lib/api/response'
+import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { getSheetRawRows } from '@/lib/google/sheets'
 import { getServerSession } from 'next-auth'
@@ -27,6 +28,11 @@ interface RepairResult {
 export async function POST() {
   const auth = await requirePermission('data-enrichment:write')
   if (!auth.authenticated) return auth.response
+
+  const rateLimit = checkRateLimit(auth.user.id, 'admin:repair-mappings:write', RATE_LIMITS.STRICT)
+  if (!rateLimit.allowed) {
+    return ApiErrors.rateLimited('Too many repair attempts. Please wait before trying again.')
+  }
 
   try {
     // Get the user's Google access token

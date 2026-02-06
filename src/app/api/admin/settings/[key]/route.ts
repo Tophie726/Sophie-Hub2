@@ -3,6 +3,7 @@ import { ROLES } from '@/lib/auth/roles'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { encrypt, decrypt, maskValue } from '@/lib/encryption'
 import { apiSuccess, apiError, ApiErrors } from '@/lib/api/response'
+import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
 
 interface RouteContext {
   params: Promise<{ key: string }>
@@ -15,6 +16,11 @@ interface RouteContext {
 export async function PUT(request: Request, context: RouteContext) {
   const authResult = await requireRole(ROLES.ADMIN)
   if (!authResult.authenticated) return authResult.response
+
+  const rateLimit = checkRateLimit(authResult.user.id, 'admin:settings:write', RATE_LIMITS.STRICT)
+  if (!rateLimit.allowed) {
+    return ApiErrors.rateLimited('Too many settings updates. Please wait before trying again.')
+  }
 
   const { key } = await context.params
 
@@ -86,6 +92,11 @@ export async function PUT(request: Request, context: RouteContext) {
 export async function DELETE(request: Request, context: RouteContext) {
   const authResult = await requireRole(ROLES.ADMIN)
   if (!authResult.authenticated) return authResult.response
+
+  const rateLimit = checkRateLimit(authResult.user.id, 'admin:settings:write', RATE_LIMITS.STRICT)
+  if (!rateLimit.allowed) {
+    return ApiErrors.rateLimited('Too many settings updates. Please wait before trying again.')
+  }
 
   const { key } = await context.params
 

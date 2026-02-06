@@ -160,7 +160,7 @@ function SidebarContent({ onNavigate, layoutId = 'activeNav' }: SidebarContentPr
       </ScrollArea>
 
       {/* User Section */}
-      <div className="border-t border-border/40 p-3">
+      <div className="border-t border-border/40 p-3 pb-safe">
         <div className="flex items-center gap-2">
           {/* Profile - clickable to settings */}
           <Link

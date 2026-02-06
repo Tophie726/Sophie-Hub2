@@ -1,9 +1,11 @@
 'use client'
 
 import { useState } from 'react'
+import { motion } from 'framer-motion'
 import { ChevronUp, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
+import { springPop } from '@/lib/animations'
 
 interface VoteButtonProps {
   feedbackId: string
@@ -76,7 +78,7 @@ export function VoteButton({
 
   const sizeClasses = size === 'sm'
     ? 'w-12 h-14 text-xs'
-    : 'w-14 h-16 text-sm'
+    : 'w-12 md:w-14 h-16 text-sm'
 
   const iconSize = size === 'sm' ? 'h-4 w-4' : 'h-5 w-5'
 
@@ -99,7 +101,15 @@ export function VoteButton({
       ) : (
         <ChevronUp className={cn(iconSize, isVoted && 'text-primary')} />
       )}
-      <span className="font-semibold tabular-nums">{count}</span>
+      <motion.span
+        key={count}
+        initial={{ scale: 1.3, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={springPop}
+        className="font-semibold tabular-nums"
+      >
+        {count}
+      </motion.span>
     </button>
   )
 }

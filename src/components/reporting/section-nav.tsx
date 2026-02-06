@@ -64,7 +64,7 @@ export function SectionNav({ sections }: SectionNavProps) {
   return (
     <div
       ref={navRef}
-      className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide pb-1 -mb-1"
+      className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide pb-1 -mb-1 px-4 md:px-0"
     >
       {sections.map((section, index) => (
         <button

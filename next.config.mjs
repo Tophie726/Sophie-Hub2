@@ -34,11 +34,14 @@ const nextConfig = {
             key: 'Permissions-Policy',
             value: 'camera=(), microphone=(), geolocation=()',
           },
-          // Note: HSTS should only be enabled in production with HTTPS
-          // {
-          //   key: 'Strict-Transport-Security',
-          //   value: 'max-age=31536000; includeSubDomains',
-          // },
+          {
+            key: 'Content-Security-Policy',
+            value: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://us.i.posthog.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.googleusercontent.com; connect-src 'self' https://us.i.posthog.com https://*.supabase.co https://oauth2.googleapis.com; font-src 'self'; frame-ancestors 'none'",
+          },
+          ...(process.env.VERCEL ? [{
+            key: 'Strict-Transport-Security',
+            value: 'max-age=31536000; includeSubDomains',
+          }] : []),
         ],
       },
     ];

@@ -4,6 +4,7 @@ import { useState, useRef, useCallback, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Settings, Trash2, GripVertical } from 'lucide-react'
 import { useDraggable } from '@dnd-kit/core'
+import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { easeOut, duration } from '@/lib/animations'
 import type { DashboardWidget } from '@/types/modules'
@@ -39,6 +40,16 @@ export function WidgetWrapper({
 }: WidgetWrapperProps) {
   const isMobilePreview = previewMode === 'mobile'
   const isDevicePreview = previewMode !== 'desktop'
+
+  // Detect actual mobile viewport
+  const [isActualMobile, setIsActualMobile] = useState(false)
+  useEffect(() => {
+    const check = () => setIsActualMobile(window.innerWidth < 768)
+    check()
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
+  }, [])
+
   const [isHovered, setIsHovered] = useState(false)
   const [isResizing, setIsResizing] = useState(false)
   const [previewSize, setPreviewSize] = useState<{ cols: number; rows: number } | null>(null)
@@ -58,7 +69,7 @@ export function WidgetWrapper({
     setActivatorNodeRef,
   } = useDraggable({
     id: widget.id,
-    disabled: !isEditMode || isResizing || isDevicePreview,
+    disabled: !isEditMode || isResizing || isDevicePreview || isActualMobile,
   })
 
   const handlePointerMove = useCallback(
@@ -142,8 +153,10 @@ export function WidgetWrapper({
   const displayCols = previewSize ? previewSize.cols : widget.col_span
   const displayRows = previewSize ? previewSize.rows : widget.row_span
 
+  const effectiveMobile = isMobilePreview || isActualMobile
+
   // Explicit grid placement
-  const style: React.CSSProperties = isMobilePreview
+  const style: React.CSSProperties = effectiveMobile
     ? {
         // Mobile: 2-col grid. Small widgets (metric-sized) = 1 col, larger = span 2
         gridColumn: widget.col_span <= 4 ? 'span 1' : 'span 2',
@@ -170,7 +183,14 @@ export function WidgetWrapper({
         zIndex: isResizing ? 40 : undefined,
       }
 
-  const showControls = isEditMode && isHovered
+  const showControls = isEditMode && (isHovered || (isActualMobile && isHovered))
+
+  // On mobile, tap toggles controls (since hover doesn't work on touch)
+  const handleTap = useCallback(() => {
+    if (isActualMobile && isEditMode) {
+      setIsHovered(prev => !prev)
+    }
+  }, [isActualMobile, isEditMode])
 
   return (
     <div
@@ -185,12 +205,13 @@ export function WidgetWrapper({
         ...style,
         borderTop: '2px solid hsl(var(--primary) / 0.2)',
       }}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      onMouseEnter={() => !isActualMobile && setIsHovered(true)}
+      onMouseLeave={() => !isActualMobile && setIsHovered(false)}
+      onClick={handleTap}
     >
-      {/* Drag handle (edit mode only) */}
+      {/* Drag handle (edit mode only, hidden on actual mobile) */}
       <AnimatePresence>
-        {isEditMode && !isBeingDragged && (
+        {isEditMode && !isBeingDragged && !isActualMobile && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -240,9 +261,9 @@ export function WidgetWrapper({
         )}
       </AnimatePresence>
 
-      {/* Resize corner handle (edit mode only, not during drag) */}
+      {/* Resize corner handle (edit mode only, not during drag, hidden on actual mobile) */}
       <AnimatePresence>
-        {isEditMode && !isBeingDragged && !isDevicePreview && (
+        {isEditMode && !isBeingDragged && !isDevicePreview && !isActualMobile && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -287,7 +308,7 @@ export function WidgetWrapper({
 
       {/* Title bar */}
       {widget.title && (
-        <div className="px-4 pt-3 pb-0">
+        <div className={cn("px-4 pt-3 pb-0", isEditMode && !isActualMobile && "pl-8 md:pl-8")}>
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide" style={{ WebkitFontSmoothing: 'antialiased' }}>
             {widget.title}
           </p>

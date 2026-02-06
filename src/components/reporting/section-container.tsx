@@ -65,9 +65,19 @@ export function SectionContainer({
   const [dropTarget, setDropTarget] = useState<{ col: number; row: number } | null>(null)
   const [dropValid, setDropValid] = useState(false)
 
+  // Detect actual mobile viewport (not just preview mode)
+  const [isActualMobile, setIsActualMobile] = useState(false)
+  useEffect(() => {
+    const check = () => setIsActualMobile(window.innerWidth < 768)
+    check()
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
+  }, [])
+
   const isMobilePreview = previewMode === 'mobile'
   const isTabletPreview = previewMode === 'tablet'
   const isDevicePreview = isMobilePreview || isTabletPreview
+  const effectiveMobile = isMobilePreview || isActualMobile
   const occupancyMap = useOccupancyMap(section.widgets)
   const maxRow = useMemo(() => Math.max(getMaxRow(section.widgets), 1), [section.widgets])
   // Show extra row during drag for expansion
@@ -78,16 +88,16 @@ export function SectionContainer({
     if (!el) return
     const measure = () => {
       const gap = 12
-      const cols = isMobilePreview ? 2 : isTabletPreview ? 4 : GRID_COLS
+      const cols = effectiveMobile ? 2 : isTabletPreview ? 4 : GRID_COLS
       const cellWidth = (el.offsetWidth - gap * (cols - 1)) / cols
-      const rowHeight = isMobilePreview ? 120 : isTabletPreview ? 150 : 180
+      const rowHeight = effectiveMobile ? 120 : isTabletPreview ? 150 : 180
       setGridDimensions({ cellWidth, rowHeight })
     }
     measure()
     const observer = new ResizeObserver(measure)
     observer.observe(el)
     return () => observer.disconnect()
-  }, [isMobilePreview, isTabletPreview])
+  }, [effectiveMobile, isTabletPreview])
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -188,7 +198,7 @@ export function SectionContainer({
   const gridCells = useMemo(() => {
     if (!activeWidget) return []
     const cells: { col: number; row: number; highlight: CellHighlight }[] = []
-    const cols = isMobilePreview ? 2 : isTabletPreview ? 4 : GRID_COLS
+    const cols = effectiveMobile ? 2 : isTabletPreview ? 4 : GRID_COLS
     for (let row = 1; row <= totalRows; row++) {
       for (let col = 1; col <= cols; col++) {
         const key = `${col},${row}`
@@ -200,9 +210,9 @@ export function SectionContainer({
       }
     }
     return cells
-  }, [activeWidget, totalRows, highlightedCells, isMobilePreview, isTabletPreview])
+  }, [activeWidget, totalRows, highlightedCells, effectiveMobile, isTabletPreview])
 
-  const gridStyle: React.CSSProperties = isMobilePreview
+  const gridStyle: React.CSSProperties = effectiveMobile
     ? {
         gridTemplateColumns: 'repeat(2, 1fr)',
         gridAutoRows: 'minmax(120px, auto)',
@@ -289,7 +299,7 @@ export function SectionContainer({
                     <WidgetWrapper
                       key={widget.id}
                       widget={widget}
-                      isEditMode={isEditMode && !isDevicePreview}
+                      isEditMode={isEditMode && !isDevicePreview && !isActualMobile}
                       isBeingDragged={activeWidget?.id === widget.id}
                       onEdit={onEditWidget}
                       onDelete={onDeleteWidget}

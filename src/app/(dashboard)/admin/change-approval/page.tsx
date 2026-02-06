@@ -1,6 +1,7 @@
 'use client'
 
 import { Suspense, useState, useEffect, useCallback } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { PageHeader } from '@/components/layout/page-header'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -77,10 +78,21 @@ const ENTITY_COLORS: Record<string, { bg: string; text: string }> = {
 const HELP_STORAGE_KEY = 'change-approval-show-help'
 
 function ChangeApprovalContent() {
-  const [stats, setStats] = useState<ApprovalStats | null>(null)
-  const [entities, setEntities] = useState<SyncableEntity[]>([])
-  const [loading, setLoading] = useState(true)
-  const [entitiesLoading, setEntitiesLoading] = useState(true)
+  const queryClient = useQueryClient()
+  // Stats are currently static (TODO: fetch from staged_changes API)
+  const stats: ApprovalStats = { pending: 0, approved: 0, rejected: 0, applied: 0 }
+  const loading = false
+
+  const { data: entities = [], isLoading: entitiesLoading } = useQuery<SyncableEntity[]>({
+    queryKey: ['sync', 'sources'],
+    queryFn: async () => {
+      const res = await fetch('/api/sync/sources')
+      if (!res.ok) throw new Error('Failed to fetch sources')
+      const json = await res.json()
+      return json.data?.entities || []
+    },
+  })
+
   const [syncingEntities, setSyncingEntities] = useState<Set<string>>(new Set())
   const [showHelp, setShowHelp] = useState(true)
 
@@ -96,41 +108,6 @@ function ChangeApprovalContent() {
     setShowHelp(show)
     localStorage.setItem(HELP_STORAGE_KEY, String(show))
   }, [])
-
-  useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        // TODO: Fetch actual stats from staged_changes API
-        setStats({
-          pending: 0,
-          approved: 0,
-          rejected: 0,
-          applied: 0,
-        })
-      } finally {
-        setLoading(false)
-      }
-    }
-    fetchStats()
-  }, [])
-
-  const fetchEntities = useCallback(async () => {
-    setEntitiesLoading(true)
-    try {
-      const res = await fetch('/api/sync/sources')
-      if (!res.ok) throw new Error('Failed to fetch sources')
-      const json = await res.json()
-      setEntities(json.data?.entities || [])
-    } catch (error) {
-      console.error('Failed to fetch sync sources:', error)
-    } finally {
-      setEntitiesLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    fetchEntities()
-  }, [fetchEntities])
 
   const handleSyncEntity = async (entity: SyncableEntity) => {
     setSyncingEntities(prev => new Set(prev).add(entity.entity))
@@ -164,7 +141,7 @@ function ChangeApprovalContent() {
       toast.error(`Failed to sync ${entity.label}`)
     }
 
-    fetchEntities()
+    queryClient.invalidateQueries({ queryKey: ['sync', 'sources'] })
     setSyncingEntities(prev => {
       const next = new Set(prev)
       next.delete(entity.entity)
@@ -235,7 +212,7 @@ function ChangeApprovalContent() {
       </PageHeader>
 
       <div className="p-4 md:p-8 max-w-5xl">
-        {loading || !stats ? (
+        {loading ? (
           <div className="flex items-center justify-center py-20">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           </div>

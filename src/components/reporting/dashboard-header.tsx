@@ -111,7 +111,7 @@ export function DashboardHeader({
   }
 
   return (
-    <div className="border-b border-border/40 bg-background/95 backdrop-blur sticky top-0 z-30">
+    <div className="border-b border-border/40 bg-background/95 backdrop-blur sticky top-14 md:top-0 z-30">
       <div className="flex flex-wrap items-center justify-between gap-2 px-4 md:px-8 py-2 md:py-0 md:min-h-[4rem]">
         {/* Top row: back button + title */}
         <div className="flex items-center gap-3 min-w-0">
@@ -134,7 +134,7 @@ export function DashboardHeader({
                   setIsEditingTitle(false)
                 }
               }}
-              className="text-lg font-semibold tracking-tight bg-transparent border-b-2 border-primary/60 outline-none px-0 py-0.5 min-w-0"
+              className="text-base md:text-lg font-semibold tracking-tight bg-transparent border-b-2 border-primary/60 outline-none px-0 py-0.5 min-w-0"
               style={{ WebkitFontSmoothing: 'antialiased' }}
             />
           ) : (
@@ -160,7 +160,7 @@ export function DashboardHeader({
                 <Button
                   variant="outline"
                   size="sm"
-                  className="h-9 px-3 gap-2 min-w-0 max-w-[160px] md:max-w-[200px] justify-between"
+                  className="h-9 px-3 gap-2 min-w-0 max-w-[120px] sm:max-w-[160px] md:max-w-[200px] justify-between"
                 >
                   <div className="flex items-center gap-2 truncate">
                     <Building2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
@@ -171,14 +171,14 @@ export function DashboardHeader({
                   <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-72 p-0" align="end">
+              <PopoverContent className="w-[calc(100vw-2rem)] sm:w-72 p-0" align="end">
                 <div className="p-2 border-b">
                   <input
                     type="text"
                     placeholder="Search partners..."
                     value={partnerSearch}
                     onChange={(e) => setPartnerSearch(e.target.value)}
-                    className="w-full text-sm bg-transparent outline-none placeholder:text-muted-foreground/50 px-2 py-1.5"
+                    className="w-full text-base md:text-sm bg-transparent outline-none placeholder:text-muted-foreground/50 px-2 py-1.5"
                     autoFocus
                   />
                 </div>
@@ -235,13 +235,13 @@ export function DashboardHeader({
           >
             {isEditMode ? (
               <>
-                <Check className="h-4 w-4 mr-1.5" />
-                Done
+                <Check className="h-4 w-4 sm:mr-1.5" />
+                <span className="hidden sm:inline">{isEditMode ? 'Done' : 'Edit Layout'}</span>
               </>
             ) : (
               <>
-                <Pencil className="h-4 w-4 mr-1.5" />
-                Edit Layout
+                <Pencil className="h-4 w-4 sm:mr-1.5" />
+                <span className="hidden sm:inline">Edit Layout</span>
               </>
             )}
           </Button>
@@ -249,7 +249,7 @@ export function DashboardHeader({
           {/* Device preview toggle - only visible in edit mode */}
           {isEditMode && onPreviewModeChange && (
             <div
-              className="flex items-center p-0.5 rounded-lg"
+              className="hidden md:flex items-center p-0.5 rounded-lg"
               style={{ boxShadow: '0 0 0 1px rgba(0,0,0,0.08)' }}
             >
               <button
@@ -300,11 +300,11 @@ export function DashboardHeader({
               className="h-9 px-4 active:scale-[0.97]"
             >
               {isSaving ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
+                <Loader2 className="h-4 w-4 animate-spin sm:mr-1.5" />
               ) : (
-                <Save className="h-4 w-4 mr-1.5" />
+                <Save className="h-4 w-4 sm:mr-1.5" />
               )}
-              Save
+              <span className="hidden sm:inline">Save</span>
             </Button>
           </motion.div>
         </div>

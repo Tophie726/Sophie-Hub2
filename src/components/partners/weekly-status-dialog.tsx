@@ -235,7 +235,7 @@ export function WeeklyStatusDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="max-w-[95vw] md:max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center justify-between pr-6">
             <span className="truncate">{partnerName}</span>

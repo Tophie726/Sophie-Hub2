@@ -177,7 +177,7 @@ export function MetricWidget({ config, dateRange, partnerId }: MetricWidgetProps
     <div className="flex flex-col items-center justify-center p-4 md:p-6 h-full antialiased">
       {/* Large value */}
       <p
-        className="text-3xl md:text-4xl font-bold text-foreground"
+        className="text-2xl md:text-3xl font-bold text-foreground truncate max-w-full"
         style={{ fontVariantNumeric: 'tabular-nums' }}
       >
         {formattedValue}

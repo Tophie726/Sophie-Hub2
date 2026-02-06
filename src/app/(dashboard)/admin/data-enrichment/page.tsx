@@ -179,7 +179,7 @@ function DataEnrichmentContent() {
                 </div>
               </div>
 
-              <div className="rounded-lg border bg-card p-6">
+              <div className="rounded-lg border bg-card p-6 shadow-sm dark:border-border/60 dark:ring-1 dark:ring-white/[0.06]">
                 <PartnerMapping />
               </div>
             </div>

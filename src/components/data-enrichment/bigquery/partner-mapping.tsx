@@ -532,7 +532,7 @@ export function PartnerMapping({ onMappingChange }: PartnerMappingProps) {
       </div>
 
       {/* Mapping list - paginated for performance */}
-      <div className="border rounded-lg divide-y max-h-[500px] overflow-y-auto">
+      <div className="border rounded-lg divide-y max-h-[500px] overflow-y-auto dark:border-border/60 dark:ring-1 dark:ring-white/[0.06]">
         {filteredClientNames.length === 0 ? (
           <div className="p-8 text-center text-muted-foreground">
             No client names match your search

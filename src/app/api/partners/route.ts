@@ -186,7 +186,7 @@ export async function GET(request: Request) {
       total,
       has_more: total > offset + limit,
     }, 200, {
-      'Cache-Control': 'private, max-age=10, stale-while-revalidate=30',
+      'Cache-Control': 'private, max-age=60, stale-while-revalidate=300',
       ...rateLimitHeaders(rateLimit),
     })
   } catch (error) {

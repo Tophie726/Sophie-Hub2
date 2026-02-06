@@ -1,6 +1,5 @@
 'use client'
 
-import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -20,6 +19,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { StatusBadge } from '@/components/entities/status-badge'
 import { FieldGroupSection } from '@/components/entities/field-group-section'
 import { PartnerAssignmentCard } from '@/components/entities/partner-assignment-card'
+import { useStaffDetailQuery } from '@/lib/hooks/use-staff-query'
 import type { StaffDetail } from '@/types/entities'
 import type { FieldLineageMap } from '@/types/lineage'
 
@@ -32,32 +32,12 @@ function formatRole(role: string | null): string {
 
 export default function StaffDetailPage() {
   const { id } = useParams<{ id: string }>()
-  const [staff, setStaff] = useState<StaffDetail | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    async function fetchStaff() {
-      try {
-        const res = await fetch(`/api/staff/${id}`)
-        const json = await res.json()
-
-        if (!res.ok) {
-          setError(json.error?.message || 'Failed to load staff member')
-          return
-        }
-
-        setStaff(json.data?.staff || null)
-      } catch (err) {
-        console.error('Failed to fetch staff:', err)
-        setError('Failed to load staff member')
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    if (id) fetchStaff()
-  }, [id])
+  const { data: staff, isLoading: loading, error: queryError } = useStaffDetailQuery(id) as {
+    data: StaffDetail | null | undefined
+    isLoading: boolean
+    error: Error | null
+  }
+  const error = queryError?.message || null
 
   if (loading) {
     return (

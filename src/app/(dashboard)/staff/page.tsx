@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { Users, Plus, Database, ChevronRight, Loader2 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/page-header'
@@ -10,6 +10,7 @@ import { ShimmerGrid } from '@/components/ui/shimmer-grid'
 import { EntityListToolbar } from '@/components/entities/entity-list-toolbar'
 import { StatusBadge } from '@/components/entities/status-badge'
 import { useDebounce } from '@/lib/hooks/use-debounce'
+import { useStaffQuery } from '@/lib/hooks/use-staff-query'
 import type { StaffListItem } from '@/types/entities'
 
 const statusOptions = [
@@ -41,7 +42,7 @@ function StaffRow({ staff }: { staff: StaffListItem }) {
 
   return (
     <Link href={`/staff/${staff.id}`}>
-      <div className="flex items-center gap-4 px-5 py-3.5 hover:bg-muted/30 transition-colors cursor-pointer">
+      <div className="flex items-center gap-3 md:gap-4 px-4 md:px-5 py-3.5 hover:bg-muted/30 transition-colors cursor-pointer active:scale-[0.97] active:bg-muted/40">
         {/* Name + code */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
@@ -113,25 +114,44 @@ function StaffRow({ staff }: { staff: StaffListItem }) {
 }
 
 export default function StaffPage() {
-  const [staff, setStaff] = useState<StaffListItem[]>([])
-  const [loading, setLoading] = useState(true)
-  const [loadingMore, setLoadingMore] = useState(false)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string[]>([])
   const [sort, setSort] = useState('full_name')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
-  const [total, setTotal] = useState(0)
-  const [hasMore, setHasMore] = useState(false)
+  const [allStaff, setAllStaff] = useState<StaffListItem[]>([])
+  const [loadMoreOffset, setLoadMoreOffset] = useState(0)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
 
   const debouncedSearch = useDebounce(search, 300)
 
-  const fetchStaff = useCallback(async (append = false, currentOffset = 0) => {
-    if (append) {
-      setLoadingMore(true)
-    } else {
-      setLoading(true)
-    }
+  // Initial query fetches first page
+  const {
+    data: staffData,
+    isLoading: loading,
+  } = useStaffQuery({
+    search: debouncedSearch || undefined,
+    status: statusFilter.length > 0 ? statusFilter : undefined,
+    sort,
+    order: sortOrder,
+    limit: 50,
+    offset: 0,
+  })
 
+  // When the initial query data changes (filters/sort changed), reset accumulated staff
+  const initialStaff: StaffListItem[] = (staffData?.staff ?? []) as StaffListItem[]
+  const total = staffData?.total ?? 0
+  const staff = loadMoreOffset === 0 ? initialStaff : allStaff
+  const hasMore = staff.length < total
+
+  // Reset load-more state when filters change
+  useEffect(() => {
+    setLoadMoreOffset(0)
+    setAllStaff([])
+  }, [debouncedSearch, statusFilter, sort, sortOrder])
+
+  const handleLoadMore = async () => {
+    const nextOffset = staff.length
+    setIsLoadingMore(true)
     try {
       const params = new URLSearchParams()
       if (debouncedSearch) params.set('search', debouncedSearch)
@@ -139,35 +159,22 @@ export default function StaffPage() {
       params.set('sort', sort)
       params.set('order', sortOrder)
       params.set('limit', '50')
-      params.set('offset', String(append ? currentOffset : 0))
+      params.set('offset', String(nextOffset))
 
       const res = await fetch(`/api/staff?${params}`)
       const json = await res.json()
       const data = json.data
 
-      if (data) {
-        if (append) {
-          setStaff(prev => [...prev, ...data.staff])
-        } else {
-          setStaff(data.staff)
-        }
-        setTotal(data.total)
-        setHasMore(data.has_more)
+      if (data?.staff) {
+        const combined = [...staff, ...data.staff]
+        setAllStaff(combined as StaffListItem[])
+        setLoadMoreOffset(nextOffset)
       }
     } catch (error) {
-      console.error('Failed to fetch staff:', error)
+      console.error('Failed to load more staff:', error)
     } finally {
-      setLoading(false)
-      setLoadingMore(false)
+      setIsLoadingMore(false)
     }
-  }, [debouncedSearch, statusFilter, sort, sortOrder])
-
-  useEffect(() => {
-    fetchStaff(false)
-  }, [fetchStaff])
-
-  const handleLoadMore = () => {
-    fetchStaff(true, staff.length)
   }
 
   return (
@@ -197,7 +204,7 @@ export default function StaffPage() {
         placeholder="Search name, email, or code..."
       />
 
-      <div className="p-6 md:p-8">
+      <div className="p-4 md:p-8">
         {loading ? (
           <div className="rounded-xl border bg-card p-1">
             <ShimmerGrid variant="table" rows={10} columns={5} />
@@ -250,10 +257,10 @@ export default function StaffPage() {
                 <Button
                   variant="outline"
                   onClick={handleLoadMore}
-                  disabled={loadingMore}
+                  disabled={isLoadingMore}
                   className="gap-2"
                 >
-                  {loadingMore ? (
+                  {isLoadingMore ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : null}
                   Load More

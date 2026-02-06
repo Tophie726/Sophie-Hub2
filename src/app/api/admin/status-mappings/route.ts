@@ -2,6 +2,7 @@ import { requireRole } from '@/lib/auth/api-auth'
 import { ROLES } from '@/lib/auth/roles'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { apiSuccess, apiError, ApiErrors, apiValidationError } from '@/lib/api/response'
+import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
 import { z } from 'zod'
 import { BUCKET_COLORS, BUCKET_LABELS, type StatusColorBucket } from '@/lib/status-colors'
 import { invalidateMappingsCache } from '@/lib/status-colors/cache'
@@ -63,6 +64,11 @@ export async function GET() {
 export async function POST(request: Request) {
   const authResult = await requireRole(ROLES.ADMIN)
   if (!authResult.authenticated) return authResult.response
+
+  const rateLimit = checkRateLimit(authResult.user.id, 'admin:status-mappings:write', RATE_LIMITS.STRICT)
+  if (!rateLimit.allowed) {
+    return ApiErrors.rateLimited('Too many status mapping updates. Please wait before trying again.')
+  }
 
   try {
     const body = await request.json()

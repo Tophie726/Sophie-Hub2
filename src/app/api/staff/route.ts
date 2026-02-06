@@ -100,7 +100,7 @@ export async function GET(request: Request) {
       total: count || 0,
       has_more: (count || 0) > offset + limit,
     }, 200, {
-      'Cache-Control': 'private, max-age=10, stale-while-revalidate=30',
+      'Cache-Control': 'private, max-age=60, stale-while-revalidate=300',
     })
   } catch (error) {
     console.error('Error in GET /api/staff:', error)

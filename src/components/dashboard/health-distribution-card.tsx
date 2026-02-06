@@ -1,26 +1,13 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { AlertTriangle, Loader2, Settings } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import Link from 'next/link'
-
-interface BucketData {
-  id: string
-  label: string
-  color: string
-  count: number
-}
-
-interface DistributionData {
-  buckets: BucketData[]
-  total: number
-  unmappedCount: number
-  lastCalculated: string
-}
+import { useHealthDistributionQuery } from '@/lib/hooks/use-stats-query'
 
 const BUCKET_BG_COLORS: Record<string, string> = {
   healthy: 'bg-green-500',
@@ -46,27 +33,8 @@ const BUCKET_HOVER_COLORS: Record<string, string> = {
 
 export function HealthDistributionCard() {
   const router = useRouter()
-  const [data, setData] = useState<DistributionData | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
+  const { data, isLoading } = useHealthDistributionQuery()
   const [hoveredBucket, setHoveredBucket] = useState<string | null>(null)
-
-  const fetchData = useCallback(async () => {
-    try {
-      const response = await fetch('/api/stats/health-distribution')
-      if (response.ok) {
-        const json = await response.json()
-        setData(json.data || json)
-      }
-    } catch (error) {
-      console.error('Failed to fetch health distribution:', error)
-    } finally {
-      setIsLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    fetchData()
-  }, [fetchData])
 
   const handleBucketClick = (bucketId: string) => {
     // Map bucket to status filter value
