@@ -10,6 +10,7 @@ import { PageHeader } from '@/components/layout/page-header'
 import { DashboardList } from '@/components/modules/dashboard-list'
 import { UsageDashboard } from '@/components/modules/usage-dashboard'
 import { UsagePreview } from '@/components/modules/usage-preview'
+import { PortfolioCard } from '@/components/modules/portfolio-card'
 import type { Module } from '@/types/modules'
 
 type Tab = 'dashboards' | 'usage'
@@ -140,6 +141,8 @@ export default function ModuleDetailPage() {
                   onViewDetails={() => setActiveTab('usage')}
                 />
               )}
+              {/* Portfolio overview card */}
+              <PortfolioCard moduleSlug={params.slug} />
               <DashboardList module={module} />
             </div>
           )}
