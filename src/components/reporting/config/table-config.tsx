@@ -1,5 +1,6 @@
 'use client'
 
+import { useState, useCallback } from 'react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
@@ -21,6 +22,7 @@ import {
 import { Checkbox } from '@/components/ui/checkbox'
 import { ViewSelector } from '@/components/reporting/config/view-selector'
 import { getTableColumns, getColumnLabel } from '@/lib/bigquery/column-metadata'
+import { VIEW_LABELS } from '@/types/modules'
 import type { TableWidgetConfig, SortDirection } from '@/types/modules'
 
 interface TableConfigProps {
@@ -28,6 +30,8 @@ interface TableConfigProps {
   title: string
   onConfigChange: (config: TableWidgetConfig) => void
   onTitleChange: (title: string) => void
+  titleTouched: boolean
+  onTitleTouched: () => void
 }
 
 const ROW_LIMITS = [
@@ -36,14 +40,33 @@ const ROW_LIMITS = [
   { value: '50', label: '50 rows' },
 ]
 
-export function TableConfig({ config, title, onConfigChange, onTitleChange }: TableConfigProps) {
+function generateTableTitle(view: string): string {
+  const label = VIEW_LABELS[view] || view
+  return `${label} Data`
+}
+
+export function TableConfig({ config, title, onConfigChange, onTitleChange, titleTouched, onTitleTouched }: TableConfigProps) {
   const tableColumns = getTableColumns(config.view)
+  const [columnSearch, setColumnSearch] = useState('')
+
+  const filteredColumns = tableColumns.filter((col) => {
+    if (!columnSearch) return true
+    const q = columnSearch.toLowerCase()
+    return col.label.toLowerCase().includes(q) || col.description.toLowerCase().includes(q)
+  })
+
+  const autoTitle = useCallback((view: string) => {
+    if (!titleTouched) {
+      onTitleChange(generateTableTitle(view))
+    }
+  }, [titleTouched, onTitleChange])
 
   function handleViewChange(view: string) {
     const newCols = getTableColumns(view)
     const firstFew = newCols.slice(0, 4).map(c => c.column)
     const sortBy = firstFew[0] ?? ''
     onConfigChange({ ...config, view, columns: firstFew, sort_by: sortBy })
+    autoTitle(view)
   }
 
   function toggleColumn(column: string) {
@@ -51,7 +74,6 @@ export function TableConfig({ config, title, onConfigChange, onTitleChange }: Ta
     const next = current.includes(column)
       ? current.filter(c => c !== column)
       : [...current, column]
-    // If sort_by column was removed, reset to first remaining
     const sortBy = next.includes(config.sort_by) ? config.sort_by : (next[0] ?? '')
     onConfigChange({ ...config, columns: next, sort_by: sortBy })
   }
@@ -62,6 +84,11 @@ export function TableConfig({ config, title, onConfigChange, onTitleChange }: Ta
     onConfigChange({ ...config, columns: next, sort_by: sortBy })
   }
 
+  function handleTitleChange(value: string) {
+    onTitleTouched()
+    onTitleChange(value)
+  }
+
   return (
     <div className="space-y-4">
       <div className="space-y-2">
@@ -69,7 +96,7 @@ export function TableConfig({ config, title, onConfigChange, onTitleChange }: Ta
         <Input
           id="table-title"
           value={title}
-          onChange={(e) => onTitleChange(e.target.value)}
+          onChange={(e) => handleTitleChange(e.target.value)}
           placeholder="e.g., Top Products"
           className="h-9"
         />
@@ -115,8 +142,14 @@ export function TableConfig({ config, title, onConfigChange, onTitleChange }: Ta
             </Button>
           </PopoverTrigger>
           <PopoverContent className="w-64 p-2" align="start">
+            <Input
+              placeholder="Search columns..."
+              value={columnSearch}
+              onChange={(e) => setColumnSearch(e.target.value)}
+              className="h-8 mb-2 text-sm"
+            />
             <div className="space-y-1 max-h-56 overflow-y-auto">
-              {tableColumns.map((col) => (
+              {filteredColumns.map((col) => (
                 <label
                   key={col.column}
                   className="flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer hover:bg-muted transition-colors"
@@ -133,6 +166,9 @@ export function TableConfig({ config, title, onConfigChange, onTitleChange }: Ta
                   </div>
                 </label>
               ))}
+              {filteredColumns.length === 0 && columnSearch && (
+                <p className="text-xs text-muted-foreground px-2 py-1.5">No matching columns</p>
+              )}
               {tableColumns.length === 0 && (
                 <p className="text-xs text-muted-foreground px-2 py-1.5">
                   Select a data view first

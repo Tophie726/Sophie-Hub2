@@ -1,5 +1,6 @@
 'use client'
 
+import { useState, useCallback } from 'react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
@@ -28,6 +29,8 @@ interface ChartConfigProps {
   title: string
   onConfigChange: (config: ChartWidgetConfig) => void
   onTitleChange: (title: string) => void
+  titleTouched: boolean
+  onTitleTouched: () => void
 }
 
 const CHART_TYPES: { value: ChartType; label: string }[] = [
@@ -51,9 +54,29 @@ const FORMATS: { value: DisplayFormat; label: string }[] = [
   { value: 'compact', label: 'Compact (1.2K)' },
 ]
 
-export function ChartConfig({ config, title, onConfigChange, onTitleChange }: ChartConfigProps) {
+function generateChartTitle(view: string, yAxis: string[], xAxis: string): string {
+  if (yAxis.length === 0) return ''
+  const metricLabels = yAxis.map(col => getColumnLabel(view, col)).join(', ')
+  const xLabel = getColumnLabel(view, xAxis)
+  return `${metricLabels} by ${xLabel}`
+}
+
+export function ChartConfig({ config, title, onConfigChange, onTitleChange, titleTouched, onTitleTouched }: ChartConfigProps) {
   const dimensionColumns = getDimensionColumns(config.view)
   const metricColumns = getMetricColumns(config.view)
+  const [yAxisSearch, setYAxisSearch] = useState('')
+
+  const filteredMetrics = metricColumns.filter((col) => {
+    if (!yAxisSearch) return true
+    const q = yAxisSearch.toLowerCase()
+    return col.label.toLowerCase().includes(q) || col.description.toLowerCase().includes(q)
+  })
+
+  const autoTitle = useCallback((view: string, yAxis: string[], xAxis: string) => {
+    if (!titleTouched) {
+      onTitleChange(generateChartTitle(view, yAxis, xAxis))
+    }
+  }, [titleTouched, onTitleChange])
 
   function handleViewChange(view: string) {
     const newDims = getDimensionColumns(view)
@@ -62,6 +85,12 @@ export function ChartConfig({ config, title, onConfigChange, onTitleChange }: Ch
     const yAxis = newMetrics.length > 0 ? [newMetrics[0].column] : []
     const format = yAxis.length > 0 ? getColumnFormat(view, yAxis[0]) : config.format
     onConfigChange({ ...config, view, x_axis: xAxis, y_axis: yAxis, format })
+    autoTitle(view, yAxis, xAxis)
+  }
+
+  function handleXAxisChange(val: string) {
+    onConfigChange({ ...config, x_axis: val })
+    autoTitle(config.view, config.y_axis, val)
   }
 
   function toggleYAxis(column: string) {
@@ -71,12 +100,19 @@ export function ChartConfig({ config, title, onConfigChange, onTitleChange }: Ch
       : [...current, column]
     const format = next.length > 0 ? getColumnFormat(config.view, next[0]) : config.format
     onConfigChange({ ...config, y_axis: next, format })
+    autoTitle(config.view, next, config.x_axis)
   }
 
   function removeYAxis(column: string) {
     const next = config.y_axis.filter(c => c !== column)
     const format = next.length > 0 ? getColumnFormat(config.view, next[0]) : config.format
     onConfigChange({ ...config, y_axis: next, format })
+    autoTitle(config.view, next, config.x_axis)
+  }
+
+  function handleTitleChange(value: string) {
+    onTitleTouched()
+    onTitleChange(value)
   }
 
   return (
@@ -86,7 +122,7 @@ export function ChartConfig({ config, title, onConfigChange, onTitleChange }: Ch
         <Input
           id="chart-title"
           value={title}
-          onChange={(e) => onTitleChange(e.target.value)}
+          onChange={(e) => handleTitleChange(e.target.value)}
           placeholder="e.g., Sales Over Time"
           className="h-9"
         />
@@ -120,7 +156,7 @@ export function ChartConfig({ config, title, onConfigChange, onTitleChange }: Ch
         <Label>X-Axis</Label>
         <Select
           value={config.x_axis}
-          onValueChange={(val) => onConfigChange({ ...config, x_axis: val })}
+          onValueChange={handleXAxisChange}
         >
           <SelectTrigger className="h-9">
             <SelectValue placeholder="Select x-axis" />
@@ -173,8 +209,14 @@ export function ChartConfig({ config, title, onConfigChange, onTitleChange }: Ch
             </Button>
           </PopoverTrigger>
           <PopoverContent className="w-64 p-2" align="start">
+            <Input
+              placeholder="Search metrics..."
+              value={yAxisSearch}
+              onChange={(e) => setYAxisSearch(e.target.value)}
+              className="h-8 mb-2 text-sm"
+            />
             <div className="space-y-1 max-h-48 overflow-y-auto">
-              {metricColumns.map((col) => (
+              {filteredMetrics.map((col) => (
                 <label
                   key={col.column}
                   className="flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer hover:bg-muted transition-colors"
@@ -183,9 +225,17 @@ export function ChartConfig({ config, title, onConfigChange, onTitleChange }: Ch
                     checked={config.y_axis.includes(col.column)}
                     onCheckedChange={() => toggleYAxis(col.column)}
                   />
-                  <span className="text-sm">{col.label}</span>
+                  <div className="flex flex-col">
+                    <span className="text-sm">{col.label}</span>
+                    {col.description && (
+                      <span className="text-xs text-muted-foreground">{col.description}</span>
+                    )}
+                  </div>
                 </label>
               ))}
+              {filteredMetrics.length === 0 && yAxisSearch && (
+                <p className="text-xs text-muted-foreground px-2 py-1.5">No matching metrics</p>
+              )}
               {metricColumns.length === 0 && (
                 <p className="text-xs text-muted-foreground px-2 py-1.5">
                   Select a data view first

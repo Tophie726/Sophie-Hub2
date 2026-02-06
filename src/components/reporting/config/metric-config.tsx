@@ -1,18 +1,23 @@
 'use client'
 
+import { useState, useCallback } from 'react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Button } from '@/components/ui/button'
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
-  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
 import { ViewSelector } from '@/components/reporting/config/view-selector'
-import { getMetricColumns, getColumnFormat } from '@/lib/bigquery/column-metadata'
+import { getMetricColumns, getColumnFormat, getColumnLabel } from '@/lib/bigquery/column-metadata'
 import type { MetricWidgetConfig, AggregationType, DisplayFormat } from '@/types/modules'
 
 interface MetricConfigProps {
@@ -20,6 +25,8 @@ interface MetricConfigProps {
   title: string
   onConfigChange: (config: MetricWidgetConfig) => void
   onTitleChange: (title: string) => void
+  titleTouched: boolean
+  onTitleTouched: () => void
 }
 
 const AGGREGATIONS: { value: AggregationType; label: string }[] = [
@@ -37,20 +44,62 @@ const FORMATS: { value: DisplayFormat; label: string }[] = [
   { value: 'compact', label: 'Compact (1.2K)' },
 ]
 
-export function MetricConfig({ config, title, onConfigChange, onTitleChange }: MetricConfigProps) {
+const AGG_PREFIX: Record<AggregationType, string> = {
+  sum: 'Total',
+  avg: 'Average',
+  count: 'Count of',
+  min: 'Minimum',
+  max: 'Maximum',
+}
+
+function generateMetricTitle(view: string, metric: string, aggregation: AggregationType): string {
+  if (!metric) return ''
+  const label = getColumnLabel(view, metric)
+  return `${AGG_PREFIX[aggregation]} ${label}`
+}
+
+export function MetricConfig({ config, title, onConfigChange, onTitleChange, titleTouched, onTitleTouched }: MetricConfigProps) {
   const metricColumns = getMetricColumns(config.view)
+  const [metricSearch, setMetricSearch] = useState('')
+  const [metricOpen, setMetricOpen] = useState(false)
+
+  const filteredMetrics = metricColumns.filter((col) => {
+    if (!metricSearch) return true
+    const q = metricSearch.toLowerCase()
+    return col.label.toLowerCase().includes(q) || col.description.toLowerCase().includes(q)
+  })
+
+  const autoTitle = useCallback((view: string, metric: string, aggregation: AggregationType) => {
+    if (!titleTouched) {
+      onTitleChange(generateMetricTitle(view, metric, aggregation))
+    }
+  }, [titleTouched, onTitleChange])
 
   function handleMetricChange(column: string) {
     const format = getColumnFormat(config.view, column)
     onConfigChange({ ...config, metric: column, format })
+    autoTitle(config.view, column, config.aggregation)
+    setMetricOpen(false)
+    setMetricSearch('')
   }
 
   function handleViewChange(view: string) {
-    // Reset metric when view changes since columns differ
     const newMetrics = getMetricColumns(view)
     const firstMetric = newMetrics[0]?.column ?? ''
     const format = firstMetric ? getColumnFormat(view, firstMetric) : config.format
     onConfigChange({ ...config, view, metric: firstMetric, format })
+    autoTitle(view, firstMetric, config.aggregation)
+  }
+
+  function handleAggregationChange(val: string) {
+    const agg = val as AggregationType
+    onConfigChange({ ...config, aggregation: agg })
+    autoTitle(config.view, config.metric, agg)
+  }
+
+  function handleTitleChange(value: string) {
+    onTitleTouched()
+    onTitleChange(value)
   }
 
   return (
@@ -60,7 +109,7 @@ export function MetricConfig({ config, title, onConfigChange, onTitleChange }: M
         <Input
           id="metric-title"
           value={title}
-          onChange={(e) => onTitleChange(e.target.value)}
+          onChange={(e) => handleTitleChange(e.target.value)}
           placeholder="e.g., Total Sales"
           className="h-9"
         />
@@ -73,26 +122,53 @@ export function MetricConfig({ config, title, onConfigChange, onTitleChange }: M
 
       <div className="space-y-2">
         <Label>Metric</Label>
-        <Select value={config.metric} onValueChange={handleMetricChange}>
-          <SelectTrigger className="h-9">
-            <SelectValue placeholder="Select a metric" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectGroup>
-              <SelectLabel>Available Metrics</SelectLabel>
-              {metricColumns.map((col) => (
-                <SelectItem key={col.column} value={col.column}>
-                  {col.label}
-                </SelectItem>
+        <Popover open={metricOpen} onOpenChange={(open) => { setMetricOpen(open); if (!open) setMetricSearch('') }}>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              className="w-full justify-start h-9 px-3 font-normal"
+            >
+              {config.metric ? (
+                <span>{getColumnLabel(config.view, config.metric)}</span>
+              ) : (
+                <span className="text-muted-foreground">Select a metric</span>
+              )}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-64 p-2" align="start">
+            <Input
+              placeholder="Search metrics..."
+              value={metricSearch}
+              onChange={(e) => setMetricSearch(e.target.value)}
+              className="h-8 mb-2 text-sm"
+            />
+            <div className="space-y-0.5 max-h-48 overflow-y-auto">
+              {filteredMetrics.map((col) => (
+                <button
+                  key={col.column}
+                  type="button"
+                  onClick={() => handleMetricChange(col.column)}
+                  className={`w-full text-left px-2 py-1.5 rounded-md cursor-pointer transition-colors text-sm ${
+                    config.metric === col.column ? 'bg-primary/10 text-primary' : 'hover:bg-muted'
+                  }`}
+                >
+                  <div className="font-medium">{col.label}</div>
+                  {col.description && (
+                    <div className="text-xs text-muted-foreground">{col.description}</div>
+                  )}
+                </button>
               ))}
-            </SelectGroup>
-          </SelectContent>
-        </Select>
-        {metricColumns.length === 0 && (
-          <p className="text-xs text-muted-foreground">
-            Select a data view first
-          </p>
-        )}
+              {filteredMetrics.length === 0 && metricSearch && (
+                <p className="text-xs text-muted-foreground px-2 py-1.5">No matching metrics</p>
+              )}
+              {metricColumns.length === 0 && (
+                <p className="text-xs text-muted-foreground px-2 py-1.5">
+                  Select a data view first
+                </p>
+              )}
+            </div>
+          </PopoverContent>
+        </Popover>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
@@ -100,7 +176,7 @@ export function MetricConfig({ config, title, onConfigChange, onTitleChange }: M
           <Label>Aggregation</Label>
           <Select
             value={config.aggregation}
-            onValueChange={(val) => onConfigChange({ ...config, aggregation: val as AggregationType })}
+            onValueChange={handleAggregationChange}
           >
             <SelectTrigger className="h-9">
               <SelectValue />

@@ -41,6 +41,11 @@ import type {
   TextWidgetConfig,
 } from '@/types/modules'
 
+export interface ConfigChildProps {
+  titleTouched: boolean
+  onTitleTouched: () => void
+}
+
 interface WidgetConfigDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -129,6 +134,7 @@ export function WidgetConfigDialog({
   const [config, setConfig] = useState<WidgetConfig>(widget?.config || DEFAULT_CONFIGS.metric)
   const [colSpan, setColSpan] = useState(widget?.col_span || 1)
   const [rowSpan, setRowSpan] = useState(widget?.row_span || 1)
+  const [titleTouched, setTitleTouched] = useState(false)
 
   // Reset state when dialog opens/closes or widget changes
   useEffect(() => {
@@ -140,6 +146,7 @@ export function WidgetConfigDialog({
         setConfig(widget.config)
         setColSpan(widget.col_span)
         setRowSpan(widget.row_span)
+        setTitleTouched(true) // Existing widget = user has set a title
       } else {
         setStep('type')
         setSelectedType('metric')
@@ -147,6 +154,7 @@ export function WidgetConfigDialog({
         setConfig(DEFAULT_CONFIGS.metric)
         setColSpan(1)
         setRowSpan(1)
+        setTitleTouched(false)
       }
     }
   }, [open, widget])
@@ -157,6 +165,8 @@ export function WidgetConfigDialog({
     const typeInfo = WIDGET_TYPES.find((t) => t.type === type)
     setColSpan(typeInfo?.defaultColSpan || 1)
     setRowSpan(typeInfo?.defaultRowSpan || 1)
+    setTitleTouched(false)
+    setTitle('')
     setStep('config')
   }
 
@@ -217,6 +227,8 @@ export function WidgetConfigDialog({
                 title={title}
                 onConfigChange={setConfig}
                 onTitleChange={setTitle}
+                titleTouched={titleTouched}
+                onTitleTouched={() => setTitleTouched(true)}
               />
             )}
             {selectedType === 'chart' && (
@@ -225,6 +237,8 @@ export function WidgetConfigDialog({
                 title={title}
                 onConfigChange={setConfig}
                 onTitleChange={setTitle}
+                titleTouched={titleTouched}
+                onTitleTouched={() => setTitleTouched(true)}
               />
             )}
             {selectedType === 'table' && (
@@ -233,6 +247,8 @@ export function WidgetConfigDialog({
                 title={title}
                 onConfigChange={setConfig}
                 onTitleChange={setTitle}
+                titleTouched={titleTouched}
+                onTitleTouched={() => setTitleTouched(true)}
               />
             )}
             {selectedType === 'text' && (
