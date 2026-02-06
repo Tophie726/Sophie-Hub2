@@ -4,7 +4,7 @@
  * Manages BigQuery client_name → partner mappings in entity_external_ids table.
  */
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { z } from 'zod'
 import { requireRole } from '@/lib/auth/api-auth'
@@ -29,8 +29,8 @@ export async function GET() {
   try {
     // Require admin role (Data Enrichment is admin-only)
     const authResult = await requireRole('admin')
-    if (authResult instanceof NextResponse) {
-      return authResult
+    if (!authResult.authenticated) {
+      return authResult.response
     }
 
     // Get all BigQuery mappings joined with partner info
@@ -103,8 +103,8 @@ export async function POST(request: NextRequest) {
   try {
     // Require admin role (Data Enrichment is admin-only)
     const authResult = await requireRole('admin')
-    if (authResult instanceof NextResponse) {
-      return authResult
+    if (!authResult.authenticated) {
+      return authResult.response
     }
 
     const body = await request.json()
@@ -180,8 +180,8 @@ export async function DELETE(request: NextRequest) {
   try {
     // Require admin role (Data Enrichment is admin-only)
     const authResult = await requireRole('admin')
-    if (authResult instanceof NextResponse) {
-      return authResult
+    if (!authResult.authenticated) {
+      return authResult.response
     }
 
     const { searchParams } = new URL(request.url)
