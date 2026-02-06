@@ -65,8 +65,8 @@ export function WidgetWrapper({
       const { pointerX, pointerY, startWidth, startHeight } = resizeStartRef.current
       const deltaX = e.clientX - pointerX
       const deltaY = e.clientY - pointerY
-      const gap = 16
-      const newCols = clamp(Math.round((startWidth + deltaX) / (gridCellWidth + gap)), 1, 4)
+      const gap = 12
+      const newCols = clamp(Math.round((startWidth + deltaX) / (gridCellWidth + gap)), 1, 8)
       const newRows = clamp(Math.round((startHeight + deltaY) / (gridRowHeight + gap)), 1, 3)
       setPreviewSize({ cols: newCols, rows: newRows })
     },

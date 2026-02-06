@@ -1,10 +1,16 @@
 /**
  * Grid occupancy utilities for snap-to-grid widget placement.
  * All coordinates are 1-based to match CSS Grid conventions.
+ *
+ * Grid: 8 columns (each ~12.5% width). Widgets snap to any column.
+ * This gives twice the positioning freedom of a 4-column grid while
+ * keeping layouts structured.
  */
 
 import { useMemo } from 'react'
 import type { DashboardWidget } from '@/types/modules'
+
+export const GRID_COLS = 8
 
 /** Map of "col,row" → widgetId for O(1) cell lookups */
 export type OccupancyMap = Map<string, string>
@@ -38,7 +44,7 @@ export function canPlace(
   excludeWidgetId?: string
 ): boolean {
   if (col < 1 || row < 1) return false
-  if (col + colSpan - 1 > 4) return false // exceeds 4-column grid
+  if (col + colSpan - 1 > GRID_COLS) return false
 
   for (let c = col; c < col + colSpan; c++) {
     for (let r = row; r < row + rowSpan; r++) {
@@ -76,7 +82,7 @@ export function pointerToCell(
   const col = Math.floor(relX / (cellWidth + gap)) + 1
   const row = Math.floor(relY / (rowHeight + gap)) + 1
 
-  if (col < 1 || col > 4 || row < 1) return null
+  if (col < 1 || col > GRID_COLS || row < 1) return null
 
   return { col, row }
 }
@@ -90,8 +96,7 @@ export function findDropPosition(
   rowSpan: number,
   draggedWidgetId: string
 ): { col: number; row: number } | null {
-  // Clamp col so widget doesn't exceed grid bounds
-  const clampedCol = Math.min(Math.max(targetCol, 1), 4 - colSpan + 1)
+  const clampedCol = Math.min(Math.max(targetCol, 1), GRID_COLS - colSpan + 1)
   const clampedRow = Math.max(targetRow, 1)
 
   if (canPlace(map, clampedCol, clampedRow, colSpan, rowSpan, draggedWidgetId)) {
@@ -109,7 +114,7 @@ export function findFirstAvailable(
   maxRow: number
 ): { col: number; row: number } {
   for (let row = 1; row <= maxRow + 1; row++) {
-    for (let col = 1; col <= 4 - colSpan + 1; col++) {
+    for (let col = 1; col <= GRID_COLS - colSpan + 1; col++) {
       if (canPlace(map, col, row, colSpan, rowSpan)) {
         return { col, row }
       }
@@ -119,30 +124,58 @@ export function findFirstAvailable(
 }
 
 /**
- * Migrate legacy widgets (all at grid_column=1, grid_row=1)
- * to proper grid positions based on sort_order.
+ * Migrate widgets from 4-column grid to 8-column grid.
+ * Doubles grid_column positions and col_span values.
+ */
+export function migrateFourToEightColumns(widgets: DashboardWidget[]): DashboardWidget[] {
+  if (widgets.length === 0) return widgets
+
+  // Detect: if any widget uses col > 4 or span > 4, already on 8-col grid
+  const isAlreadyEightCol = widgets.some(
+    (w) => w.grid_column > 4 || w.col_span > 4
+  )
+  if (isAlreadyEightCol) return widgets
+
+  // All widgets fit in a 4-col grid → convert to 8-col
+  return widgets.map((w) => ({
+    ...w,
+    grid_column: (Math.max(1, w.grid_column) - 1) * 2 + 1,
+    col_span: w.col_span * 2,
+  }))
+}
+
+/**
+ * Migrate legacy widgets (all at grid_column<=1, grid_row<=1)
+ * to proper grid positions based on sort_order, using 8-col grid.
  */
 export function migrateAutoPlacedWidgets(widgets: DashboardWidget[]): DashboardWidget[] {
   if (widgets.length === 0) return widgets
 
+  // Step 1: If all at origin, assign positions
   const allAtOrigin = widgets.every(
     (w) => w.grid_column <= 1 && w.grid_row <= 1
   )
-  if (!allAtOrigin) return widgets
 
-  const sorted = [...widgets].sort((a, b) => a.sort_order - b.sort_order)
-  const occupancy: OccupancyMap = new Map()
+  let positioned = widgets
+  if (allAtOrigin) {
+    const sorted = [...widgets].sort((a, b) => a.sort_order - b.sort_order)
+    const occupancy: OccupancyMap = new Map()
 
-  return sorted.map((w) => {
-    const pos = findFirstAvailable(occupancy, w.col_span, w.row_span, getMaxOccupiedRow(occupancy))
-    // Mark cells as occupied
-    for (let c = pos.col; c < pos.col + w.col_span; c++) {
-      for (let r = pos.row; r < pos.row + w.row_span; r++) {
-        occupancy.set(cellKey(c, r), w.id)
+    positioned = sorted.map((w) => {
+      // Default to 2-col span on 8-col grid (= old 1-col on 4-col grid)
+      const colSpan = Math.max(2, w.col_span)
+      const pos = findFirstAvailable(occupancy, colSpan, w.row_span, getMaxOccupiedRow(occupancy))
+      for (let c = pos.col; c < pos.col + colSpan; c++) {
+        for (let r = pos.row; r < pos.row + w.row_span; r++) {
+          occupancy.set(cellKey(c, r), w.id)
+        }
       }
-    }
-    return { ...w, grid_column: pos.col, grid_row: pos.row }
-  })
+      return { ...w, grid_column: pos.col, grid_row: pos.row, col_span: colSpan }
+    })
+  }
+
+  // Step 2: Migrate from 4-col to 8-col if needed
+  return migrateFourToEightColumns(positioned)
 }
 
 function getMaxOccupiedRow(map: OccupancyMap): number {

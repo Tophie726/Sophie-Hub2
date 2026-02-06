@@ -23,6 +23,7 @@ import {
   findDropPosition,
   getCellsForPlacement,
   getMaxRow,
+  GRID_COLS,
 } from '@/hooks/use-grid-occupancy'
 import { easeInOut, duration } from '@/lib/animations'
 import type { SectionWithWidgets, DashboardWidget, DateRange } from '@/types/modules'
@@ -74,8 +75,8 @@ export function SectionContainer({
     const el = gridRef.current
     if (!el) return
     const measure = () => {
-      const gap = 16
-      const cols = isMobilePreview ? 1 : 4
+      const gap = 12
+      const cols = isMobilePreview ? 1 : GRID_COLS
       const cellWidth = (el.offsetWidth - gap * (cols - 1)) / cols
       const rowHeight = 180
       setGridDimensions({ cellWidth, rowHeight })
@@ -114,7 +115,7 @@ export function SectionContainer({
       gridRectRef.current,
       gridDimensions.cellWidth,
       gridDimensions.rowHeight,
-      16 // gap
+      12 // gap
     )
 
     if (!cell) {
@@ -185,7 +186,7 @@ export function SectionContainer({
   const gridCells = useMemo(() => {
     if (!activeWidget) return []
     const cells: { col: number; row: number; highlight: CellHighlight }[] = []
-    const cols = isMobilePreview ? 1 : 4
+    const cols = isMobilePreview ? 1 : GRID_COLS
     for (let row = 1; row <= totalRows; row++) {
       for (let col = 1; col <= cols; col++) {
         const key = `${col},${row}`
@@ -205,7 +206,7 @@ export function SectionContainer({
         gridAutoRows: 'minmax(180px, auto)',
       }
     : {
-        gridTemplateColumns: 'repeat(4, 1fr)',
+        gridTemplateColumns: `repeat(${GRID_COLS}, 1fr)`,
         gridTemplateRows: `repeat(${totalRows}, minmax(180px, auto))`,
       }
 
@@ -263,7 +264,7 @@ export function SectionContainer({
               >
                 <div
                   ref={gridRef}
-                  className="grid gap-4 relative"
+                  className="grid gap-3 relative"
                   style={gridStyle}
                 >
                   {/* Drop target cells (only visible during drag) */}
