@@ -1,13 +1,14 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-// import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   Hash,
   BarChart3,
   Table2,
   FileText,
   ArrowLeft,
+  ChevronDown,
 } from 'lucide-react'
 import {
   Dialog,
@@ -26,11 +27,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { WIDGET_PRESETS, getPresetsByTemplate, TEMPLATE_LABELS } from '@/lib/bigquery/widget-presets'
+import type { PresetTemplate } from '@/lib/bigquery/widget-presets'
 import { MetricConfig } from '@/components/reporting/config/metric-config'
 import { ChartConfig } from '@/components/reporting/config/chart-config'
 import { TableConfig } from '@/components/reporting/config/table-config'
 import { TextConfig } from '@/components/reporting/config/text-config'
-// import { easeOut, duration } from '@/lib/animations'
+import { easeOut } from '@/lib/animations'
 import type {
   DashboardWidget,
   WidgetType,
@@ -135,6 +138,29 @@ export function WidgetConfigDialog({
   const [colSpan, setColSpan] = useState(widget?.col_span || 1)
   const [rowSpan, setRowSpan] = useState(widget?.row_span || 1)
   const [titleTouched, setTitleTouched] = useState(false)
+  const [expandedTemplates, setExpandedTemplates] = useState<Set<PresetTemplate>>(new Set<PresetTemplate>(['executive']))
+
+  function toggleTemplate(template: PresetTemplate) {
+    setExpandedTemplates((prev) => {
+      const next = new Set<PresetTemplate>(prev)
+      if (next.has(template)) {
+        next.delete(template)
+      } else {
+        next.add(template)
+      }
+      return next
+    })
+  }
+
+  function handlePresetSelect(preset: typeof WIDGET_PRESETS[number]) {
+    setSelectedType(preset.widget_type)
+    setConfig(preset.config)
+    setColSpan(preset.col_span)
+    setRowSpan(preset.row_span)
+    setTitle(preset.title)
+    setTitleTouched(false)
+    setStep('config')
+  }
 
   // Reset state when dialog opens/closes or widget changes
   useEffect(() => {
@@ -200,23 +226,94 @@ export function WidgetConfigDialog({
         </DialogHeader>
 
         {step === 'type' ? (
-          <div className="grid grid-cols-2 gap-3 py-2">
-            {WIDGET_TYPES.map((wt) => (
-              <button
-                key={wt.type}
-                onClick={() => handleTypeSelect(wt.type)}
-                className="group text-left p-4 rounded-xl transition-all hover:shadow-md active:scale-[0.97]"
-                style={{ boxShadow: '0 0 0 1px rgba(0,0,0,0.08)' }}
-              >
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted/60 mb-3 group-hover:bg-primary/10 transition-colors">
-                  <span className="text-muted-foreground group-hover:text-primary transition-colors">
-                    {wt.icon}
-                  </span>
-                </div>
-                <p className="text-sm font-medium">{wt.label}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">{wt.description}</p>
-              </button>
-            ))}
+          <div className="space-y-5 py-2">
+            {/* Presets section */}
+            <div>
+              <p className="text-xs font-medium text-muted-foreground mb-3">Start from Preset</p>
+              <div className="space-y-2">
+                {(['executive', 'ppc', 'product'] as PresetTemplate[]).map((template) => {
+                  const presets = getPresetsByTemplate(template)
+                  const isExpanded = expandedTemplates.has(template)
+                  return (
+                    <div key={template}>
+                      <button
+                        onClick={() => toggleTemplate(template)}
+                        className="flex w-full items-center justify-between px-3 py-2 text-sm font-medium rounded-lg hover:bg-muted/50 transition-colors active:scale-[0.97]"
+                      >
+                        {TEMPLATE_LABELS[template]}
+                        <motion.span
+                          initial={false}
+                          animate={{ rotate: isExpanded ? 180 : 0 }}
+                          transition={{ duration: 0.2, ease: easeOut }}
+                        >
+                          <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                        </motion.span>
+                      </button>
+                      <AnimatePresence initial={false}>
+                        {isExpanded && (
+                          <motion.div
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: 'auto', opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            transition={{ duration: 0.2, ease: easeOut }}
+                            className="overflow-hidden"
+                          >
+                            <div className="grid grid-cols-2 gap-2 px-1 pt-2 pb-1">
+                              {presets.map((preset) => (
+                                <button
+                                  key={preset.id}
+                                  onClick={() => handlePresetSelect(preset)}
+                                  className="group text-left p-3 rounded-lg transition-all hover:shadow-sm active:scale-[0.97]"
+                                  style={{ boxShadow: '0 0 0 1px rgba(0,0,0,0.08)' }}
+                                >
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <p className="text-sm font-medium truncate">{preset.title}</p>
+                                    <span className="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                                      {preset.widget_type}
+                                    </span>
+                                  </div>
+                                  <p className="text-xs text-muted-foreground line-clamp-1">{preset.description}</p>
+                                </button>
+                              ))}
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Divider */}
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-border/40" />
+              </div>
+              <div className="relative flex justify-center">
+                <span className="bg-background px-3 text-xs text-muted-foreground">Or configure manually</span>
+              </div>
+            </div>
+
+            {/* Manual type selection */}
+            <div className="grid grid-cols-2 gap-3">
+              {WIDGET_TYPES.map((wt) => (
+                <button
+                  key={wt.type}
+                  onClick={() => handleTypeSelect(wt.type)}
+                  className="group text-left p-4 rounded-xl transition-all hover:shadow-md active:scale-[0.97]"
+                  style={{ boxShadow: '0 0 0 1px rgba(0,0,0,0.08)' }}
+                >
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted/60 mb-3 group-hover:bg-primary/10 transition-colors">
+                    <span className="text-muted-foreground group-hover:text-primary transition-colors">
+                      {wt.icon}
+                    </span>
+                  </div>
+                  <p className="text-sm font-medium">{wt.label}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{wt.description}</p>
+                </button>
+              ))}
+            </div>
           </div>
         ) : (
           <div className="space-y-6 py-2">

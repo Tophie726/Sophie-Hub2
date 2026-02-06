@@ -63,7 +63,7 @@ const PortfolioQuerySchema = z.object({
   date_range: DateRangeSchema.optional(),
   group_by: z.string().optional(),
   group_by_brand: z.boolean().optional().default(false),
-  partner_ids: z.array(z.string().uuid()).optional(),
+  partner_ids: z.array(z.string().uuid()).max(100, 'Maximum 100 partner IDs allowed').optional(),
   sort_by: z.string().optional(),
   sort_direction: z.enum(VALID_SORT_DIRECTIONS).optional().default('desc'),
   limit: z.number().int().min(1).max(1000).optional().default(100),

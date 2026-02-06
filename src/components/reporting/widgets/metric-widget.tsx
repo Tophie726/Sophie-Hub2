@@ -18,6 +18,102 @@ export function MetricWidget({ config, dateRange, partnerId, title }: MetricWidg
     setError(null)
 
     try {
+      // Computed metric: fetch numerator + denominator and calculate client-side
+      if (config.computed) {
+        const { formula, numerator, denominator } = config.computed
+        const views = config.ppc_views && config.ppc_views.length > 1
+          ? config.ppc_views
+          : [config.view]
+
+        // Fetch both metrics across all views in parallel
+        const results = await Promise.all(
+          views.map(async (view) => {
+            const res = await fetch('/api/bigquery/query', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                partner_id: partnerId,
+                view,
+                metrics: [numerator, denominator],
+                aggregation: config.aggregation,
+                date_range: dateRange,
+              }),
+            })
+            if (!res.ok) {
+              const json = await res.json()
+              throw new Error(json.error?.message || 'Failed to load metric')
+            }
+            const json = await res.json()
+            return json.data?.data || json.data
+          })
+        )
+
+        // Sum numerator and denominator across views
+        let numTotal = 0
+        let denTotal = 0
+        for (const result of results) {
+          numTotal += Number(result?.[numerator] ?? result?.value ?? 0)
+          denTotal += Number(result?.[denominator] ?? 0)
+        }
+
+        // Apply formula
+        let computedValue: number
+        if (denTotal === 0) {
+          setData({ value: 0, formatted: '\u2014' }) // em dash for division by zero
+          return
+        }
+        const ratio = numTotal / denTotal
+        if (['acos', 'ctr', 'cvr', 'tacos'].includes(formula)) {
+          computedValue = ratio * 100
+        } else {
+          computedValue = ratio
+        }
+
+        setData({
+          value: computedValue,
+          formatted: formatByType(computedValue, config.format),
+        })
+        return
+      }
+
+      // Multi-view: fetch from each PPC view in parallel and sum
+      if (config.ppc_views && config.ppc_views.length > 1) {
+        const results = await Promise.all(
+          config.ppc_views.map(async (view) => {
+            const res = await fetch('/api/bigquery/query', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                partner_id: partnerId,
+                view,
+                metrics: [config.metric],
+                aggregation: config.aggregation,
+                date_range: dateRange,
+              }),
+            })
+            if (!res.ok) {
+              const json = await res.json()
+              throw new Error(json.error?.message || 'Failed to load metric')
+            }
+            const json = await res.json()
+            return json.data?.data || json.data
+          })
+        )
+
+        // Sum the values across all views
+        let total = 0
+        for (const result of results) {
+          total += Number(result?.value ?? 0)
+        }
+
+        setData({
+          value: total,
+          formatted: formatByType(total, config.format),
+        })
+        return
+      }
+
+      // Single view: default behavior
       const res = await fetch('/api/bigquery/query', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

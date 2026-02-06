@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Settings, Trash2, GripVertical } from 'lucide-react'
 import { useSortable } from '@dnd-kit/sortable'
@@ -15,71 +15,13 @@ interface WidgetWrapperProps {
   onEdit: (widget: DashboardWidget) => void
   onDelete: (widgetId: string) => void
   onResize: (widgetId: string, colSpan: number, rowSpan: number) => void
+  gridCellWidth?: number
+  gridRowHeight?: number
   children: React.ReactNode
 }
 
-function ResizePopover({
-  colSpan,
-  rowSpan,
-  onResize,
-  onClose,
-}: {
-  colSpan: number
-  rowSpan: number
-  onResize: (col: number, row: number) => void
-  onClose: () => void
-}) {
-  const ref = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        onClose()
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [onClose])
-
-  return (
-    <motion.div
-      ref={ref}
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.95 }}
-      transition={{ duration: duration.micro, ease: easeOut }}
-      className="absolute bottom-full right-0 mb-1 bg-popover border border-border rounded-lg shadow-lg p-2 z-20"
-      onClick={(e) => e.stopPropagation()}
-    >
-      <div className="flex items-center gap-3 text-xs">
-        <label className="flex items-center gap-1.5">
-          <span className="text-muted-foreground">W</span>
-          <select
-            value={colSpan}
-            onChange={(e) => onResize(Number(e.target.value), rowSpan)}
-            className="bg-muted/50 border border-border/60 rounded px-1.5 py-0.5 text-xs outline-none focus:ring-1 focus:ring-primary/40"
-          >
-            {[1, 2, 3, 4].map((n) => (
-              <option key={n} value={n}>{n}</option>
-            ))}
-          </select>
-        </label>
-        <span className="text-muted-foreground">x</span>
-        <label className="flex items-center gap-1.5">
-          <span className="text-muted-foreground">H</span>
-          <select
-            value={rowSpan}
-            onChange={(e) => onResize(colSpan, Number(e.target.value))}
-            className="bg-muted/50 border border-border/60 rounded px-1.5 py-0.5 text-xs outline-none focus:ring-1 focus:ring-primary/40"
-          >
-            {[1, 2, 3].map((n) => (
-              <option key={n} value={n}>{n}</option>
-            ))}
-          </select>
-        </label>
-      </div>
-    </motion.div>
-  )
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value))
 }
 
 export function WidgetWrapper({
@@ -88,10 +30,21 @@ export function WidgetWrapper({
   onEdit,
   onDelete,
   onResize,
+  gridCellWidth = 200,
+  gridRowHeight = 200,
   children,
 }: WidgetWrapperProps) {
   const [isHovered, setIsHovered] = useState(false)
-  const [showResizePopover, setShowResizePopover] = useState(false)
+  const [isResizing, setIsResizing] = useState(false)
+  const [previewSize, setPreviewSize] = useState<{ cols: number; rows: number } | null>(null)
+
+  const resizeStartRef = useRef<{
+    pointerX: number
+    pointerY: number
+    startWidth: number
+    startHeight: number
+  } | null>(null)
+  const widgetRef = useRef<HTMLDivElement>(null)
 
   const {
     attributes,
@@ -103,18 +56,93 @@ export function WidgetWrapper({
     isDragging,
   } = useSortable({
     id: widget.id,
-    disabled: !isEditMode,
+    disabled: !isEditMode || isResizing,
   })
 
+  const handlePointerMove = useCallback(
+    (e: PointerEvent) => {
+      if (!resizeStartRef.current) return
+      const { pointerX, pointerY, startWidth, startHeight } = resizeStartRef.current
+      const deltaX = e.clientX - pointerX
+      const deltaY = e.clientY - pointerY
+      const gap = 16 // gap-4 = 16px
+      const newCols = clamp(Math.round((startWidth + deltaX) / (gridCellWidth + gap)), 1, 4)
+      const newRows = clamp(Math.round((startHeight + deltaY) / (gridRowHeight + gap)), 1, 3)
+      setPreviewSize({ cols: newCols, rows: newRows })
+    },
+    [gridCellWidth, gridRowHeight]
+  )
+
+  const handlePointerUp = useCallback(
+    () => {
+      if (previewSize) {
+        onResize(widget.id, previewSize.cols, previewSize.rows)
+      }
+      setIsResizing(false)
+      setPreviewSize(null)
+      resizeStartRef.current = null
+      document.removeEventListener('pointermove', handlePointerMove)
+      document.removeEventListener('pointerup', handlePointerUp)
+    },
+    [previewSize, widget.id, onResize, handlePointerMove]
+  )
+
+  // Store latest handlePointerUp in a ref so pointermove always sees current previewSize
+  const pointerUpRef = useRef(handlePointerUp)
+  pointerUpRef.current = handlePointerUp
+
+  const handlePointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+
+      const el = widgetRef.current
+      if (!el) return
+
+      resizeStartRef.current = {
+        pointerX: e.clientX,
+        pointerY: e.clientY,
+        startWidth: el.offsetWidth,
+        startHeight: el.offsetHeight,
+      }
+
+      setIsResizing(true)
+      setPreviewSize({ cols: widget.col_span, rows: widget.row_span })
+
+      const onMove = (ev: PointerEvent) => handlePointerMove(ev)
+      const onUp = () => {
+        pointerUpRef.current()
+        document.removeEventListener('pointermove', onMove)
+        document.removeEventListener('pointerup', onUp)
+      }
+
+      document.addEventListener('pointermove', onMove)
+      document.addEventListener('pointerup', onUp)
+    },
+    [handlePointerMove, widget.col_span, widget.row_span]
+  )
+
+  // Clean up listeners on unmount
+  useEffect(() => {
+    return () => {
+      resizeStartRef.current = null
+    }
+  }, [])
+
+  const displayCols = previewSize ? previewSize.cols : widget.col_span
+  const displayRows = previewSize ? previewSize.rows : widget.row_span
+
   const style: React.CSSProperties = {
-    gridColumn: `span ${widget.col_span}`,
-    gridRow: `span ${widget.row_span}`,
+    gridColumn: `span ${displayCols}`,
+    gridRow: `span ${displayRows}`,
     boxShadow: isDragging
       ? '0 8px 32px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.08)'
       : '0 0 0 1px rgba(0,0,0,0.08)',
     transform: CSS.Transform.toString(transform),
-    transition,
-    zIndex: isDragging ? 50 : undefined,
+    transition: isResizing
+      ? 'box-shadow 150ms cubic-bezier(0.25, 0.46, 0.45, 0.94)'
+      : transition,
+    zIndex: isDragging ? 50 : isResizing ? 40 : undefined,
     opacity: isDragging ? 0.9 : 1,
   }
 
@@ -122,10 +150,13 @@ export function WidgetWrapper({
 
   return (
     <div
-      ref={setNodeRef}
+      ref={(node) => {
+        setNodeRef(node)
+        ;(widgetRef as React.MutableRefObject<HTMLDivElement | null>).current = node
+      }}
       className={`relative group rounded-xl bg-card ${
-        isEditMode ? 'ring-2 ring-primary/20 ring-dashed' : ''
-      } ${isDragging ? 'scale-[1.02]' : ''}`}
+        isEditMode && !isResizing ? 'ring-2 ring-primary/20 ring-dashed' : ''
+      } ${isResizing ? 'ring-2 ring-primary/30' : ''} ${isDragging ? 'scale-[1.02]' : ''}`}
       style={style}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
@@ -181,7 +212,7 @@ export function WidgetWrapper({
         )}
       </AnimatePresence>
 
-      {/* Resize badge (edit mode only) */}
+      {/* Resize corner handle (edit mode only) */}
       <AnimatePresence>
         {isEditMode && (
           <motion.div
@@ -189,28 +220,40 @@ export function WidgetWrapper({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: duration.micro, ease: easeOut }}
-            className="absolute bottom-2 right-2 z-10"
+            className="absolute bottom-1 right-1 z-10"
           >
-            <button
-              onClick={() => setShowResizePopover((prev) => !prev)}
-              className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-muted/80 backdrop-blur-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-              title="Resize widget"
+            <div
+              onPointerDown={handlePointerDown}
+              className="w-4 h-4 cursor-se-resize opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-end"
+              title="Drag to resize"
             >
-              {widget.col_span}x{widget.row_span}
-            </button>
-            <AnimatePresence>
-              {showResizePopover && (
-                <ResizePopover
-                  colSpan={widget.col_span}
-                  rowSpan={widget.row_span}
-                  onResize={(col, row) => {
-                    onResize(widget.id, col, row)
-                    setShowResizePopover(false)
-                  }}
-                  onClose={() => setShowResizePopover(false)}
-                />
-              )}
-            </AnimatePresence>
+              {/* Three diagonal lines forming a grip pattern */}
+              <svg width="10" height="10" viewBox="0 0 10 10" className="text-muted-foreground/60">
+                <line x1="9" y1="1" x2="1" y2="9" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
+                <line x1="9" y1="4" x2="4" y2="9" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
+                <line x1="9" y1="7" x2="7" y2="9" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
+              </svg>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Resize preview label */}
+      <AnimatePresence>
+        {isResizing && previewSize && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            transition={{ duration: duration.micro, ease: easeOut }}
+            className="absolute bottom-2 right-2 z-20"
+          >
+            <span
+              className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-primary/90 text-primary-foreground backdrop-blur-sm"
+              style={{ fontVariantNumeric: 'tabular-nums' }}
+            >
+              {previewSize.cols}{'\u00D7'}{previewSize.rows}
+            </span>
           </motion.div>
         )}
       </AnimatePresence>

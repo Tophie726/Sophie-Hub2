@@ -55,26 +55,31 @@ export async function GET() {
 
     // Get partner names for the mapped IDs
     const partnerIds = mappings?.map(m => m.entity_id) || []
-    let partners: Record<string, string> = {}
+    let partners: Record<string, { brand_name: string; tier: string | null; status: string | null }> = {}
 
     if (partnerIds.length > 0) {
       const { data: partnerData } = await supabase
         .from('partners')
-        .select('id, brand_name')
+        .select('id, brand_name, tier, status')
         .in('id', partnerIds)
 
       if (partnerData) {
         partners = Object.fromEntries(
-          partnerData.map(p => [p.id, p.brand_name])
+          partnerData.map(p => [p.id, { brand_name: p.brand_name, tier: p.tier, status: p.status }])
         )
       }
     }
 
-    // Enrich mappings with partner names
-    const enrichedMappings = mappings?.map(m => ({
-      ...m,
-      partner_name: partners[m.entity_id] || null
-    })) || []
+    // Enrich mappings with partner names, tier, and status
+    const enrichedMappings = mappings?.map(m => {
+      const partner = partners[m.entity_id]
+      return {
+        ...m,
+        partner_name: partner?.brand_name || null,
+        tier: partner?.tier || null,
+        status: partner?.status || null,
+      }
+    }) || []
 
     // Add Cache-Control header - mappings change infrequently
     const response = apiSuccess({

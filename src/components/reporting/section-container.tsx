@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ChevronDown, Plus } from 'lucide-react'
 import {
@@ -48,6 +48,23 @@ export function SectionContainer({
   onResizeWidget,
 }: SectionContainerProps) {
   const [isCollapsed, setIsCollapsed] = useState(section.collapsed)
+  const [gridDimensions, setGridDimensions] = useState({ cellWidth: 200, rowHeight: 200 })
+  const gridRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const el = gridRef.current
+    if (!el) return
+    const measure = () => {
+      const gap = 16 // gap-4 = 16px
+      const cellWidth = (el.offsetWidth - gap * 3) / 4 // 4 columns, 3 gaps
+      const rowHeight = 200 // base row height for row_span=1
+      setGridDimensions({ cellWidth, rowHeight })
+    }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
 
   // Require some pointer movement before starting drag to avoid accidental drags
   const sensors = useSensors(
@@ -141,6 +158,7 @@ export function SectionContainer({
                   strategy={rectSortingStrategy}
                 >
                   <div
+                    ref={gridRef}
                     className="grid gap-4"
                     style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}
                   >
@@ -152,6 +170,8 @@ export function SectionContainer({
                         onEdit={onEditWidget}
                         onDelete={onDeleteWidget}
                         onResize={onResizeWidget}
+                        gridCellWidth={gridDimensions.cellWidth}
+                        gridRowHeight={gridDimensions.rowHeight}
                       >
                         <WidgetRenderer
                           widget={widget}

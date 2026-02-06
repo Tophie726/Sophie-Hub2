@@ -101,7 +101,13 @@ export function DrawingPad({ open, onOpenChange, onSave, backgroundImage }: Draw
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[95vw] md:max-w-[900px] h-[85vh] p-0 gap-0 overflow-hidden flex flex-col">
+      <DialogContent
+        className="max-w-[95vw] md:max-w-[900px] h-[85vh] p-0 gap-0 overflow-hidden flex flex-col"
+        // Prevent Dialog from interfering with Excalidraw's focus management
+        onOpenAutoFocus={(e) => e.preventDefault()}
+        onPointerDownOutside={(e) => e.preventDefault()}
+        onInteractOutside={(e) => e.preventDefault()}
+      >
         <DialogHeader className="px-4 py-3 border-b flex-row items-center justify-between space-y-0 shrink-0">
           <DialogTitle className="text-base">Sketch your idea</DialogTitle>
           <div className="flex items-center gap-2">

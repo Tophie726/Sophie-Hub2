@@ -215,7 +215,7 @@ function PortfolioDashboardInner() {
           tier: m.tier || null,
           status: m.status || null,
         })))
-      } catch { /* silent */ }
+      } catch (err) { console.error('[portfolio] Failed to fetch partners:', err) }
     }
     fetchPartners()
   }, [])

@@ -22,7 +22,15 @@ import {
 import { Checkbox } from '@/components/ui/checkbox'
 import { ViewSelector } from '@/components/reporting/config/view-selector'
 import { getMetricColumns, getDimensionColumns, getColumnLabel, getColumnFormat } from '@/lib/bigquery/column-metadata'
+import { cn } from '@/lib/utils'
 import type { ChartWidgetConfig, ChartType, AggregationType, DisplayFormat } from '@/types/modules'
+
+const PPC_VIEWS = ['sp', 'sd', 'sb'] as const
+const PPC_OPTIONS = [
+  { value: 'sp' as const, label: 'Sponsored Products' },
+  { value: 'sd' as const, label: 'Sponsored Display' },
+  { value: 'sb' as const, label: 'Sponsored Brands' },
+]
 
 interface ChartConfigProps {
   config: ChartWidgetConfig
@@ -78,14 +86,34 @@ export function ChartConfig({ config, title, onConfigChange, onTitleChange, titl
     }
   }, [titleTouched, onTitleChange])
 
+  const isPpcView = PPC_VIEWS.includes(config.view as typeof PPC_VIEWS[number])
+  const activePpcViews = config.ppc_views ?? (isPpcView ? [config.view as typeof PPC_VIEWS[number]] : [])
+
   function handleViewChange(view: string) {
     const newDims = getDimensionColumns(view)
     const newMetrics = getMetricColumns(view)
     const xAxis = newDims.find(d => d.category === 'temporal')?.column ?? newDims[0]?.column ?? ''
     const yAxis = newMetrics.length > 0 ? [newMetrics[0].column] : []
     const format = yAxis.length > 0 ? getColumnFormat(view, yAxis[0]) : config.format
-    onConfigChange({ ...config, view, x_axis: xAxis, y_axis: yAxis, format })
+    const isPpc = PPC_VIEWS.includes(view as typeof PPC_VIEWS[number])
+    onConfigChange({
+      ...config,
+      view,
+      x_axis: xAxis,
+      y_axis: yAxis,
+      format,
+      ppc_views: isPpc ? [view as typeof PPC_VIEWS[number]] : undefined,
+    })
     autoTitle(view, yAxis, xAxis)
+  }
+
+  function togglePpcView(view: typeof PPC_VIEWS[number]) {
+    const current = activePpcViews
+    const next = current.includes(view)
+      ? current.filter(v => v !== view)
+      : [...current, view]
+    if (next.length === 0) return
+    onConfigChange({ ...config, ppc_views: next as ('sp' | 'sd' | 'sb')[] })
   }
 
   function handleXAxisChange(val: string) {
@@ -132,6 +160,33 @@ export function ChartConfig({ config, title, onConfigChange, onTitleChange, titl
         value={config.view}
         onChange={handleViewChange}
       />
+
+      {isPpcView && (
+        <div className="space-y-1.5">
+          <span className="text-xs text-muted-foreground">Campaign Types</span>
+          <div className="flex flex-wrap gap-1.5">
+            {PPC_OPTIONS.map(opt => {
+              const isSelected = activePpcViews.includes(opt.value)
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => togglePpcView(opt.value)}
+                  className={cn(
+                    'px-2.5 py-1 text-xs rounded-md transition-colors active:scale-[0.97]',
+                    isSelected
+                      ? 'bg-foreground text-background'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                  style={!isSelected ? { boxShadow: '0 0 0 1px rgba(0,0,0,0.08)' } : undefined}
+                >
+                  {opt.label}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="space-y-2">
         <Label>Chart Type</Label>

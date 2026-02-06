@@ -18,7 +18,15 @@ import {
 } from '@/components/ui/popover'
 import { ViewSelector } from '@/components/reporting/config/view-selector'
 import { getMetricColumns, getColumnFormat, getColumnLabel } from '@/lib/bigquery/column-metadata'
+import { cn } from '@/lib/utils'
 import type { MetricWidgetConfig, AggregationType, DisplayFormat } from '@/types/modules'
+
+const PPC_VIEWS = ['sp', 'sd', 'sb'] as const
+const PPC_OPTIONS = [
+  { value: 'sp' as const, label: 'Sponsored Products' },
+  { value: 'sd' as const, label: 'Sponsored Display' },
+  { value: 'sb' as const, label: 'Sponsored Brands' },
+]
 
 interface MetricConfigProps {
   config: MetricWidgetConfig
@@ -83,12 +91,32 @@ export function MetricConfig({ config, title, onConfigChange, onTitleChange, tit
     setMetricSearch('')
   }
 
+  const isPpcView = PPC_VIEWS.includes(config.view as typeof PPC_VIEWS[number])
+  const activePpcViews = config.ppc_views ?? (isPpcView ? [config.view as typeof PPC_VIEWS[number]] : [])
+
   function handleViewChange(view: string) {
     const newMetrics = getMetricColumns(view)
     const firstMetric = newMetrics[0]?.column ?? ''
     const format = firstMetric ? getColumnFormat(view, firstMetric) : config.format
-    onConfigChange({ ...config, view, metric: firstMetric, format })
+    const isPpc = PPC_VIEWS.includes(view as typeof PPC_VIEWS[number])
+    onConfigChange({
+      ...config,
+      view,
+      metric: firstMetric,
+      format,
+      ppc_views: isPpc ? [view as typeof PPC_VIEWS[number]] : undefined,
+    })
     autoTitle(view, firstMetric, config.aggregation)
+  }
+
+  function togglePpcView(view: typeof PPC_VIEWS[number]) {
+    const current = activePpcViews
+    const next = current.includes(view)
+      ? current.filter(v => v !== view)
+      : [...current, view]
+    // Must have at least one view selected
+    if (next.length === 0) return
+    onConfigChange({ ...config, ppc_views: next as ('sp' | 'sd' | 'sb')[] })
   }
 
   function handleAggregationChange(val: string) {
@@ -119,6 +147,33 @@ export function MetricConfig({ config, title, onConfigChange, onTitleChange, tit
         value={config.view}
         onChange={handleViewChange}
       />
+
+      {isPpcView && (
+        <div className="space-y-1.5">
+          <span className="text-xs text-muted-foreground">Campaign Types</span>
+          <div className="flex flex-wrap gap-1.5">
+            {PPC_OPTIONS.map(opt => {
+              const isSelected = activePpcViews.includes(opt.value)
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => togglePpcView(opt.value)}
+                  className={cn(
+                    'px-2.5 py-1 text-xs rounded-md transition-colors active:scale-[0.97]',
+                    isSelected
+                      ? 'bg-foreground text-background'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                  style={!isSelected ? { boxShadow: '0 0 0 1px rgba(0,0,0,0.08)' } : undefined}
+                >
+                  {opt.label}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="space-y-2">
         <Label>Metric</Label>

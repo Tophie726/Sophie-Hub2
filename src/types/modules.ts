@@ -30,12 +30,22 @@ export type SortDirection = 'asc' | 'desc'
 // Widget Config Types (stored as JSONB in dashboard_widgets.config)
 // =============================================================================
 
+/** Computed metric formula definition */
+export interface ComputedMetric {
+  formula: 'acos' | 'roas' | 'tacos' | 'cpc' | 'ctr' | 'cvr'
+  numerator: string
+  denominator: string
+  multiply?: number
+}
+
 /** Config for a single-metric widget (e.g., "Total Sales: $42,000") */
 export interface MetricWidgetConfig {
   view: string
   metric: string
   aggregation: AggregationType
   format: DisplayFormat
+  computed?: ComputedMetric
+  ppc_views?: ('sp' | 'sd' | 'sb')[]
 }
 
 /** Config for a chart widget */
@@ -46,6 +56,7 @@ export interface ChartWidgetConfig {
   y_axis: string[]
   aggregation: AggregationType
   format: DisplayFormat
+  ppc_views?: ('sp' | 'sd' | 'sb')[]
 }
 
 /** Config for a data table widget */
@@ -55,6 +66,7 @@ export interface TableWidgetConfig {
   sort_by: string
   sort_direction: SortDirection
   limit: number
+  ppc_views?: ('sp' | 'sd' | 'sb')[]
 }
 
 /** Config for a static text/markdown widget */

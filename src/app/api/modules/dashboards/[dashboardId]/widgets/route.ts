@@ -15,6 +15,22 @@ import { z } from 'zod'
 
 const supabase = getAdminClient()
 
+function checkConfigSize(config: Record<string, unknown>): boolean {
+  try {
+    return JSON.stringify(config).length <= 10_000
+  } catch {
+    return false
+  }
+}
+
+function maxDepth(obj: unknown, depth = 0): number {
+  if (depth > 5) return depth // bail early
+  if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) return depth
+  const values = Object.values(obj)
+  if (values.length === 0) return depth
+  return Math.max(...values.map(v => maxDepth(v, depth + 1)))
+}
+
 const VALID_WIDGET_TYPES = ['metric', 'chart', 'table', 'text'] as const
 
 const CreateWidgetSchema = z.object({
@@ -42,6 +58,13 @@ export async function POST(
     const validation = CreateWidgetSchema.safeParse(body)
     if (!validation.success) {
       return apiValidationError(validation.error)
+    }
+
+    if (!checkConfigSize(validation.data.config)) {
+      return apiError('VALIDATION_ERROR', 'Widget config exceeds maximum size (10KB)', 400)
+    }
+    if (maxDepth(validation.data.config) > 3) {
+      return apiError('VALIDATION_ERROR', 'Widget config nesting too deep (max 3 levels)', 400)
     }
 
     // Verify section belongs to this dashboard
@@ -118,6 +141,15 @@ export async function PATCH(
     const validation = UpdateWidgetSchema.safeParse(body)
     if (!validation.success) {
       return apiValidationError(validation.error)
+    }
+
+    if (validation.data.config) {
+      if (!checkConfigSize(validation.data.config)) {
+        return apiError('VALIDATION_ERROR', 'Widget config exceeds maximum size (10KB)', 400)
+      }
+      if (maxDepth(validation.data.config) > 3) {
+        return apiError('VALIDATION_ERROR', 'Widget config nesting too deep (max 3 levels)', 400)
+      }
     }
 
     const { widget_id, ...updates } = validation.data

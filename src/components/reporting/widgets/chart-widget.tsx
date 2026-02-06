@@ -84,6 +84,61 @@ export function ChartWidget({ config, dateRange, partnerId, title, height }: Cha
     setError(null)
 
     try {
+      // Multi-view: fetch from each PPC view in parallel and merge by date
+      if (config.ppc_views && config.ppc_views.length > 1) {
+        const results = await Promise.all(
+          config.ppc_views.map(async (view) => {
+            const res = await fetch('/api/bigquery/query', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                partner_id: partnerId,
+                view,
+                metrics: config.y_axis,
+                aggregation: config.aggregation,
+                group_by: config.x_axis,
+                date_range: dateRange,
+                sort_by: config.x_axis,
+                sort_direction: 'asc',
+                limit: 365,
+              }),
+            })
+            if (!res.ok) {
+              const json = await res.json()
+              throw new Error(json.error?.message || 'Failed to load chart')
+            }
+            const json = await res.json()
+            return (json.data?.data || json.data) as ChartQueryResult
+          })
+        )
+
+        // Merge datasets by date label: sum values for same dates
+        const mergedMap = new Map<string, Record<string, number>>()
+
+        for (const result of results) {
+          if (!result?.labels) continue
+          result.labels.forEach((label, i) => {
+            const existing = mergedMap.get(label) || {}
+            for (const ds of result.datasets) {
+              existing[ds.label] = (existing[ds.label] || 0) + (ds.data[i] ?? 0)
+            }
+            mergedMap.set(label, existing)
+          })
+        }
+
+        // Build merged ChartQueryResult
+        const sortedLabels = Array.from(mergedMap.keys()).sort()
+        const datasetLabels = results[0]?.datasets.map(ds => ds.label) ?? config.y_axis
+        const mergedDatasets = datasetLabels.map(label => ({
+          label,
+          data: sortedLabels.map(date => mergedMap.get(date)?.[label] ?? 0),
+        }))
+
+        setData({ labels: sortedLabels, datasets: mergedDatasets })
+        return
+      }
+
+      // Single view: default behavior
       const res = await fetch('/api/bigquery/query', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

@@ -4,7 +4,9 @@
 
 ## Executive Summary
 
-The widget system is **well-architected** with strong security fundamentals: column whitelisting, Zod input validation, parameterized BigQuery queries, and role-based access control. Two critical issues were found and fixed: (1) the portfolio-query endpoint has no rate limiting, and (2) error messages leak internal BigQuery details to clients. Several important and future recommendations are also documented below.
+The widget system is **well-architected** with strong security fundamentals: column whitelisting, Zod input validation, parameterized BigQuery queries, and role-based access control. Two critical issues were found and fixed: (1) the portfolio-query endpoint has no rate limiting, and (2) error messages leak internal BigQuery details to clients. Two important issues were also fixed in V2: (3) partner_ids array max length limit, and (4) widget config deep validation. Several recommendations remain for future work.
+
+**V2 Round (2026-02-06):** Security review of new features: widget presets, multi-view PPC queries, computed metrics, drag-to-resize, and searchable column pickers. All passed review -- no new vulnerabilities introduced.
 
 ---
 
@@ -47,29 +49,26 @@ return ApiErrors.internal(
 
 ### 3. IMPORTANT: partner_ids Array Has No Max Length Limit
 
-**File:** `src/app/api/bigquery/portfolio-query/route.ts` (line 65)
+**File:** `src/app/api/bigquery/portfolio-query/route.ts` (line 66)
 
-The Zod schema validates that each element is a UUID, but there is no `.max()` on the array:
-```typescript
-partner_ids: z.array(z.string().uuid()).optional(),
-```
+The Zod schema validates that each element is a UUID, but there was no `.max()` on the array.
 
 An attacker could pass thousands of UUIDs, triggering:
 1. A massive Supabase `.in()` query (URL length limits may mitigate this)
 2. A BigQuery query with thousands of parameterized values in the IN clause
 
-**Recommendation:** Add `.max(100)` to the `partner_ids` array. With 700 partners total, 100 is generous.
+**Status:** FIXED -- Added `.max(100, 'Maximum 100 partner IDs allowed')` to the `partner_ids` array. With ~700 partners total, 100 is generous.
 
 ### 4. IMPORTANT: Widget Config JSONB Has No Deep Validation
 
-**File:** `src/app/api/modules/dashboards/[dashboardId]/widgets/route.ts` (line 29)
+**File:** `src/app/api/modules/dashboards/[dashboardId]/widgets/route.ts`
 
 The `config` field uses `z.record(z.string(), z.unknown())` which accepts any JSON object. A malicious admin could store:
 - Extremely large config objects (megabytes of JSON)
 - Deeply nested structures that cause rendering issues
 - XSS payloads that could execute if config values are rendered unsafely
 
-**Recommendation:** Add size limit validation or use typed config schemas per widget type.
+**Status:** FIXED -- Added `checkConfigSize()` (10KB max via `JSON.stringify` length) and `maxDepth()` (3 levels max, bails at depth 5) validation. Applied to both POST (create) and PATCH (update) handlers, after Zod validation but before database writes. PATCH only validates config when it is present in the update payload.
 
 ### 5. IMPORTANT: In-Memory Cache Does Not Work on Vercel Serverless
 
@@ -185,8 +184,8 @@ The API currently selects only the requested columns (good!), but does not use p
 - `aggregation`: Enum validated
 - `sort_direction`: Enum validated
 
-**Caveat 1:** `partner_ids` array has no max length (see Important Issue #3)
-**Caveat 2:** Widget `config` JSONB is loosely validated (see Important Issue #4)
+**Caveat 1 (FIXED):** `partner_ids` array now has `.max(100)` (see Important Issue #3)
+**Caveat 2 (FIXED):** Widget `config` JSONB now has size (10KB) and depth (3 levels) validation (see Important Issue #4)
 **Caveat 3:** `dashboardId` from URL params is not UUID-validated (Supabase would reject invalid UUIDs, but explicit validation is better practice)
 
 ### Rate Limiting: EXISTS (with gaps)
@@ -209,6 +208,68 @@ The API currently selects only the requested columns (good!), but does not use p
 **Before fix:** Both BigQuery query endpoints returned raw `error.message` from caught exceptions. BigQuery SDK errors can include SQL text, project IDs, and service account details.
 
 **After fix:** Generic error messages returned to client. Detailed errors logged server-side with `console.error()`.
+
+---
+
+## V2 Feature Security Review (2026-02-06)
+
+### Widget Presets: PASS (No XSS Risk)
+
+**File:** `src/lib/bigquery/widget-presets.ts`
+
+All 18 preset titles and descriptions are hardcoded string literals (e.g., `'Total Sales Revenue'`, `'Sum of all ordered product sales'`). They are rendered in `widget-config-dialog.tsx` via JSX text nodes (`{preset.title}`, `{preset.description}`), which React auto-escapes. No `dangerouslySetInnerHTML` is used anywhere in the widget system.
+
+The preset config objects use typed interfaces (`MetricWidgetConfig`, `ChartWidgetConfig`, `TableWidgetConfig`) with known view aliases and column names from the whitelist. A preset cannot inject arbitrary SQL because the server-side query builder validates all fields against `ALLOWED_COLUMNS` and `VIEW_ALIASES`.
+
+### Multi-View PPC Queries: PASS (Parameterized)
+
+**Files:** `src/components/reporting/widgets/metric-widget.tsx`, `chart-widget.tsx`
+
+When multiple PPC views are selected (e.g., SP + SD + SB), the widget fetches each view separately in parallel via `Promise.all()` and sums/merges results client-side. Each individual request goes through `/api/bigquery/query`, which:
+- Validates the `view` against `VIEW_ALIASES` (static allowlist)
+- Uses parameterized `@param` queries for all values
+- Applies column whitelisting per view
+
+The `ppc_views` array is typed as `('sp' | 'sd' | 'sb')[]` in `types/modules.ts`. No string interpolation is used to build queries from these values.
+
+### Computed Metrics: PASS (Division-by-Zero Handled)
+
+**File:** `src/components/reporting/widgets/metric-widget.tsx` (lines 22-77)
+
+Computed metrics (ACOS, ROAS, TACOS, CPC, CTR, CVR) fetch numerator and denominator separately, then compute the ratio client-side. Division-by-zero is explicitly handled:
+
+```typescript
+if (denTotal === 0) {
+  setData({ value: 0, formatted: '\u2014' }) // em dash
+  return
+}
+```
+
+The `ComputedMetric` interface in `types/modules.ts` constrains `formula` to a union of known formulas. The `numerator` and `denominator` fields are column names validated server-side against the whitelist.
+
+### Drag-to-Resize: PASS (No DOM Injection)
+
+**File:** `src/components/reporting/widget-wrapper.tsx`
+
+The resize implementation uses `PointerEvent` coordinates with pure numeric calculations:
+- `clamp(Math.round(...), 1, 4)` for columns and `clamp(..., 1, 3)` for rows
+- Grid span values are set via numeric CSS: `gridColumn: span ${displayCols}`
+- The resize preview label displays `{previewSize.cols}` and `{previewSize.rows}` -- numeric values only, no user strings
+- No user content is injected into DOM attributes during resize
+
+The drag-and-drop uses `@dnd-kit/sortable` in `section-container.tsx`, which operates on widget IDs (UUIDs). The `DndContext` and `SortableContext` only use widget IDs for ordering -- no user-controlled strings are rendered into the DOM via the drag system.
+
+### Searchable Column Pickers: PASS (No XSS)
+
+**Files:** `src/components/reporting/config/metric-config.tsx`, `chart-config.tsx`
+
+Both config components use a search `<Input>` that filters columns from the static `COLUMN_METADATA` registry. The search value filters via `.includes()` -- it is never rendered into the DOM as HTML. Column labels and descriptions come from the hardcoded metadata registry, not user input.
+
+### Auto-Title Generation: PASS
+
+**Files:** `src/components/reporting/config/metric-config.tsx`, `chart-config.tsx`
+
+Auto-generated titles use `getColumnLabel()` from the static column metadata registry combined with aggregation prefixes. The `titleTouched` flag prevents overwriting user-edited titles. Titles are set via React state and rendered inside JSX text nodes -- React auto-escapes.
 
 ---
 
@@ -273,23 +334,36 @@ The API currently selects only the requested columns (good!), but does not use p
 
 ## Files Reviewed
 
-| File | Lines | Purpose |
-|------|-------|---------|
-| `src/app/api/bigquery/query/route.ts` | 349 | Single-partner query endpoint |
-| `src/app/api/bigquery/portfolio-query/route.ts` | 352 | Cross-brand query endpoint |
-| `src/app/api/modules/dashboards/[dashboardId]/widgets/route.ts` | 176 | Widget CRUD |
-| `src/components/reporting/widgets/metric-widget.tsx` | 149 | Metric widget rendering |
-| `src/components/reporting/widgets/chart-widget.tsx` | 304 | Chart widget rendering |
-| `src/components/reporting/widgets/table-widget.tsx` | 203 | Table widget rendering |
-| `src/lib/bigquery/column-metadata.ts` | 188 | Column whitelist registry |
-| `src/lib/auth/api-auth.ts` | 179 | Auth helpers |
-| `src/lib/api/response.ts` | 163 | API response helpers |
-| `src/lib/rate-limit/index.ts` | 253 | Rate limiting service |
-| `src/lib/constants.ts` | 87 | Centralized constants |
-| `src/lib/auth/roles.ts` | 86 | RBAC role definitions |
-| `src/types/modules.ts` | 286 | Module/widget type definitions |
+| File | Lines | Purpose | Reviewed In |
+|------|-------|---------|-------------|
+| `src/app/api/bigquery/query/route.ts` | 348 | Single-partner query endpoint | V1, V2 |
+| `src/app/api/bigquery/portfolio-query/route.ts` | 358 | Cross-brand query endpoint | V1, V2 |
+| `src/app/api/modules/dashboards/[dashboardId]/widgets/route.ts` | 208 | Widget CRUD + config validation | V1, V2 |
+| `src/app/api/bigquery/partner-mappings/route.ts` | 215 | Partner mapping CRUD | V2 |
+| `src/components/reporting/widgets/metric-widget.tsx` | 245 | Metric widget + computed metrics + multi-view | V1, V2 |
+| `src/components/reporting/widgets/chart-widget.tsx` | 359 | Chart widget + multi-view merge | V1, V2 |
+| `src/components/reporting/widgets/table-widget.tsx` | 203 | Table widget rendering | V1 |
+| `src/components/reporting/widget-wrapper.tsx` | 267 | Drag-and-drop + resize handle | V2 |
+| `src/components/reporting/section-container.tsx` | 201 | Section with DnD context + grid measurement | V2 |
+| `src/components/reporting/widget-config-dialog.tsx` | 427 | Widget config dialog + presets tab | V2 |
+| `src/components/reporting/config/metric-config.tsx` | 270 | Metric config + PPC selector + searchable picker | V2 |
+| `src/components/reporting/config/chart-config.tsx` | 345 | Chart config + PPC selector + searchable picker | V2 |
+| `src/components/modules/portfolio-dashboard.tsx` | 746 | Portfolio dashboard with tier/status filters | V2 |
+| `src/lib/bigquery/widget-presets.ts` | 368 | 18 preset widget configs | V2 |
+| `src/types/modules.ts` | 298 | Module/widget types + ComputedMetric + ppc_views | V1, V2 |
+| `src/lib/bigquery/column-metadata.ts` | 188 | Column whitelist registry | V1 |
+| `src/lib/auth/api-auth.ts` | 179 | Auth helpers | V1 |
+| `src/lib/api/response.ts` | 163 | API response helpers | V1 |
+| `src/lib/rate-limit/index.ts` | 253 | Rate limiting service | V1 |
+| `src/lib/constants.ts` | 87 | Centralized constants | V1 |
+| `src/lib/auth/roles.ts` | 86 | RBAC role definitions | V1 |
 
 ## Changes Made
 
+### V1 (Initial Audit)
 1. **`src/app/api/bigquery/portfolio-query/route.ts`** -- Added rate limiting with `RATE_LIMITS.STRICT`, fixed error message leakage
 2. **`src/app/api/bigquery/query/route.ts`** -- Fixed error message leakage
+
+### V2 (Widget System V2)
+3. **`src/app/api/bigquery/portfolio-query/route.ts`** -- Added `.max(100, 'Maximum 100 partner IDs allowed')` to `partner_ids` Zod array
+4. **`src/app/api/modules/dashboards/[dashboardId]/widgets/route.ts`** -- Added `checkConfigSize()` (10KB max) and `maxDepth()` (3 levels max) validation to POST and PATCH handlers
