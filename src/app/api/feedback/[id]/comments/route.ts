@@ -7,7 +7,10 @@ import { z } from 'zod'
 
 const AttachmentSchema = z.object({
   type: z.enum(['image', 'drawing', 'file']),
-  url: z.string(),
+  url: z.string().refine(
+    (url) => url.startsWith('https://') || url.startsWith('http://') || url.startsWith('data:image/'),
+    { message: 'URL must use http, https, or data:image scheme' }
+  ),
   name: z.string().optional(),
 })
 

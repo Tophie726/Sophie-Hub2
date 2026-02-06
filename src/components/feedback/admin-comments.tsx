@@ -29,6 +29,11 @@ import {
   DialogContent,
 } from '@/components/ui/dialog'
 
+function safeHref(url: string): string {
+  if (url.startsWith('https://') || url.startsWith('http://') || url.startsWith('data:image/')) return url
+  return '#'
+}
+
 interface CommentAttachment {
   type: 'image' | 'drawing' | 'file'
   url: string
@@ -526,7 +531,7 @@ function CommentThread({
             {comment.attachments.map((att, idx) => (
               <div key={idx}>
                 {att.type === 'image' || att.type === 'drawing' ? (
-                  <a href={att.url} target="_blank" rel="noopener noreferrer">
+                  <a href={safeHref(att.url)} target="_blank" rel="noopener noreferrer">
                     <img
                       src={att.url}
                       alt={att.name || 'Attachment'}
@@ -535,7 +540,7 @@ function CommentThread({
                   </a>
                 ) : (
                   <a
-                    href={att.url}
+                    href={safeHref(att.url)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center gap-1 px-2 py-1 bg-muted/50 rounded text-xs hover:bg-muted transition-colors"
@@ -609,7 +614,7 @@ function CommentThread({
                   {reply.attachments.map((att, idx) => (
                     <div key={idx}>
                       {att.type === 'image' || att.type === 'drawing' ? (
-                        <a href={att.url} target="_blank" rel="noopener noreferrer">
+                        <a href={safeHref(att.url)} target="_blank" rel="noopener noreferrer">
                           <img
                             src={att.url}
                             alt={att.name || 'Attachment'}
@@ -618,7 +623,7 @@ function CommentThread({
                         </a>
                       ) : (
                         <a
-                          href={att.url}
+                          href={safeHref(att.url)}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="flex items-center gap-1 px-1.5 py-0.5 bg-muted/50 rounded text-[10px] hover:bg-muted transition-colors"

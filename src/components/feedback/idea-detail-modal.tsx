@@ -28,6 +28,11 @@ import { toast } from 'sonner'
 import { formatDistanceToNow } from 'date-fns'
 import { DrawingPad } from './drawing-pad'
 
+function safeHref(url: string): string {
+  if (url.startsWith('https://') || url.startsWith('http://') || url.startsWith('data:image/')) return url
+  return '#'
+}
+
 type FeedbackType = 'bug' | 'feature' | 'question'
 type FeedbackStatus = 'new' | 'reviewed' | 'in_progress' | 'resolved' | 'wont_fix'
 
@@ -388,7 +393,7 @@ export function IdeaDetailModal({
                         {comment.attachments.map((att, idx) => (
                           <div key={idx} className="relative group">
                             {att.type === 'image' || att.type === 'drawing' ? (
-                              <a href={att.url} target="_blank" rel="noopener noreferrer">
+                              <a href={safeHref(att.url)} target="_blank" rel="noopener noreferrer">
                                 <img
                                   src={att.url}
                                   alt={att.name || 'Attachment'}
@@ -397,7 +402,7 @@ export function IdeaDetailModal({
                               </a>
                             ) : (
                               <a
-                                href={att.url}
+                                href={safeHref(att.url)}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="flex items-center gap-1.5 px-2 py-1 bg-muted rounded-md text-xs hover:bg-muted/80 transition-colors"

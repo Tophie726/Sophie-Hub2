@@ -11,7 +11,7 @@ const FeedbackSchema = z.object({
   description: z.string().min(1, 'Description is required'),
   page_url: z.string().optional(),
   posthog_session_id: z.string().nullable().optional(),
-  screenshot_data: z.string().nullable().optional(), // base64 image data
+  screenshot_data: z.string().startsWith('data:image/').nullable().optional(), // base64 image data
   browser_info: z.record(z.string(), z.unknown()).optional(),
 })
 

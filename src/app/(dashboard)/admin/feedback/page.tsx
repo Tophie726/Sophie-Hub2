@@ -1074,9 +1074,15 @@ function FeedbackDetailDialog({
                   alt="Bug screenshot"
                   className="w-full max-h-[300px] object-contain cursor-pointer hover:opacity-90 transition-opacity"
                   onClick={() => {
-                    const win = window.open()
-                    if (win) {
-                      win.document.write(`<img src="${item.screenshot_url}" style="max-width: 100%;">`)
+                    if (item.screenshot_url?.startsWith('data:image/')) {
+                      const win = window.open()
+                      if (win) {
+                        win.document.title = 'Screenshot'
+                        const img = win.document.createElement('img')
+                        img.src = item.screenshot_url
+                        img.style.maxWidth = '100%'
+                        win.document.body.appendChild(img)
+                      }
                     }
                   }}
                 />
