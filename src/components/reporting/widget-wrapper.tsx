@@ -122,6 +122,18 @@ export function WidgetWrapper({
     [handlePointerMove, widget.col_span, widget.row_span]
   )
 
+  // Lock cursor on body during drag or resize so it doesn't flicker
+  useEffect(() => {
+    if (isDragging) {
+      document.body.style.cursor = 'grabbing'
+      return () => { document.body.style.cursor = '' }
+    }
+    if (isResizing) {
+      document.body.style.cursor = 'se-resize'
+      return () => { document.body.style.cursor = '' }
+    }
+  }, [isDragging, isResizing])
+
   // Clean up listeners on unmount
   useEffect(() => {
     return () => {
@@ -172,10 +184,11 @@ export function WidgetWrapper({
             ref={setActivatorNodeRef}
             {...attributes}
             {...listeners}
-            className="absolute top-2 left-2 z-10 p-1 rounded-md bg-muted/60 backdrop-blur-sm cursor-grab active:cursor-grabbing hover:bg-muted transition-colors"
+            className="absolute top-2 left-2 z-10 p-1.5 rounded-md bg-muted/60 backdrop-blur-sm cursor-grab active:cursor-grabbing hover:bg-muted transition-colors"
+            style={{ touchAction: 'none' }}
             title="Drag to reorder"
           >
-            <GripVertical className="h-3.5 w-3.5 text-muted-foreground" />
+            <GripVertical className="h-4 w-4 text-muted-foreground" />
           </motion.div>
         )}
       </AnimatePresence>
@@ -224,11 +237,10 @@ export function WidgetWrapper({
           >
             <div
               onPointerDown={handlePointerDown}
-              className="w-4 h-4 cursor-se-resize opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-end"
+              className="w-5 h-5 cursor-se-resize opacity-60 hover:opacity-100 transition-opacity flex items-end justify-end"
               title="Drag to resize"
             >
-              {/* Three diagonal lines forming a grip pattern */}
-              <svg width="10" height="10" viewBox="0 0 10 10" className="text-muted-foreground/60">
+              <svg width="10" height="10" viewBox="0 0 10 10" className="text-muted-foreground">
                 <line x1="9" y1="1" x2="1" y2="9" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
                 <line x1="9" y1="4" x2="4" y2="9" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
                 <line x1="9" y1="7" x2="7" y2="9" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />

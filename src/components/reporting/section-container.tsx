@@ -160,7 +160,11 @@ export function SectionContainer({
                   <div
                     ref={gridRef}
                     className="grid gap-4"
-                    style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}
+                    style={{
+                      gridTemplateColumns: 'repeat(4, 1fr)',
+                      gridAutoFlow: 'dense',
+                      gridAutoRows: 'minmax(180px, auto)',
+                    }}
                   >
                     {sortedWidgets.map((widget) => (
                       <WidgetWrapper
