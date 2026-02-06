@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { ArrowUp, ArrowDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ShimmerGrid } from '@/components/ui/shimmer-grid'
-import { formatHeader, formatCell } from '@/lib/reporting/formatters'
+import { resolveColumnLabel, formatCell } from '@/lib/reporting/formatters'
 import type { TableWidgetProps } from '@/lib/reporting/types'
 import type { TableQueryResult, SortDirection } from '@/types/modules'
 
@@ -161,7 +161,7 @@ export function TableWidget({ config, dateRange, partnerId, title }: TableWidget
                     )}
                   >
                     <span className="inline-flex items-center gap-1">
-                      {formatHeader(header)}
+                      {resolveColumnLabel(config.view, header)}
                       {sortColumn === i && (
                         sortDir === 'asc'
                           ? <ArrowUp className="h-3 w-3" />

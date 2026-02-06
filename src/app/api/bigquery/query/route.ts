@@ -18,48 +18,21 @@ import { apiSuccess, apiError, ApiErrors, apiValidationError } from '@/lib/api/r
 import { checkRateLimit, RATE_LIMITS, rateLimitHeaders } from '@/lib/rate-limit'
 import { BIGQUERY } from '@/lib/constants'
 import { VIEW_ALIASES } from '@/types/modules'
+import { COLUMN_METADATA, getAllowedColumns } from '@/lib/bigquery/column-metadata'
 import { z } from 'zod'
 
 const supabase = getAdminClient()
 
 // =============================================================================
-// Column whitelist per view (prevents SQL injection)
+// Column whitelist per view (derived from column-metadata.ts)
 // =============================================================================
 
-// Actual BigQuery column names per view (verified from live schema)
-const ALLOWED_COLUMNS: Record<string, string[]> = {
-  pbi_sellingpartner_sales_unified_latest: [
-    'client_id', 'date', 'request_time', 'asin_child', 'asin_parent',
-    'sessions', 'sessions_b2b', 'units_ordered', 'units_ordered_b2b',
-    'ordered_product_sales_amount', 'ordered_product_sales_b2b_amount',
-    'total_order_items', 'total_order_items_b2b',
-  ],
-  pbi_sellingpartner_refunds_unified_latest: [
-    'client_id', 'date', 'request_time', 'units_refunded', 'refund_rate',
-  ],
-  pbi_sp_par_unified_latest: [
-    'client_name', 'date', 'request_time', 'campaign_id', 'ad_id',
-    'campaign_name', 'asin', 'impressions', 'clicks',
-    'ppc_spend', 'ppc_sales', 'ppc_orders', 'ppc_units',
-  ],
-  pbi_sd_par_unified_latest: [
-    'client_name', 'date', 'request_time', 'campaign_id', 'ad_id',
-    'campaign_name', 'asin', 'impressions', 'clicks',
-    'ppc_spend', 'ppc_sales', 'ppc_orders', 'ppc_units',
-  ],
-  pbi_sb_str_unified_latest: [
-    'client_id', 'date', 'request_time', 'campaign_id',
-    'campaign_name', 'asin', 'impressions', 'clicks',
-    'ppc_spend', 'ppc_sales', 'ppc_orders',
-  ],
-  pbi_dim_products_unified_latest: [
-    'client_id', 'asin', 'parent_asin', 'product_name', 'report_start_date',
-  ],
-  pbi_match_unified_latest: [
-    'client_name', 'type', 'date', 'request_time', 'campaign_id',
-    'campaign_name', 'asin', 'match_type', 'ppc_revenue',
-  ],
-}
+const ALLOWED_COLUMNS: Record<string, string[]> = Object.fromEntries(
+  Object.entries(COLUMN_METADATA).map(([alias, meta]) => [
+    VIEW_ALIASES[alias],
+    meta.columns.map(c => c.column),
+  ])
+)
 
 // Partner identifier field varies by view
 const PARTNER_FIELD_PER_VIEW: Record<string, string> = {
@@ -274,7 +247,12 @@ export async function POST(request: NextRequest) {
       // Table data: { headers, rows, total_rows }
       const headers = metrics
       const tableRows = rows.map((r) =>
-        metrics.map((col) => String(r[col] ?? ''))
+        metrics.map((col) => {
+          const val = r[col]
+          if (val instanceof Date) return val.toISOString().split('T')[0]
+          if (val && typeof val === 'object' && val.value) return String(val.value)
+          return String(val ?? '')
+        })
       )
 
       return apiSuccess({
@@ -285,7 +263,12 @@ export async function POST(request: NextRequest) {
       }, 200, rateLimitHeaders(rateLimit))
     } else if (group_by) {
       // Chart data: { labels, datasets }
-      const labels = rows.map((r) => String(r[group_by] ?? ''))
+      const labels = rows.map((r) => {
+        const val = r[group_by]
+        if (val instanceof Date) return val.toISOString().split('T')[0]
+        if (val && typeof val === 'object' && val.value) return String(val.value)
+        return String(val ?? '')
+      })
       const datasets = metrics.map((metric) => ({
         label: metric,
         data: rows.map((r) => Number(r[metric] ?? 0)),

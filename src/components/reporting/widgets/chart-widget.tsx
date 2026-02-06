@@ -15,7 +15,7 @@ import {
   Tooltip,
 } from 'recharts'
 import { cn } from '@/lib/utils'
-import { formatCompact, formatDateShort, formatHeader, formatByType } from '@/lib/reporting/formatters'
+import { formatCompact, formatDateShort, resolveColumnLabel, formatByType } from '@/lib/reporting/formatters'
 import type { ChartWidgetProps } from '@/lib/reporting/types'
 import { CHART_COLORS } from '@/lib/reporting/types'
 import type { ChartQueryResult } from '@/types/modules'
@@ -36,11 +36,13 @@ function CustomTooltip({
   payload,
   label,
   format,
+  viewAlias,
 }: {
   active?: boolean
   payload?: TooltipPayloadEntry[]
   label?: string
   format: string
+  viewAlias: string
 }) {
   if (!active || !payload || !payload.length) return null
 
@@ -58,7 +60,7 @@ function CustomTooltip({
             className="h-2 w-2 rounded-full flex-shrink-0"
             style={{ background: entry.color }}
           />
-          <span className="text-xs">{formatHeader(entry.name)}:</span>
+          <span className="text-xs">{resolveColumnLabel(viewAlias, entry.name)}:</span>
           <span
             className="text-xs font-medium"
             style={{ fontVariantNumeric: 'tabular-nums' }}
@@ -201,7 +203,7 @@ export function ChartWidget({ config, dateRange, partnerId, title, height }: Cha
 
   const tooltipContent = (
     <Tooltip
-      content={<CustomTooltip format={config.format} />}
+      content={<CustomTooltip format={config.format} viewAlias={config.view} />}
       cursor={{ stroke: 'hsl(var(--border))', strokeWidth: 1 }}
     />
   )

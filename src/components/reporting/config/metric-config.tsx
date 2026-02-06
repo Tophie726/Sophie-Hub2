@@ -5,11 +5,14 @@ import { Label } from '@/components/ui/label'
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
 import { ViewSelector } from '@/components/reporting/config/view-selector'
+import { getMetricColumns, getColumnFormat } from '@/lib/bigquery/column-metadata'
 import type { MetricWidgetConfig, AggregationType, DisplayFormat } from '@/types/modules'
 
 interface MetricConfigProps {
@@ -35,6 +38,21 @@ const FORMATS: { value: DisplayFormat; label: string }[] = [
 ]
 
 export function MetricConfig({ config, title, onConfigChange, onTitleChange }: MetricConfigProps) {
+  const metricColumns = getMetricColumns(config.view)
+
+  function handleMetricChange(column: string) {
+    const format = getColumnFormat(config.view, column)
+    onConfigChange({ ...config, metric: column, format })
+  }
+
+  function handleViewChange(view: string) {
+    // Reset metric when view changes since columns differ
+    const newMetrics = getMetricColumns(view)
+    const firstMetric = newMetrics[0]?.column ?? ''
+    const format = firstMetric ? getColumnFormat(view, firstMetric) : config.format
+    onConfigChange({ ...config, view, metric: firstMetric, format })
+  }
+
   return (
     <div className="space-y-4">
       <div className="space-y-2">
@@ -50,21 +68,31 @@ export function MetricConfig({ config, title, onConfigChange, onTitleChange }: M
 
       <ViewSelector
         value={config.view}
-        onChange={(view) => onConfigChange({ ...config, view })}
+        onChange={handleViewChange}
       />
 
       <div className="space-y-2">
-        <Label htmlFor="metric-column">Metric Column</Label>
-        <Input
-          id="metric-column"
-          value={config.metric}
-          onChange={(e) => onConfigChange({ ...config, metric: e.target.value })}
-          placeholder="e.g., ordered_product_sales"
-          className="h-9"
-        />
-        <p className="text-xs text-muted-foreground">
-          The BigQuery column name to aggregate
-        </p>
+        <Label>Metric</Label>
+        <Select value={config.metric} onValueChange={handleMetricChange}>
+          <SelectTrigger className="h-9">
+            <SelectValue placeholder="Select a metric" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectLabel>Available Metrics</SelectLabel>
+              {metricColumns.map((col) => (
+                <SelectItem key={col.column} value={col.column}>
+                  {col.label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+        {metricColumns.length === 0 && (
+          <p className="text-xs text-muted-foreground">
+            Select a data view first
+          </p>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-4">

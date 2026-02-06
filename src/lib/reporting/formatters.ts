@@ -5,6 +5,8 @@
  * for use across metric, chart, and table widgets.
  */
 
+import { getColumnLabel } from '@/lib/bigquery/column-metadata'
+
 /**
  * Format a number as USD currency: "$45,230.00"
  */
@@ -137,4 +139,12 @@ export function formatByType(value: number | string, format: 'number' | 'currenc
     case 'number':
     default: return formatNumber(value)
   }
+}
+
+/**
+ * Resolve a column name to a friendly label using metadata.
+ * Falls back to formatHeader() if no metadata entry exists.
+ */
+export function resolveColumnLabel(viewAlias: string, column: string): string {
+  return getColumnLabel(viewAlias, column)
 }
