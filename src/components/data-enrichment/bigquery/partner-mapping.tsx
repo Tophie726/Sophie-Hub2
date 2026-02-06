@@ -168,7 +168,7 @@ export function PartnerMapping({ onMappingChange }: PartnerMappingProps) {
 
       // Try matching without special chars (e.g., "Coat Defense" vs "CoatDefense")
       const normalizedNoSpaces = normalized.replace(/[^a-z0-9]/g, '')
-      for (const [partnerNorm, partner] of partnersByNormalizedName) {
+      for (const [partnerNorm, partner] of Array.from(partnersByNormalizedName.entries())) {
         const partnerNoSpaces = partnerNorm.replace(/[^a-z0-9]/g, '')
         if (normalizedNoSpaces === partnerNoSpaces && !mappedPartnerIds.has(partner.id)) {
           matches[clientName] = { partnerId: partner.id, confidence: 'close' }
