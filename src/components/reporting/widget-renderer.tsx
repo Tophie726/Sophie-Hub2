@@ -1,6 +1,6 @@
 'use client'
 
-import type { DashboardWidget, DateRange } from '@/types/modules'
+import type { DashboardWidget, DateRange, MetricWidgetConfig, ChartWidgetConfig, TableWidgetConfig, TextWidgetConfig } from '@/types/modules'
 import { MetricWidget } from '@/components/reporting/widgets/metric-widget'
 import { ChartWidget } from '@/components/reporting/widgets/chart-widget'
 import { TableWidget } from '@/components/reporting/widgets/table-widget'
@@ -28,7 +28,7 @@ export function WidgetRenderer({ widget, dateRange, partnerId }: WidgetRendererP
     case 'metric':
       return (
         <MetricWidget
-          config={widget.config as any}
+          config={widget.config as MetricWidgetConfig}
           dateRange={dateRange}
           partnerId={partnerId}
           title={widget.title}
@@ -37,7 +37,7 @@ export function WidgetRenderer({ widget, dateRange, partnerId }: WidgetRendererP
     case 'chart':
       return (
         <ChartWidget
-          config={widget.config as any}
+          config={widget.config as ChartWidgetConfig}
           dateRange={dateRange}
           partnerId={partnerId}
           title={widget.title}
@@ -46,7 +46,7 @@ export function WidgetRenderer({ widget, dateRange, partnerId }: WidgetRendererP
     case 'table':
       return (
         <TableWidget
-          config={widget.config as any}
+          config={widget.config as TableWidgetConfig}
           dateRange={dateRange}
           partnerId={partnerId}
           title={widget.title}
@@ -55,7 +55,7 @@ export function WidgetRenderer({ widget, dateRange, partnerId }: WidgetRendererP
     case 'text':
       return (
         <TextWidget
-          config={widget.config as any}
+          config={widget.config as TextWidgetConfig}
           dateRange={dateRange}
           partnerId={partnerId}
           title={widget.title}

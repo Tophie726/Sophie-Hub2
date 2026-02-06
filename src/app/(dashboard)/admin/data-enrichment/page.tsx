@@ -45,7 +45,7 @@ function DataEnrichmentContent() {
   const [browserView, setBrowserView] = useState<DataBrowserView>(initial.view)
   const [selectedSourceId, setSelectedSourceId] = useState<string | null>(initial.sourceId)
   const [selectedTabId, setSelectedTabId] = useState<string | null>(initial.tabId)
-  const [isHydrated, setIsHydrated] = useState(false)
+  const [, setIsHydrated] = useState(false)
 
   // Restore from localStorage after hydration (only if no URL params)
   useEffect(() => {

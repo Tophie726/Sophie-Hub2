@@ -171,7 +171,7 @@ export async function POST(request: NextRequest) {
   let anthropicKey: string
   try {
     anthropicKey = await getAnthropicApiKey()
-  } catch (keyError) {
+  } catch {
     console.error('[analyze-bug] Anthropic API key not configured')
     return apiError(
       'SERVICE_UNAVAILABLE',

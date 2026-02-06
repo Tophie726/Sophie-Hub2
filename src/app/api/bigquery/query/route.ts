@@ -18,7 +18,7 @@ import { apiSuccess, apiError, ApiErrors, apiValidationError } from '@/lib/api/r
 import { checkRateLimit, RATE_LIMITS, rateLimitHeaders } from '@/lib/rate-limit'
 import { BIGQUERY } from '@/lib/constants'
 import { VIEW_ALIASES } from '@/types/modules'
-import { COLUMN_METADATA, getAllowedColumns } from '@/lib/bigquery/column-metadata'
+import { COLUMN_METADATA } from '@/lib/bigquery/column-metadata'
 import { z } from 'zod'
 
 const supabase = getAdminClient()

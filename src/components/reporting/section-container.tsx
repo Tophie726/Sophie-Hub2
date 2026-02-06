@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ChevronDown, Plus, GripVertical } from 'lucide-react'
+import { ChevronDown, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { WidgetWrapper } from '@/components/reporting/widget-wrapper'
 import { WidgetRenderer } from '@/components/reporting/widget-renderer'

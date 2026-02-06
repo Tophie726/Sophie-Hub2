@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Settings, Trash2, GripVertical } from 'lucide-react'
+import { Settings, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { easeOut, duration } from '@/lib/animations'
 import type { DashboardWidget } from '@/types/modules'

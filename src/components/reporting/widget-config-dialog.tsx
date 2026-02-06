@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { motion } from 'framer-motion'
+// import { motion } from 'framer-motion'
 import {
   Hash,
   BarChart3,
@@ -30,7 +30,7 @@ import { MetricConfig } from '@/components/reporting/config/metric-config'
 import { ChartConfig } from '@/components/reporting/config/chart-config'
 import { TableConfig } from '@/components/reporting/config/table-config'
 import { TextConfig } from '@/components/reporting/config/text-config'
-import { easeOut, duration } from '@/lib/animations'
+// import { easeOut, duration } from '@/lib/animations'
 import type {
   DashboardWidget,
   WidgetType,

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState } from 'react'
 import { Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -32,7 +32,7 @@ export function DashboardBuilder({ dashboard: initial, moduleSlug }: DashboardBu
 
   // Partner selection (for templates or override)
   const [selectedPartnerId, setSelectedPartnerId] = useState<string | null>(initial.partner_id || null)
-  const [selectedPartnerName, setSelectedPartnerName] = useState<string | null>(null)
+  const [, setSelectedPartnerName] = useState<string | null>(null)
 
   // Widget config dialog state
   const [configDialogOpen, setConfigDialogOpen] = useState(false)
@@ -214,7 +214,6 @@ export function DashboardBuilder({ dashboard: initial, moduleSlug }: DashboardBu
       for (const section of dashboard.sections) {
         for (const widget of section.widgets) {
           if (widget.id.startsWith('temp-')) {
-            const sectionId = section.id.startsWith('temp-') ? section.id : section.id
             await fetch(`/api/modules/dashboards/${dashboard.id}/widgets`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -235,7 +234,7 @@ export function DashboardBuilder({ dashboard: initial, moduleSlug }: DashboardBu
 
       setHasChanges(false)
       toast.success('Dashboard saved')
-    } catch (err) {
+    } catch {
       toast.error('Failed to save dashboard')
     } finally {
       setIsSaving(false)

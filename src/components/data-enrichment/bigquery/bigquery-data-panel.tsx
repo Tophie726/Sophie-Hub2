@@ -18,7 +18,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 
-const easeOut: [number, number, number, number] = [0.22, 1, 0.36, 1]
 
 interface BigQueryDataPanelProps {
   partnerId: string

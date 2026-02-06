@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
   let anthropicKey: string
   try {
     anthropicKey = await getAnthropicApiKey()
-  } catch (keyError) {
+  } catch {
     console.error('Failed to get Anthropic API key')
     return apiError(
       'SERVICE_UNAVAILABLE',

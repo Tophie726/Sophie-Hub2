@@ -12,7 +12,7 @@
  *   limit - max rows to return (default: 100)
  */
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { requireAuth, canAccessPartner } from '@/lib/auth/api-auth'
 import { apiSuccess, ApiErrors } from '@/lib/api/response'

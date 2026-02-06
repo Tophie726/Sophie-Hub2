@@ -14,7 +14,6 @@ import {
   CartesianGrid,
   Tooltip,
 } from 'recharts'
-import { cn } from '@/lib/utils'
 import { formatCompact, formatDateShort, resolveColumnLabel, formatByType } from '@/lib/reporting/formatters'
 import type { ChartWidgetProps } from '@/lib/reporting/types'
 import { CHART_COLORS } from '@/lib/reporting/types'
