@@ -127,32 +127,58 @@ export async function GET(request: Request) {
     const total = filteredPartners.length
     const paginatedPartners = filteredPartners.slice(offset, offset + limit)
 
-    // Query 2: Batch fetch pod_leader assignments for paginated partners
+    // Query 2: Batch fetch staff assignments for paginated partners (pod_leaders + sales_reps)
     const partnerIds = paginatedPartners.map(p => p.id)
     const podLeaders: Record<string, { id: string; full_name: string }> = {}
+    const salesReps: Record<string, { id: string; full_name: string }> = {}
 
     if (partnerIds.length > 0) {
       const { data: assignments } = await supabase
         .from('partner_assignments')
-        .select('partner_id, staff:staff_id(id, full_name)')
+        .select('partner_id, assignment_role, staff:staff_id(id, full_name)')
         .in('partner_id', partnerIds)
-        .eq('assignment_role', 'pod_leader')
+        .in('assignment_role', ['pod_leader', 'sales_rep'])
         .is('unassigned_at', null)
 
       if (assignments) {
         for (const a of assignments) {
           const staff = a.staff as unknown as { id: string; full_name: string } | null
           if (staff) {
-            podLeaders[a.partner_id] = staff
+            if (a.assignment_role === 'pod_leader') {
+              podLeaders[a.partner_id] = staff
+            } else if (a.assignment_role === 'sales_rep') {
+              salesReps[a.partner_id] = staff
+            }
           }
         }
       }
     }
 
-    // Merge pod leaders into results
+    // Query 3: Batch fetch BigQuery mappings from entity_external_ids
+    const bigqueryMappings: Record<string, string> = {}
+
+    if (partnerIds.length > 0) {
+      const { data: bqMappings } = await supabase
+        .from('entity_external_ids')
+        .select('entity_id, external_id')
+        .eq('entity_type', 'partners')
+        .eq('source', 'bigquery')
+        .in('entity_id', partnerIds)
+
+      if (bqMappings) {
+        for (const m of bqMappings) {
+          bigqueryMappings[m.entity_id] = m.external_id
+        }
+      }
+    }
+
+    // Merge staff assignments and BigQuery status into results
     const partnersWithLeaders = paginatedPartners.map(p => ({
       ...p,
       pod_leader: podLeaders[p.id] || null,
+      sales_rep: salesReps[p.id] || null,
+      has_bigquery: !!bigqueryMappings[p.id],
+      bigquery_client_name: bigqueryMappings[p.id] || null,
     }))
 
     return apiSuccess({

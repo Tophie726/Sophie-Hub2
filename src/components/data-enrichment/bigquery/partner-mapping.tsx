@@ -11,8 +11,10 @@ import {
   Unlink,
   AlertCircle,
   ChevronDown,
-  Sparkles
+  Sparkles,
+  ExternalLink
 } from 'lucide-react'
+import Link from 'next/link'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -585,15 +587,24 @@ export function PartnerMapping({ onMappingChange }: PartnerMappingProps) {
                 {/* Action area */}
                 <div className="flex items-center gap-2 flex-shrink-0">
                   {isMapped ? (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 text-muted-foreground hover:text-destructive"
-                      onClick={() => handleDeleteMapping(mapping)}
-                    >
-                      <X className="h-4 w-4 mr-1" />
-                      Remove
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      <Link
+                        href={`/partners/${mapping.entity_id}`}
+                        className="inline-flex items-center gap-1 h-8 px-2.5 text-sm text-muted-foreground hover:text-primary rounded-md hover:bg-muted transition-colors"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                        View
+                      </Link>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 text-muted-foreground hover:text-destructive"
+                        onClick={() => handleDeleteMapping(mapping)}
+                      >
+                        <X className="h-4 w-4 mr-1" />
+                        Remove
+                      </Button>
+                    </div>
                   ) : (
                     <>
                       <Select

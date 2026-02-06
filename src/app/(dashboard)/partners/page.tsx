@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import Link from 'next/link'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { format, parseISO } from 'date-fns'
-import { Building2, Plus, Database, ChevronRight, ChevronLeft, ChevronUp, ChevronDown, Loader2, Settings2, Activity, RefreshCw, FileSpreadsheet, MoreHorizontal, Sparkles, GripVertical } from 'lucide-react'
+import { Building2, Plus, Database, ChevronRight, ChevronLeft, ChevronUp, ChevronDown, Loader2, Settings2, Activity, RefreshCw, FileSpreadsheet, MoreHorizontal, Sparkles, GripVertical, Filter, X } from 'lucide-react'
 import { Reorder, useDragControls } from 'framer-motion'
 import { toast } from 'sonner'
 import { PageHeader } from '@/components/layout/page-header'
@@ -40,6 +40,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
 import { useDebounce } from '@/lib/hooks/use-debounce'
 import { usePartnerSearch } from '@/lib/hooks/use-partner-search'
 
@@ -63,6 +68,7 @@ interface Partner {
   brand_manager_name: string | null
   sales_rep_name: string | null
   pod_leader?: { id: string; full_name: string } | null
+  sales_rep?: { id: string; full_name: string } | null
   source_data?: Record<string, Record<string, Record<string, unknown>>> | null
   // Computed status fields from API
   computed_status?: string | null
@@ -71,6 +77,9 @@ interface Partner {
   latest_weekly_status?: string | null
   status_matches?: boolean
   weeks_without_data?: number
+  // BigQuery mapping
+  has_bigquery?: boolean
+  bigquery_client_name?: string | null
   [key: string]: unknown // Allow dynamic field access
 }
 
@@ -89,6 +98,8 @@ interface ColumnDef {
   align?: 'left' | 'right'
   sortable?: boolean // Can click header to sort
   sortKey?: string // API sort key if different from column key
+  filterable?: boolean // Can filter by column values
+  filterType?: 'boolean' | 'enum' | 'text' // How to render filter UI
   render?: (partner: Partner) => React.ReactNode
 }
 
@@ -147,7 +158,28 @@ const CORE_COLUMNS: ColumnDef[] = [
     minWidth: 70,
     flex: 0,
     sortable: true,
+    filterable: true,
+    filterType: 'enum',
     render: (p) => <TierBadge tier={p.tier} />
+  },
+  {
+    key: 'has_bigquery',
+    label: 'BigQuery',
+    source: 'db',
+    sourceType: 'computed',
+    defaultVisible: true,
+    minWidth: 90,
+    flex: 0,
+    filterable: true,
+    filterType: 'boolean',
+    render: (p) => p.has_bigquery ? (
+      <span className="inline-flex items-center gap-1 text-xs font-medium text-green-600 bg-green-500/10 px-2 py-0.5 rounded-full">
+        <Database className="h-3 w-3" />
+        Connected
+      </span>
+    ) : (
+      <span className="text-muted-foreground/40 text-xs">--</span>
+    )
   },
   { key: 'client_name', label: 'Client', source: 'db', sourceType: 'sheet', defaultVisible: true, minWidth: 120, flex: 1, sortable: true },
   { key: 'client_email', label: 'Email', source: 'db', sourceType: 'sheet', defaultVisible: false, minWidth: 160, flex: 1 },
@@ -161,6 +193,8 @@ const CORE_COLUMNS: ColumnDef[] = [
     minWidth: 110,
     flex: 1,
     sortable: true,
+    filterable: true,
+    filterType: 'text',
     render: (p) => {
       if (p.pod_leader) {
         return <span className="text-foreground">{p.pod_leader.full_name}</span>
@@ -177,7 +211,32 @@ const CORE_COLUMNS: ColumnDef[] = [
     }
   },
   { key: 'brand_manager_name', label: 'Brand Manager', source: 'db', sourceType: 'sheet', defaultVisible: false, minWidth: 110, flex: 1 },
-  { key: 'sales_rep_name', label: 'Sales Rep', source: 'db', sourceType: 'sheet', defaultVisible: false, minWidth: 110, flex: 1 },
+  {
+    key: 'sales_rep_name',
+    label: 'Sales Rep',
+    source: 'db',
+    sourceType: 'sheet',
+    defaultVisible: false,
+    minWidth: 110,
+    flex: 1,
+    sortable: true,
+    filterable: true,
+    filterType: 'text',
+    render: (p) => {
+      if (p.sales_rep) {
+        return <span className="text-foreground">{p.sales_rep.full_name}</span>
+      }
+      if (p.sales_rep_name) {
+        return (
+          <span className="text-muted-foreground flex items-center gap-1" title="Not linked to staff record">
+            {p.sales_rep_name}
+            <span className="text-[10px] text-amber-500">●</span>
+          </span>
+        )
+      }
+      return <span className="text-muted-foreground">--</span>
+    }
+  },
   {
     key: 'asin_count',
     label: 'ASINs',
@@ -427,6 +486,138 @@ function DraggableColumnItem({
   )
 }
 
+// Column filter popover - Google Sheets-style filter for column headers
+function ColumnFilterPopover({
+  col,
+  partners,
+  activeFilters,
+  onFilterChange,
+}: {
+  col: ColumnDef
+  partners: Partner[]
+  activeFilters: string[]
+  onFilterChange: (values: string[]) => void
+}) {
+  const [filterSearch, setFilterSearch] = useState('')
+
+  // Compute unique values for this column
+  const uniqueValues = useMemo(() => {
+    if (col.key === 'has_bigquery') {
+      return ['Connected', 'Not Connected']
+    }
+
+    const valSet = new Set<string>()
+    for (const p of partners) {
+      const raw = p[col.key]
+      const val = raw !== null && raw !== undefined && raw !== '' ? String(raw) : '--'
+      valSet.add(val)
+    }
+
+    // Sort: real values first (alphabetically), then '--' at the end
+    return Array.from(valSet).sort((a, b) => {
+      if (a === '--') return 1
+      if (b === '--') return 0
+      return a.localeCompare(b)
+    })
+  }, [col.key, partners])
+
+  const filteredValues = useMemo(() => {
+    if (!filterSearch) return uniqueValues
+    const q = filterSearch.toLowerCase()
+    return uniqueValues.filter(v => v.toLowerCase().includes(q))
+  }, [uniqueValues, filterSearch])
+
+  const isActive = activeFilters.length > 0
+  const allSelected = activeFilters.length === 0
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          className={`ml-1 p-0.5 rounded hover:bg-muted transition-colors ${isActive ? 'text-primary' : 'text-muted-foreground/40 hover:text-muted-foreground'}`}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <Filter className="h-3 w-3" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        className="w-52 p-2"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Search for columns with many values */}
+        {uniqueValues.length > 6 && (
+          <input
+            type="text"
+            placeholder="Search..."
+            value={filterSearch}
+            onChange={(e) => setFilterSearch(e.target.value)}
+            className="w-full h-7 px-2 text-xs border rounded mb-2 bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+          />
+        )}
+
+        {/* Quick actions */}
+        <div className="flex items-center gap-2 mb-1.5">
+          <button
+            className="text-[11px] text-muted-foreground hover:text-foreground"
+            onClick={() => onFilterChange([])}
+          >
+            Show All
+          </button>
+          {!allSelected && (
+            <button
+              className="text-[11px] text-primary hover:text-primary/80"
+              onClick={() => onFilterChange([])}
+            >
+              Clear Filter
+            </button>
+          )}
+        </div>
+
+        {/* Value list */}
+        <div className="max-h-[200px] overflow-y-auto space-y-0.5">
+          {filteredValues.map(val => {
+            const isChecked = allSelected || activeFilters.includes(val)
+            return (
+              <label
+                key={val}
+                className="flex items-center gap-2 py-1 px-1 rounded hover:bg-muted cursor-pointer text-xs"
+                onClick={(e) => {
+                  e.preventDefault()
+                  if (allSelected) {
+                    // Transition from "show all" to "show only this one"
+                    onFilterChange([val])
+                  } else if (activeFilters.includes(val)) {
+                    // Uncheck this value
+                    const next = activeFilters.filter(v => v !== val)
+                    onFilterChange(next) // Empty array = show all
+                  } else {
+                    // Check this value
+                    onFilterChange([...activeFilters, val])
+                  }
+                }}
+              >
+                <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors ${
+                  isChecked
+                    ? 'bg-primary border-primary text-primary-foreground'
+                    : 'border-muted-foreground/30'
+                }`}>
+                  {isChecked && (
+                    <svg className="w-2.5 h-2.5" viewBox="0 0 12 12" fill="none">
+                      <path d="M2.5 6L5 8.5L9.5 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  )}
+                </div>
+                <span className="truncate">{val}</span>
+              </label>
+            )
+          })}
+        </div>
+      </PopoverContent>
+    </Popover>
+  )
+}
+
 function PartnerRow({ partner, columns, visibleColumns, onSync, onWeeklyClick, onStatusClick }: {
   partner: Partner
   columns: ColumnDef[]
@@ -450,8 +641,8 @@ function PartnerRow({ partner, columns, visibleColumns, onSync, onWeeklyClick, o
       {/* Brand name - sticky left, clickable link */}
       <Link
         href={`/partners/${partner.id}`}
-        className="sticky left-0 z-10 bg-card group-hover:bg-muted/30 pl-5 pr-4 shrink-0 cursor-pointer transition-colors"
-        style={{ width: 180, minWidth: 180 }}
+        className="sticky left-0 z-10 bg-card group-hover:bg-accent pl-5 pr-4 shrink-0 cursor-pointer transition-colors"
+        style={{ width: 180, minWidth: 180, boxShadow: '2px 0 4px -2px rgba(0,0,0,0.08)' }}
       >
         <span className="font-medium text-sm truncate block hover:text-primary transition-colors">
           {partner.brand_name}
@@ -558,6 +749,7 @@ function PartnerRow({ partner, columns, visibleColumns, onSync, onWeeklyClick, o
 // localStorage keys for persisting column preferences
 const VISIBLE_COLUMNS_STORAGE_KEY = 'partners-visible-columns'
 const COLUMN_ORDER_STORAGE_KEY = 'partners-column-order'
+const KNOWN_COLUMNS_STORAGE_KEY = 'partners-known-columns'
 
 export default function PartnersPage() {
   const searchParams = useSearchParams()
@@ -595,6 +787,8 @@ export default function PartnersPage() {
   const [pageSize, setPageSize] = useState(50)
   const [currentPage, setCurrentPage] = useState(1)
   const [visibleColumns, setVisibleColumns] = useState<Set<string>>(() => {
+    const defaults = new Set(CORE_COLUMNS.filter(c => c.defaultVisible).map(c => c.key))
+
     // Try to restore from localStorage
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem(VISIBLE_COLUMNS_STORAGE_KEY)
@@ -602,15 +796,35 @@ export default function PartnersPage() {
         try {
           const parsed = JSON.parse(saved) as string[]
           if (Array.isArray(parsed) && parsed.length > 0) {
-            return new Set(parsed)
+            const savedSet = new Set(parsed)
+
+            // Auto-show new defaultVisible columns that weren't in previously known columns
+            const knownRaw = localStorage.getItem(KNOWN_COLUMNS_STORAGE_KEY)
+            const knownCols = knownRaw ? new Set(JSON.parse(knownRaw) as string[]) : new Set<string>()
+
+            Array.from(defaults).forEach(key => {
+              if (!knownCols.has(key)) {
+                // New column that wasn't previously known — show it
+                savedSet.add(key)
+              }
+            })
+
+            // Update known columns
+            localStorage.setItem(KNOWN_COLUMNS_STORAGE_KEY, JSON.stringify(CORE_COLUMNS.map(c => c.key)))
+
+            return savedSet
           }
         } catch {
           // Invalid JSON, use defaults
         }
       }
     }
-    // Fall back to defaults
-    return new Set(CORE_COLUMNS.filter(c => c.defaultVisible).map(c => c.key))
+
+    // Fall back to defaults and save known columns
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(KNOWN_COLUMNS_STORAGE_KEY, JSON.stringify(CORE_COLUMNS.map(c => c.key)))
+    }
+    return defaults
   })
 
   // Weekly status dialog state
@@ -621,6 +835,9 @@ export default function PartnersPage() {
 
   // Add partner dialog state
   const [addPartnerOpen, setAddPartnerOpen] = useState(false)
+
+  // Column filter state - maps column key to selected filter values
+  const [columnFilters, setColumnFilters] = useState<Record<string, string[]>>({})
 
   // Field lineage info for tooltips (which sheet/tab/column each field came from)
   const [fieldLineage, setFieldLineage] = useState<Record<string, {
@@ -640,7 +857,27 @@ export default function PartnersPage() {
   })
 
   // Use filtered results when searching locally, otherwise use all partners
-  const displayedPartners = search.length >= 2 ? filteredPartners : partners
+  const searchFiltered = search.length >= 2 ? filteredPartners : partners
+
+  // Apply column-level filters
+  const displayedPartners = useMemo(() => {
+    const activeFilters = Object.entries(columnFilters).filter(([, vals]) => vals.length > 0)
+    if (activeFilters.length === 0) return searchFiltered
+
+    return searchFiltered.filter(partner => {
+      return activeFilters.every(([key, allowedValues]) => {
+        // Special handling for boolean columns (BigQuery)
+        if (key === 'has_bigquery') {
+          const val = partner.has_bigquery ? 'Connected' : 'Not Connected'
+          return allowedValues.includes(val)
+        }
+        // Get the display value for this partner+column
+        const rawVal = partner[key]
+        const displayVal = rawVal !== null && rawVal !== undefined && rawVal !== '' ? String(rawVal) : '--'
+        return allowedValues.includes(displayVal)
+      })
+    })
+  }, [searchFiltered, columnFilters])
 
   // Scroll sync handler - syncs header and content horizontal scroll
   const handleContentScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
@@ -649,11 +886,7 @@ export default function PartnersPage() {
     }
   }, [])
 
-  const handleHeaderScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
-    if (contentScrollRef.current) {
-      contentScrollRef.current.scrollLeft = e.currentTarget.scrollLeft
-    }
-  }, [])
+  // handleHeaderScroll removed - header is overflow-hidden, synced one-way from content
 
   // Discover additional columns from source_data
   const sourceDataColumns = useMemo(() => extractSourceDataColumns(partners), [partners])
@@ -907,6 +1140,38 @@ export default function PartnersPage() {
         placeholder="Search brand, client, or code..."
       />
 
+      {/* Active column filter chips */}
+      {Object.keys(columnFilters).length > 0 && (
+        <div className="px-6 md:px-8 pt-2 flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-muted-foreground">Column filters:</span>
+          {Object.entries(columnFilters).map(([key, values]) => {
+            const col = CORE_COLUMNS.find(c => c.key === key)
+            return (
+              <button
+                key={key}
+                onClick={() => {
+                  setColumnFilters(prev => {
+                    const next = { ...prev }
+                    delete next[key]
+                    return next
+                  })
+                }}
+                className="inline-flex items-center gap-1 text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full hover:bg-primary/20 transition-colors"
+              >
+                {col?.label || key}: {values.join(', ')}
+                <X className="h-3 w-3" />
+              </button>
+            )
+          })}
+          <button
+            onClick={() => setColumnFilters({})}
+            className="text-xs text-muted-foreground hover:text-foreground"
+          >
+            Clear all
+          </button>
+        </div>
+      )}
+
       <div className="p-6 md:p-8">
         {/* Heatmap View */}
         {showHeatmap ? (
@@ -955,8 +1220,7 @@ export default function PartnersPage() {
               <div className="sticky top-[113px] z-20 bg-card border-b border-border/60 rounded-t-xl overflow-hidden">
                 <div
                   ref={headerScrollRef}
-                  className="overflow-x-auto scrollbar-hide"
-                  onScroll={handleHeaderScroll}
+                  className="overflow-hidden"
                 >
                   <div className="hidden md:flex items-center py-2.5 text-[11px] font-medium text-muted-foreground uppercase tracking-wider min-w-max">
                     {/* Brand header - sticky left, sortable */}
@@ -970,7 +1234,7 @@ export default function PartnersPage() {
                         }
                       }}
                       className="sticky left-0 z-10 bg-card pl-5 pr-4 shrink-0 flex items-center gap-1 hover:text-foreground transition-colors"
-                      style={{ width: 180, minWidth: 180 }}
+                      style={{ width: 180, minWidth: 180, boxShadow: '2px 0 4px -2px rgba(0,0,0,0.08)' }}
                     >
                       Brand
                       {sort === 'brand_name' && (
@@ -986,39 +1250,63 @@ export default function PartnersPage() {
                         flex: col.flex ?? 1,
                       }
 
+                      const filterEl = col.filterable ? (
+                        <ColumnFilterPopover
+                          col={col}
+                          partners={partners}
+                          activeFilters={columnFilters[col.key] || []}
+                          onFilterChange={(values) => {
+                            setColumnFilters(prev => {
+                              const next = { ...prev }
+                              if (values.length === 0) {
+                                delete next[col.key]
+                              } else {
+                                next[col.key] = values
+                              }
+                              return next
+                            })
+                          }}
+                        />
+                      ) : null
+
                       if (col.sortable) {
                         return (
-                          <button
+                          <div
                             key={col.key}
-                            onClick={() => {
-                              const sortKey = col.sortKey || col.key
-                              if (sort === sortKey) {
-                                setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
-                              } else {
-                                setSort(sortKey)
-                                // Date columns default to desc (newest first), text to asc
-                                const isDateCol = sortKey === 'onboarding_date' || sortKey === 'created_at' || sortKey === 'updated_at'
-                                setSortOrder(isDateCol ? 'desc' : 'asc')
-                              }
-                            }}
-                            className={`flex items-center gap-1 hover:text-foreground transition-colors px-2 ${col.align === 'right' ? 'justify-end' : ''}`}
+                            className={`flex items-center px-2 ${col.align === 'right' ? 'justify-end' : ''}`}
                             style={colStyle}
                           >
-                            {col.label}
-                            {isSorted && (
-                              sortOrder === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />
-                            )}
-                          </button>
+                            <button
+                              onClick={() => {
+                                const sortKey = col.sortKey || col.key
+                                if (sort === sortKey) {
+                                  setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
+                                } else {
+                                  setSort(sortKey)
+                                  const isDateCol = sortKey === 'onboarding_date' || sortKey === 'created_at' || sortKey === 'updated_at'
+                                  setSortOrder(isDateCol ? 'desc' : 'asc')
+                                }
+                              }}
+                              className="flex items-center gap-1 hover:text-foreground transition-colors"
+                            >
+                              {col.label}
+                              {isSorted && (
+                                sortOrder === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />
+                              )}
+                            </button>
+                            {filterEl}
+                          </div>
                         )
                       }
 
                       return (
                         <div
                           key={col.key}
-                          className={`px-2 ${col.align === 'right' ? 'text-right' : ''}`}
+                          className={`flex items-center px-2 ${col.align === 'right' ? 'justify-end' : ''}`}
                           style={colStyle}
                         >
-                          {col.label}
+                          <span>{col.label}</span>
+                          {filterEl}
                         </div>
                       )
                     })}

@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { ChevronLeft, Loader2 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/page-header'
 import { DashboardList } from '@/components/modules/dashboard-list'
+import { UsageDashboard } from '@/components/modules/usage-dashboard'
 import type { Module } from '@/types/modules'
 
 export default function ModuleDetailPage() {
@@ -74,7 +75,8 @@ export default function ModuleDetailPage() {
       </PageHeader>
 
       <div className="p-4 md:p-8">
-        <div className="max-w-4xl mx-auto">
+        <div className="max-w-5xl mx-auto space-y-8">
+          <UsageDashboard moduleSlug={params.slug} />
           <DashboardList module={module} />
         </div>
       </div>

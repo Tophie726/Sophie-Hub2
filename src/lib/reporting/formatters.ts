@@ -142,6 +142,17 @@ export function formatByType(value: number | string, format: 'number' | 'currenc
 }
 
 /**
+ * Format a byte count: 1234567 -> "1.2 MB"
+ */
+export function formatBytes(bytes: number): string {
+  if (isNaN(bytes) || bytes === 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']
+  const i = Math.floor(Math.log(bytes) / Math.log(1024))
+  const value = bytes / Math.pow(1024, i)
+  return `${value.toFixed(value >= 100 ? 0 : 1)} ${units[i]}`
+}
+
+/**
  * Resolve a column name to a friendly label using metadata.
  * Falls back to formatHeader() if no metadata entry exists.
  */

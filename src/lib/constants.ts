@@ -18,6 +18,8 @@ export const CACHE = {
   STATUS_COLORS_TTL: 5 * 60 * 1000,
   /** Rate limiter stale entry cleanup (10 min) */
   RATE_LIMIT_CLEANUP: 10 * 60 * 1000,
+  /** Usage dashboard cache (1 hour) - aggregated stats change slowly */
+  USAGE_TTL: 60 * 60 * 1000,
 } as const
 
 // =============================================================================

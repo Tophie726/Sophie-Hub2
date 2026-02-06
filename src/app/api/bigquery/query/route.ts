@@ -242,6 +242,29 @@ export async function POST(request: NextRequest) {
     const [job] = await bq.createQueryJob({ query, params })
     const [rows] = await job.getQueryResults()
 
+    // Fire-and-forget: log usage without blocking response
+    job.getMetadata().then(([jobMeta]) => {
+      const bytesProcessed = parseInt(jobMeta.statistics?.totalBytesProcessed || '0', 10)
+      const startMs = parseInt(jobMeta.statistics?.startTime || '0', 10)
+      const endMs = parseInt(jobMeta.statistics?.endTime || '0', 10)
+      const durationMs = startMs && endMs ? endMs - startMs : null
+      const estimatedCost = (bytesProcessed / 1_099_511_627_776) * 5.0
+
+      Promise.resolve(
+        supabase.from('bigquery_query_logs').insert({
+          user_id: auth.user.id,
+          partner_id,
+          partner_name: clientId,
+          view_alias: view,
+          view_name: viewName,
+          bytes_processed: bytesProcessed,
+          estimated_cost_usd: estimatedCost,
+          duration_ms: durationMs,
+          query_mode: mode,
+        })
+      ).catch(() => {})
+    }).catch(() => {})
+
     // Format response based on query type
     if (isRaw) {
       // Table data: { headers, rows, total_rows }
