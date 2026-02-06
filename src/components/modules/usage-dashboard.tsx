@@ -36,6 +36,7 @@ const SOURCE_COLORS: Record<string, string> = {
   'Sophie Hub': 'bg-blue-500',
   'Daton (Sync)': 'bg-amber-500',
   'BI Tools': 'bg-purple-500',
+  'Scheduled Jobs': 'bg-cyan-500',
   'Team Queries': 'bg-emerald-500',
   'Other': 'bg-gray-400',
 }
@@ -44,6 +45,7 @@ const SOURCE_STROKE_COLORS: Record<string, string> = {
   'Sophie Hub': 'hsl(217, 91%, 60%)',
   'Daton (Sync)': 'hsl(38, 92%, 50%)',
   'BI Tools': 'hsl(270, 67%, 55%)',
+  'Scheduled Jobs': 'hsl(190, 80%, 50%)',
   'Team Queries': 'hsl(152, 69%, 45%)',
   'Other': 'hsl(0, 0%, 60%)',
 }
@@ -52,9 +54,10 @@ const SOURCE_STROKE_COLORS: Record<string, string> = {
 const SOURCE_DESCRIPTIONS: Record<string, string> = {
   'Sophie Hub': 'Queries from partner dashboards in this app',
   'Daton (Sync)': 'Automated Amazon data sync (runs hourly, many small queries)',
-  'BI Tools': 'Power BI, Looker, or Tableau connected to BigQuery',
+  'BI Tools': 'Power BI, Looker, Tableau, or analytics@ connected to BigQuery',
+  'Scheduled Jobs': 'ETL pipelines and service accounts running on a schedule',
   'Team Queries': 'Team members querying BigQuery directly in the console',
-  'Other': 'Service accounts, scripts, or unidentified sources',
+  'Other': 'External users or unidentified sources',
 }
 
 interface ChartTooltipPayloadEntry {

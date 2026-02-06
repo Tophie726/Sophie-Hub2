@@ -27,7 +27,12 @@ const supabase = getAdminClient()
 const VALID_PERIODS = ['7d', '30d', '90d'] as const
 type Period = (typeof VALID_PERIODS)[number]
 
-/** The CASE expression used to categorize query sources */
+/** The CASE expression used to categorize query sources.
+ *  Order matters: more specific patterns must come before general ones.
+ *  analytics@ is the Power BI service connection (42K queries/mo).
+ *  etl-pipelines@ is a scheduled service account.
+ *  Both match @sophiesociety/@sophie-society so must be checked first.
+ */
 const SOURCE_CASE = `
   CASE
     WHEN labels IS NOT NULL AND EXISTS(
@@ -37,7 +42,11 @@ const SOURCE_CASE = `
     WHEN LOWER(user_email) LIKE '%powerbi%'
       OR LOWER(user_email) LIKE '%looker%'
       OR LOWER(user_email) LIKE '%tableau%'
+      OR LOWER(user_email) LIKE 'analytics@%'
       THEN 'BI Tools'
+    WHEN LOWER(user_email) LIKE 'etl-pipelines@%'
+      OR LOWER(user_email) LIKE '%iam.gserviceaccount.com'
+      THEN 'Scheduled Jobs'
     WHEN LOWER(user_email) LIKE '%@sophiesociety%'
       OR LOWER(user_email) LIKE '%@sophie-society%'
       THEN 'Team Queries'

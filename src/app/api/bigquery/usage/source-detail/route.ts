@@ -18,7 +18,7 @@ import type { SourceDetailEntry } from '@/types/usage'
 const VALID_PERIODS = ['7d', '30d', '90d'] as const
 type Period = (typeof VALID_PERIODS)[number]
 
-const VALID_SOURCES = ['All', 'Sophie Hub', 'Daton (Sync)', 'BI Tools', 'Team Queries', 'Other'] as const
+const VALID_SOURCES = ['All', 'Sophie Hub', 'Daton (Sync)', 'BI Tools', 'Scheduled Jobs', 'Team Queries', 'Other'] as const
 type Source = (typeof VALID_SOURCES)[number]
 
 /** The CASE expression used to categorize query sources (matches main usage route) */
@@ -31,7 +31,11 @@ const SOURCE_CASE = `
     WHEN LOWER(user_email) LIKE '%powerbi%'
       OR LOWER(user_email) LIKE '%looker%'
       OR LOWER(user_email) LIKE '%tableau%'
+      OR LOWER(user_email) LIKE 'analytics@%'
       THEN 'BI Tools'
+    WHEN LOWER(user_email) LIKE 'etl-pipelines@%'
+      OR LOWER(user_email) LIKE '%iam.gserviceaccount.com'
+      THEN 'Scheduled Jobs'
     WHEN LOWER(user_email) LIKE '%@sophiesociety%'
       OR LOWER(user_email) LIKE '%@sophie-society%'
       THEN 'Team Queries'
@@ -49,9 +53,14 @@ function sourceToCondition(source: Source): string | null {
     case 'Daton (Sync)':
       return `LOWER(user_email) LIKE '%daton%'`
     case 'BI Tools':
-      return `(LOWER(user_email) LIKE '%powerbi%' OR LOWER(user_email) LIKE '%looker%' OR LOWER(user_email) LIKE '%tableau%')`
+      return `(LOWER(user_email) LIKE '%powerbi%' OR LOWER(user_email) LIKE '%looker%' OR LOWER(user_email) LIKE '%tableau%' OR LOWER(user_email) LIKE 'analytics@%')`
+    case 'Scheduled Jobs':
+      return `(LOWER(user_email) LIKE 'etl-pipelines@%' OR LOWER(user_email) LIKE '%iam.gserviceaccount.com')`
     case 'Team Queries':
-      return `(LOWER(user_email) LIKE '%@sophiesociety%' OR LOWER(user_email) LIKE '%@sophie-society%')`
+      return `(LOWER(user_email) LIKE '%@sophiesociety%' OR LOWER(user_email) LIKE '%@sophie-society%')
+        AND LOWER(user_email) NOT LIKE 'analytics@%'
+        AND LOWER(user_email) NOT LIKE 'etl-pipelines@%'
+        AND LOWER(user_email) NOT LIKE '%iam.gserviceaccount.com'`
     case 'Other':
       return `NOT (
         (labels IS NOT NULL AND EXISTS(SELECT 1 FROM UNNEST(labels) l WHERE l.key = 'source' AND l.value = 'sophie-hub'))
@@ -59,6 +68,9 @@ function sourceToCondition(source: Source): string | null {
         OR LOWER(user_email) LIKE '%powerbi%'
         OR LOWER(user_email) LIKE '%looker%'
         OR LOWER(user_email) LIKE '%tableau%'
+        OR LOWER(user_email) LIKE 'analytics@%'
+        OR LOWER(user_email) LIKE 'etl-pipelines@%'
+        OR LOWER(user_email) LIKE '%iam.gserviceaccount.com'
         OR LOWER(user_email) LIKE '%@sophiesociety%'
         OR LOWER(user_email) LIKE '%@sophie-society%'
       )`

@@ -17,6 +17,7 @@ const SOURCE_COLORS: Record<string, string> = {
   'Sophie Hub': 'bg-blue-500',
   'Daton (Sync)': 'bg-amber-500',
   'BI Tools': 'bg-purple-500',
+  'Scheduled Jobs': 'bg-cyan-500',
   'Team Queries': 'bg-emerald-500',
   'Other': 'bg-gray-400',
 }
