@@ -34,10 +34,19 @@ const PERIODS: { value: Period; label: string }[] = [
 /** Colors for source breakdown */
 const SOURCE_COLORS: Record<string, string> = {
   'Sophie Hub': 'bg-blue-500',
-  'Daton Pipeline': 'bg-amber-500',
+  'Daton (Sync)': 'bg-amber-500',
   'BI Tools': 'bg-purple-500',
-  'Manual (Team)': 'bg-emerald-500',
+  'Team Queries': 'bg-emerald-500',
   'Other': 'bg-gray-400',
+}
+
+/** Descriptions explaining what each source is */
+const SOURCE_DESCRIPTIONS: Record<string, string> = {
+  'Sophie Hub': 'Queries from partner dashboards in this app',
+  'Daton (Sync)': 'Automated Amazon data sync (runs hourly, many small queries)',
+  'BI Tools': 'Power BI, Looker, or Tableau connected to BigQuery',
+  'Team Queries': 'Team members querying BigQuery directly in the console',
+  'Other': 'Service accounts, scripts, or unidentified sources',
 }
 
 interface ChartTooltipPayloadEntry {
@@ -273,7 +282,7 @@ function UsageDashboardInner() {
               icon={<Users className="h-4 w-4" />}
               label="Hub Brands"
               value={formatNumber(data.overview.unique_accounts)}
-              subtitle="via Sophie Hub"
+              subtitle={data.overview.unique_accounts === 0 ? 'logging just enabled' : 'queried via Hub'}
               color="text-orange-600 dark:text-orange-400"
             />
           </div>
@@ -516,15 +525,27 @@ function SourceBreakdownCard({
               activeSource && activeSource !== s.source && 'opacity-40',
             )}
           >
-            <div className={cn('h-2.5 w-2.5 rounded-full flex-shrink-0', SOURCE_COLORS[s.source] || 'bg-gray-400')} />
+            <div className={cn('h-2.5 w-2.5 rounded-full flex-shrink-0 mt-0.5', SOURCE_COLORS[s.source] || 'bg-gray-400')} />
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between gap-2">
-                <span className="text-sm font-medium text-foreground truncate">{s.source}</span>
-                <span className="text-sm font-medium text-foreground flex-shrink-0" style={{ fontVariantNumeric: 'tabular-nums' }}>
-                  {formatCurrency(s.estimated_cost)}
-                </span>
+                <div className="min-w-0">
+                  <span className="text-sm font-medium text-foreground truncate block">{s.source}</span>
+                  {SOURCE_DESCRIPTIONS[s.source] && (
+                    <span className="text-[11px] text-muted-foreground/60 leading-tight block">
+                      {SOURCE_DESCRIPTIONS[s.source]}
+                    </span>
+                  )}
+                </div>
+                <div className="text-right flex-shrink-0">
+                  <span className="text-sm font-medium text-foreground block" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                    {formatCurrency(s.estimated_cost)}
+                  </span>
+                  <span className="text-[11px] text-muted-foreground/60 block" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                    {formatBytes(s.total_bytes)}
+                  </span>
+                </div>
               </div>
-              <div className="flex items-center justify-between gap-2 mt-0.5">
+              <div className="flex items-center justify-between gap-2 mt-1">
                 <div className="flex-1 h-1.5 rounded-full bg-muted max-w-[160px]">
                   <div
                     className={cn('h-full rounded-full transition-all', SOURCE_COLORS[s.source] || 'bg-gray-400')}

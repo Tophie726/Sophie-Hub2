@@ -195,14 +195,14 @@ async function fetchSourceBreakdown(days: number): Promise<SourceBreakdown[]> {
         WHEN labels IS NOT NULL AND EXISTS(
           SELECT 1 FROM UNNEST(labels) l WHERE l.key = 'source' AND l.value = 'sophie-hub'
         ) THEN 'Sophie Hub'
-        WHEN LOWER(user_email) LIKE '%daton%' THEN 'Daton Pipeline'
+        WHEN LOWER(user_email) LIKE '%daton%' THEN 'Daton (Sync)'
         WHEN LOWER(user_email) LIKE '%powerbi%'
           OR LOWER(user_email) LIKE '%looker%'
           OR LOWER(user_email) LIKE '%tableau%'
           THEN 'BI Tools'
         WHEN LOWER(user_email) LIKE '%@sophiesociety%'
           OR LOWER(user_email) LIKE '%@sophie-society%'
-          THEN 'Manual (Team)'
+          THEN 'Team Queries'
         ELSE 'Other'
       END as source_category,
       COUNT(*) as query_count,

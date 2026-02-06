@@ -1,19 +1,42 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useParams } from 'next/navigation'
+import { useState, useEffect, useCallback } from 'react'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { ChevronLeft, Loader2 } from 'lucide-react'
+import { ChevronLeft, Loader2, LayoutDashboard, BarChart3 } from 'lucide-react'
+import { motion } from 'framer-motion'
+import { cn } from '@/lib/utils'
 import { PageHeader } from '@/components/layout/page-header'
 import { DashboardList } from '@/components/modules/dashboard-list'
 import { UsageDashboard } from '@/components/modules/usage-dashboard'
+import { UsagePreview } from '@/components/modules/usage-preview'
 import type { Module } from '@/types/modules'
+
+type Tab = 'dashboards' | 'usage'
+
+const TABS: { value: Tab; label: string; icon: React.ReactNode }[] = [
+  { value: 'dashboards', label: 'Dashboards', icon: <LayoutDashboard className="h-3.5 w-3.5" /> },
+  { value: 'usage', label: 'Usage & Cost', icon: <BarChart3 className="h-3.5 w-3.5" /> },
+]
 
 export default function ModuleDetailPage() {
   const params = useParams<{ slug: string }>()
+  const searchParams = useSearchParams()
+  const router = useRouter()
   const [module, setModule] = useState<Module | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  const activeTab = (searchParams.get('tab') as Tab) || 'dashboards'
+  const isAmazonReporting = params.slug === 'amazon-reporting'
+
+  const setActiveTab = useCallback((tab: Tab) => {
+    if (tab === 'dashboards') {
+      router.push(`/admin/modules/${params.slug}`, { scroll: false })
+    } else {
+      router.push(`/admin/modules/${params.slug}?tab=${tab}`, { scroll: false })
+    }
+  }, [router, params.slug])
 
   useEffect(() => {
     async function fetchModule() {
@@ -75,9 +98,61 @@ export default function ModuleDetailPage() {
       </PageHeader>
 
       <div className="p-4 md:p-8">
-        <div className="max-w-5xl mx-auto space-y-8">
-          <UsageDashboard moduleSlug={params.slug} />
-          <DashboardList module={module} />
+        <div className="max-w-5xl mx-auto space-y-6">
+          {/* Tabs — only show if module has usage dashboard */}
+          {isAmazonReporting && (
+            <div className="flex items-center gap-1 p-0.5 rounded-lg w-fit" style={{ boxShadow: '0 0 0 1px rgba(0,0,0,0.08)' }}>
+              {TABS.map((tab) => (
+                <button
+                  key={tab.value}
+                  onClick={() => setActiveTab(tab.value)}
+                  className={cn(
+                    'relative flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors',
+                    activeTab === tab.value
+                      ? 'text-foreground'
+                      : 'text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  {activeTab === tab.value && (
+                    <motion.div
+                      layoutId="moduleTab"
+                      className="absolute inset-0 bg-background rounded-md"
+                      style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}
+                      transition={{ type: 'spring', bounce: 0.15, duration: 0.4 }}
+                    />
+                  )}
+                  <span className="relative z-10 flex items-center gap-1.5">
+                    {tab.icon}
+                    {tab.label}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Dashboards tab */}
+          {activeTab === 'dashboards' && (
+            <div className="space-y-6">
+              {/* Mini usage preview card */}
+              {isAmazonReporting && (
+                <UsagePreview
+                  moduleSlug={params.slug}
+                  onViewDetails={() => setActiveTab('usage')}
+                />
+              )}
+              <DashboardList module={module} />
+            </div>
+          )}
+
+          {/* Usage & Cost tab */}
+          {activeTab === 'usage' && isAmazonReporting && (
+            <UsageDashboard moduleSlug={params.slug} />
+          )}
+
+          {/* Non-amazon modules — no tabs, just dashboard list */}
+          {!isAmazonReporting && (
+            <DashboardList module={module} />
+          )}
         </div>
       </div>
     </div>
