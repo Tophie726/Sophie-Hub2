@@ -341,8 +341,7 @@ export async function POST(request: NextRequest) {
       }, 200, rateLimitHeaders(rateLimit))
     }
   } catch (error) {
-    return ApiErrors.internal(
-      error instanceof Error ? error.message : 'BigQuery query failed'
-    )
+    console.error('[bigquery-query] Error:', error instanceof Error ? error.message : error)
+    return ApiErrors.internal('BigQuery query failed')
   }
 }

@@ -18,6 +18,7 @@ import { getAdminClient } from '@/lib/supabase/admin'
 import { requireRole } from '@/lib/auth/api-auth'
 import { ROLES } from '@/lib/auth/roles'
 import { apiSuccess, apiError, ApiErrors, apiValidationError } from '@/lib/api/response'
+import { checkRateLimit, RATE_LIMITS, rateLimitHeaders } from '@/lib/rate-limit'
 import { BIGQUERY } from '@/lib/constants'
 import { VIEW_ALIASES } from '@/types/modules'
 import { COLUMN_METADATA } from '@/lib/bigquery/column-metadata'
@@ -115,6 +116,12 @@ export async function POST(request: NextRequest) {
   const auth = await requireRole(ROLES.ADMIN)
   if (!auth.authenticated) return auth.response
 
+  // Rate limit: portfolio queries are expensive (scan all brands)
+  const rateLimit = checkRateLimit(auth.user.id, 'bigquery:portfolio', RATE_LIMITS.STRICT)
+  if (!rateLimit.allowed) {
+    return ApiErrors.rateLimited('Too many portfolio queries. Please wait before querying again.')
+  }
+
   try {
     const body = await request.json()
     const validation = PortfolioQuerySchema.safeParse(body)
@@ -151,7 +158,7 @@ export async function POST(request: NextRequest) {
     const cacheKey = JSON.stringify({ view, metrics, aggregation, mode, date_range, group_by, group_by_brand, partner_ids, sort_by, sort_direction, limit })
     const cached = getCached(cacheKey)
     if (cached) {
-      return apiSuccess(cached)
+      return apiSuccess(cached, 200, rateLimitHeaders(rateLimit))
     }
 
     const fullTable = `\`${BIGQUERY.PROJECT_ID}.${BIGQUERY.DATASET}.${viewName}\``
@@ -342,10 +349,9 @@ export async function POST(request: NextRequest) {
     // Cache result
     portfolioCache.set(cacheKey, { data: result, timestamp: Date.now() })
 
-    return apiSuccess(result)
+    return apiSuccess(result, 200, rateLimitHeaders(rateLimit))
   } catch (error) {
-    return ApiErrors.internal(
-      error instanceof Error ? error.message : 'Portfolio query failed'
-    )
+    console.error('[portfolio-query] Error:', error instanceof Error ? error.message : error)
+    return ApiErrors.internal('Portfolio query failed')
   }
 }
