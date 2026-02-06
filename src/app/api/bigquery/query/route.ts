@@ -68,9 +68,10 @@ const VALID_SORT_DIRECTIONS = ['asc', 'desc'] as const
 // =============================================================================
 
 const DateRangeSchema = z.object({
-  preset: z.enum(['7d', '30d', '90d', 'custom']),
+  preset: z.enum(['7d', '14d', '30d', '60d', '90d', 'mtd', 'last_month', 'ytd', '365d', 'custom']),
   start: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   end: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  comparison: z.enum(['previous_period', 'same_period_last_year', 'none']).optional(),
 })
 
 const QuerySchema = z.object({
@@ -106,14 +107,39 @@ function getDateFilter(dateRange: z.infer<typeof DateRangeSchema>): { startDate?
   }
 
   const now = new Date()
-  const days = dateRange.preset === '7d' ? 7 : dateRange.preset === '30d' ? 30 : 90
-  const start = new Date(now)
-  start.setDate(start.getDate() - days)
+  const today = now.toISOString().split('T')[0]
 
-  return {
-    startDate: start.toISOString().split('T')[0],
-    endDate: now.toISOString().split('T')[0],
+  // Simple day-offset presets
+  const dayPresets: Record<string, number> = {
+    '7d': 7, '14d': 14, '30d': 30, '60d': 60, '90d': 90, '365d': 365,
   }
+
+  if (dateRange.preset in dayPresets) {
+    const start = new Date(now)
+    start.setDate(start.getDate() - dayPresets[dateRange.preset])
+    return { startDate: start.toISOString().split('T')[0], endDate: today }
+  }
+
+  if (dateRange.preset === 'mtd') {
+    const start = new Date(now.getFullYear(), now.getMonth(), 1)
+    return { startDate: start.toISOString().split('T')[0], endDate: today }
+  }
+
+  if (dateRange.preset === 'last_month') {
+    const start = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+    const end = new Date(now.getFullYear(), now.getMonth(), 0) // last day of prev month
+    return { startDate: start.toISOString().split('T')[0], endDate: end.toISOString().split('T')[0] }
+  }
+
+  if (dateRange.preset === 'ytd') {
+    const start = new Date(now.getFullYear(), 0, 1)
+    return { startDate: start.toISOString().split('T')[0], endDate: today }
+  }
+
+  // Fallback: last 30 days
+  const fallback = new Date(now)
+  fallback.setDate(fallback.getDate() - 30)
+  return { startDate: fallback.toISOString().split('T')[0], endDate: today }
 }
 
 function sanitizeIdentifier(name: string): string {

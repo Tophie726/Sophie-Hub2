@@ -51,6 +51,7 @@ export const navigation: NavSection[] = [
     items: [
       { name: 'Partners', href: '/partners', icon: Building2 },
       { name: 'Staff', href: '/staff', icon: Users },
+      { name: 'Products', href: '/admin/products', icon: Package },
       { name: 'Feedback', href: '/feedback', icon: Lightbulb },
     ],
   },
@@ -58,11 +59,10 @@ export const navigation: NavSection[] = [
     title: 'Admin',
     requiredRole: ROLES.ADMIN,
     items: [
-      { name: 'Data Enrichment', href: '/admin/data-enrichment', icon: Database, highlight: true },
       { name: 'Modules', href: '/admin/modules', icon: Blocks },
-      { name: 'Change Approval', href: '/admin/change-approval', icon: GitPullRequest },
-      { name: 'Products', href: '/admin/products', icon: Package },
       { name: 'Feedback Triage', href: '/admin/feedback', icon: MessageSquare },
+      { name: 'Data Enrichment', href: '/admin/data-enrichment', icon: Database, highlight: true },
+      { name: 'Change Approval', href: '/admin/change-approval', icon: GitPullRequest },
     ],
   },
 ]

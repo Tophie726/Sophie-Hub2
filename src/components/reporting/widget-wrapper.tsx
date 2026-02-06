@@ -17,7 +17,7 @@ interface WidgetWrapperProps {
   onResize: (widgetId: string, colSpan: number, rowSpan: number) => void
   gridCellWidth?: number
   gridRowHeight?: number
-  isMobilePreview?: boolean
+  previewMode?: 'desktop' | 'tablet' | 'mobile'
   children: React.ReactNode
 }
 
@@ -34,9 +34,11 @@ export function WidgetWrapper({
   onResize,
   gridCellWidth = 200,
   gridRowHeight = 200,
-  isMobilePreview = false,
+  previewMode = 'desktop',
   children,
 }: WidgetWrapperProps) {
+  const isMobilePreview = previewMode === 'mobile'
+  const isDevicePreview = previewMode !== 'desktop'
   const [isHovered, setIsHovered] = useState(false)
   const [isResizing, setIsResizing] = useState(false)
   const [previewSize, setPreviewSize] = useState<{ cols: number; rows: number } | null>(null)
@@ -56,7 +58,7 @@ export function WidgetWrapper({
     setActivatorNodeRef,
   } = useDraggable({
     id: widget.id,
-    disabled: !isEditMode || isResizing || isMobilePreview,
+    disabled: !isEditMode || isResizing || isDevicePreview,
   })
 
   const handlePointerMove = useCallback(
@@ -143,7 +145,14 @@ export function WidgetWrapper({
   // Explicit grid placement
   const style: React.CSSProperties = isMobilePreview
     ? {
-        // Mobile preview: single column, no explicit placement
+        // Mobile: 2-col grid. Small widgets (metric-sized) = 1 col, larger = span 2
+        gridColumn: widget.col_span <= 4 ? 'span 1' : 'span 2',
+        boxShadow: '0 0 0 1px rgba(0,0,0,0.08)',
+      }
+    : previewMode === 'tablet'
+    ? {
+        // Tablet: 4-col grid. Map 8-col spans to 4-col (halved, min 1)
+        gridColumn: `span ${Math.max(1, Math.round(widget.col_span / 2))}`,
         boxShadow: '0 0 0 1px rgba(0,0,0,0.08)',
       }
     : {
@@ -161,7 +170,7 @@ export function WidgetWrapper({
         zIndex: isResizing ? 40 : undefined,
       }
 
-  const showControls = isEditMode || isHovered
+  const showControls = isEditMode && isHovered
 
   return (
     <div
@@ -169,10 +178,13 @@ export function WidgetWrapper({
         setDragRef(node)
         ;(widgetRef as React.MutableRefObject<HTMLDivElement | null>).current = node
       }}
-      className={`relative group rounded-xl bg-card ${
-        isEditMode && !isResizing && !isBeingDragged ? 'ring-2 ring-primary/20 ring-dashed' : ''
-      } ${isResizing ? 'ring-2 ring-primary/30' : ''}`}
-      style={style}
+      className={`relative group rounded-xl bg-card overflow-hidden ${
+        isResizing ? 'ring-2 ring-primary/30' : ''
+      }`}
+      style={{
+        ...style,
+        borderTop: '2px solid hsl(var(--primary) / 0.2)',
+      }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
@@ -196,7 +208,7 @@ export function WidgetWrapper({
         )}
       </AnimatePresence>
 
-      {/* Edit/delete controls */}
+      {/* Edit/delete controls (hover only in edit mode) */}
       <AnimatePresence>
         {showControls && !isBeingDragged && (
           <motion.div
@@ -230,7 +242,7 @@ export function WidgetWrapper({
 
       {/* Resize corner handle (edit mode only, not during drag) */}
       <AnimatePresence>
-        {isEditMode && !isBeingDragged && !isMobilePreview && (
+        {isEditMode && !isBeingDragged && !isDevicePreview && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -273,7 +285,16 @@ export function WidgetWrapper({
         )}
       </AnimatePresence>
 
-      <div className="p-4">
+      {/* Title bar */}
+      {widget.title && (
+        <div className="px-4 pt-3 pb-0">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide" style={{ WebkitFontSmoothing: 'antialiased' }}>
+            {widget.title}
+          </p>
+        </div>
+      )}
+
+      <div className="p-4 overflow-auto">
         {children}
       </div>
     </div>

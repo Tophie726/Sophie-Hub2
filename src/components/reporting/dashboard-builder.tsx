@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { DashboardHeader } from '@/components/reporting/dashboard-header'
 import { SectionContainer } from '@/components/reporting/section-container'
+import { SectionNav } from '@/components/reporting/section-nav'
 import { EmptyDashboard } from '@/components/reporting/empty-dashboard'
 import { WidgetConfigDialog } from '@/components/reporting/widget-config-dialog'
 import {
@@ -51,7 +52,7 @@ export function DashboardBuilder({ dashboard: initial, moduleSlug }: DashboardBu
   const [hasChanges, setHasChanges] = useState(migrationResult.didMigrate)
   const [isSaving, setIsSaving] = useState(false)
   const [isEditMode, setIsEditMode] = useState(false)
-  const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile'>('desktop')
+  const [previewMode, setPreviewMode] = useState<'desktop' | 'tablet' | 'mobile'>('desktop')
   const [dateRange, setDateRange] = useState<DateRange>({
     preset: (initial.date_range_default as DateRange['preset']) || '30d',
   })
@@ -327,13 +328,16 @@ export function DashboardBuilder({ dashboard: initial, moduleSlug }: DashboardBu
   }
 
   const isMobilePreview = previewMode === 'mobile'
+  const isTabletPreview = previewMode === 'tablet'
+  const isDevicePreview = isMobilePreview || isTabletPreview
 
   const dashboardContent = (
-    <div className={isMobilePreview ? 'space-y-4' : 'space-y-6'}>
+    <div className={isDevicePreview ? 'space-y-4' : 'space-y-6'}>
       {dashboard.sections.length === 0 ? (
         <EmptyDashboard onAddSection={handleAddSection} />
       ) : (
         <>
+          <SectionNav sections={dashboard.sections.sort((a, b) => a.sort_order - b.sort_order)} />
           {dashboard.sections
             .sort((a, b) => a.sort_order - b.sort_order)
             .map((section) => (
@@ -353,7 +357,7 @@ export function DashboardBuilder({ dashboard: initial, moduleSlug }: DashboardBu
               />
             ))}
 
-          {!isMobilePreview && (
+          {!isDevicePreview && (
             <div className="pt-2">
               <Button
                 variant="outline"
@@ -390,23 +394,26 @@ export function DashboardBuilder({ dashboard: initial, moduleSlug }: DashboardBu
       />
 
       <div className="p-4 md:p-8">
-        {isMobilePreview ? (
-          // Mobile preview frame
+        {isDevicePreview ? (
           <div className="flex justify-center py-4">
             <div
-              className="bg-background rounded-[2rem] overflow-hidden relative"
+              className="bg-background overflow-hidden relative"
               style={{
-                width: 375,
+                width: isMobilePreview ? 375 : 768,
                 maxHeight: 'calc(100vh - 10rem)',
                 overflowY: 'auto',
-                boxShadow: '0 0 0 8px rgba(0,0,0,0.08), 0 25px 60px rgba(0,0,0,0.12)',
+                borderRadius: isMobilePreview ? '2rem' : '1.25rem',
+                boxShadow: '0 0 0 8px rgba(0,0,0,0.06), 0 25px 60px rgba(0,0,0,0.10)',
               }}
             >
-              {/* Notch */}
+              {/* Status bar */}
               <div className="sticky top-0 z-10 flex justify-center pt-2 pb-1 bg-background">
-                <div className="w-20 h-1 rounded-full bg-muted-foreground/20" />
+                <div
+                  className="rounded-full bg-muted-foreground/20"
+                  style={{ width: isMobilePreview ? 80 : 40, height: 4 }}
+                />
               </div>
-              <div className="p-3">
+              <div className={isMobilePreview ? 'p-3' : 'p-5'}>
                 {dashboardContent}
               </div>
             </div>

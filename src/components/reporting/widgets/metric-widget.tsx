@@ -9,7 +9,7 @@ import { fetchBigQuery } from '@/lib/bigquery/query-cache'
 import type { MetricWidgetProps, TrendDirection } from '@/lib/reporting/types'
 import type { MetricQueryResult } from '@/types/modules'
 
-export function MetricWidget({ config, dateRange, partnerId, title }: MetricWidgetProps) {
+export function MetricWidget({ config, dateRange, partnerId }: MetricWidgetProps) {
   const [data, setData] = useState<MetricQueryResult | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -136,11 +136,6 @@ export function MetricWidget({ config, dateRange, partnerId, title }: MetricWidg
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center p-4 md:p-6 h-full">
-        {title && (
-          <div className="mb-3">
-            <ShimmerBar width={80} height={12} />
-          </div>
-        )}
         <ShimmerBar width={120} height={36} />
         <div className="mt-2">
           <ShimmerBar width={60} height={14} />
@@ -180,13 +175,6 @@ export function MetricWidget({ config, dateRange, partnerId, title }: MetricWidg
 
   return (
     <div className="flex flex-col items-center justify-center p-4 md:p-6 h-full antialiased">
-      {/* Label */}
-      {title && (
-        <p className="text-sm text-muted-foreground uppercase tracking-wide mb-2 text-wrap-balance text-center">
-          {title}
-        </p>
-      )}
-
       {/* Large value */}
       <p
         className="text-3xl md:text-4xl font-bold text-foreground"

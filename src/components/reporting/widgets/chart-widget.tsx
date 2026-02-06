@@ -73,7 +73,7 @@ function CustomTooltip({
   )
 }
 
-export function ChartWidget({ config, dateRange, partnerId, title, height }: ChartWidgetProps) {
+export function ChartWidget({ config, dateRange, partnerId, height }: ChartWidgetProps) {
   const [data, setData] = useState<ChartQueryResult | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -176,9 +176,6 @@ export function ChartWidget({ config, dateRange, partnerId, title, height }: Cha
   if (isLoading) {
     return (
       <div className="p-4 md:p-6 antialiased">
-        {title && (
-          <div className="h-4 w-32 rounded bg-gradient-to-r from-muted/40 via-muted/15 to-muted/40 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite] mb-4" />
-        )}
         <div
           className="w-full rounded-lg overflow-hidden bg-gradient-to-r from-muted/40 via-muted/15 to-muted/40 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite]"
           style={{ height: chartHeight }}
@@ -250,11 +247,6 @@ export function ChartWidget({ config, dateRange, partnerId, title, height }: Cha
 
   return (
     <div className="p-4 md:p-6 antialiased">
-      {title && (
-        <p className="text-sm font-medium text-foreground mb-4 text-wrap-balance">
-          {title}
-        </p>
-      )}
       <ResponsiveContainer width="100%" height={chartHeight}>
         {config.chart_type === 'bar' ? (
           <BarChart data={chartData} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>

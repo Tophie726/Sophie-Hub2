@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { Save, Loader2, ArrowLeft, Building2, ChevronDown, Pencil, Check, Monitor, Smartphone } from 'lucide-react'
+import { Save, Loader2, ArrowLeft, Building2, ChevronDown, Pencil, Check, Monitor, Tablet, Smartphone } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import {
@@ -33,8 +33,8 @@ interface DashboardHeaderProps {
   onPartnerChange?: (partnerId: string, partnerName: string) => void
   isEditMode: boolean
   onToggleEditMode: () => void
-  previewMode?: 'desktop' | 'mobile'
-  onPreviewModeChange?: (mode: 'desktop' | 'mobile') => void
+  previewMode?: 'desktop' | 'tablet' | 'mobile'
+  onPreviewModeChange?: (mode: 'desktop' | 'tablet' | 'mobile') => void
 }
 
 export function DashboardHeader({
@@ -112,10 +112,11 @@ export function DashboardHeader({
 
   return (
     <div className="border-b border-border/40 bg-background/95 backdrop-blur sticky top-0 z-30">
-      <div className="flex h-16 items-center justify-between px-8">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 px-4 md:px-8 py-2 md:py-0 md:min-h-[4rem]">
+        {/* Top row: back button + title */}
+        <div className="flex items-center gap-3 min-w-0">
           <Link href={`/admin/modules/${moduleSlug}`}>
-            <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0">
               <ArrowLeft className="h-4 w-4" />
             </Button>
           </Link>
@@ -133,7 +134,7 @@ export function DashboardHeader({
                   setIsEditingTitle(false)
                 }
               }}
-              className="text-lg font-semibold tracking-tight bg-transparent border-b-2 border-primary/60 outline-none px-0 py-0.5 -webkit-font-smoothing-antialiased"
+              className="text-lg font-semibold tracking-tight bg-transparent border-b-2 border-primary/60 outline-none px-0 py-0.5 min-w-0"
               style={{ WebkitFontSmoothing: 'antialiased' }}
             />
           ) : (
@@ -142,7 +143,7 @@ export function DashboardHeader({
                 setEditValue(title)
                 setIsEditingTitle(true)
               }}
-              className="text-lg font-semibold tracking-tight hover:text-primary/80 transition-colors cursor-text"
+              className="text-lg font-semibold tracking-tight hover:text-primary/80 transition-colors cursor-text truncate"
               style={{ WebkitFontSmoothing: 'antialiased' }}
             >
               {title}
@@ -150,7 +151,8 @@ export function DashboardHeader({
           )}
         </div>
 
-        <div className="flex items-center gap-4">
+        {/* Bottom row on narrow screens: controls */}
+        <div className="flex flex-wrap items-center gap-2 md:gap-4">
           {/* Partner Picker */}
           {onPartnerChange && (
             <Popover open={partnerOpen} onOpenChange={setPartnerOpen}>
@@ -158,7 +160,7 @@ export function DashboardHeader({
                 <Button
                   variant="outline"
                   size="sm"
-                  className="h-9 px-3 gap-2 min-w-[160px] justify-between"
+                  className="h-9 px-3 gap-2 min-w-0 max-w-[160px] md:max-w-[200px] justify-between"
                 >
                   <div className="flex items-center gap-2 truncate">
                     <Building2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
@@ -244,8 +246,8 @@ export function DashboardHeader({
             )}
           </Button>
 
-          {/* Device preview toggle */}
-          {onPreviewModeChange && (
+          {/* Device preview toggle - only visible in edit mode */}
+          {isEditMode && onPreviewModeChange && (
             <div
               className="flex items-center p-0.5 rounded-lg"
               style={{ boxShadow: '0 0 0 1px rgba(0,0,0,0.08)' }}
@@ -260,6 +262,17 @@ export function DashboardHeader({
                 title="Desktop view"
               >
                 <Monitor className="h-3.5 w-3.5" />
+              </button>
+              <button
+                onClick={() => onPreviewModeChange('tablet')}
+                className={`relative p-1.5 rounded-md transition-colors ${
+                  previewMode === 'tablet'
+                    ? 'text-foreground bg-muted'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+                title="Tablet preview"
+              >
+                <Tablet className="h-3.5 w-3.5" />
               </button>
               <button
                 onClick={() => onPreviewModeChange('mobile')}

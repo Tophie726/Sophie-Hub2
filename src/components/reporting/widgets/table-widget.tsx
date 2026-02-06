@@ -9,7 +9,7 @@ import { fetchBigQuery } from '@/lib/bigquery/query-cache'
 import type { TableWidgetProps } from '@/lib/reporting/types'
 import type { TableQueryResult, SortDirection } from '@/types/modules'
 
-export function TableWidget({ config, dateRange, partnerId, title }: TableWidgetProps) {
+export function TableWidget({ config, dateRange, partnerId }: TableWidgetProps) {
   const [data, setData] = useState<TableQueryResult | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -81,9 +81,6 @@ export function TableWidget({ config, dateRange, partnerId, title }: TableWidget
   if (isLoading) {
     return (
       <div className="p-4 md:p-6">
-        {title && (
-          <div className="h-4 w-32 rounded bg-gradient-to-r from-muted/40 via-muted/15 to-muted/40 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite] mb-4" />
-        )}
         <div className="overflow-hidden rounded-lg">
           <ShimmerGrid variant="table" rows={5} columns={config.columns?.length || 4} />
         </div>
@@ -120,11 +117,8 @@ export function TableWidget({ config, dateRange, partnerId, title }: TableWidget
 
   return (
     <div className="p-4 md:p-6 antialiased">
-      {title && (
-        <div className="flex items-center justify-between mb-3">
-          <p className="text-sm font-medium text-foreground text-wrap-balance">
-            {title}
-          </p>
+      {data.total_rows != null && (
+        <div className="flex items-center justify-end mb-3">
           <span
             className="text-xs text-muted-foreground"
             style={{ fontVariantNumeric: 'tabular-nums' }}

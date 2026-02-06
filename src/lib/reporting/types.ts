@@ -11,6 +11,7 @@ import type {
   ChartWidgetConfig,
   TableWidgetConfig,
   TextWidgetConfig,
+  AiTextWidgetConfig,
 } from '@/types/modules'
 
 // =============================================================================
@@ -40,6 +41,10 @@ export interface TableWidgetProps extends BaseWidgetProps {
 
 export interface TextWidgetProps extends BaseWidgetProps {
   config: TextWidgetConfig
+}
+
+export interface AiTextWidgetProps extends BaseWidgetProps {
+  config: AiTextWidgetConfig
 }
 
 // =============================================================================

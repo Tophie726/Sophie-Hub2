@@ -1,10 +1,11 @@
 'use client'
 
-import type { DashboardWidget, DateRange, MetricWidgetConfig, ChartWidgetConfig, TableWidgetConfig, TextWidgetConfig } from '@/types/modules'
+import type { DashboardWidget, DateRange, MetricWidgetConfig, ChartWidgetConfig, TableWidgetConfig, TextWidgetConfig, AiTextWidgetConfig } from '@/types/modules'
 import { MetricWidget } from '@/components/reporting/widgets/metric-widget'
 import { ChartWidget } from '@/components/reporting/widgets/chart-widget'
 import { TableWidget } from '@/components/reporting/widgets/table-widget'
 import { TextWidget } from '@/components/reporting/widgets/text-widget'
+import { AiTextWidget } from '@/components/reporting/widgets/ai-text-widget'
 
 interface WidgetRendererProps {
   widget: DashboardWidget
@@ -31,7 +32,6 @@ export function WidgetRenderer({ widget, dateRange, partnerId }: WidgetRendererP
           config={widget.config as MetricWidgetConfig}
           dateRange={dateRange}
           partnerId={partnerId}
-          title={widget.title}
         />
       )
     case 'chart':
@@ -40,7 +40,6 @@ export function WidgetRenderer({ widget, dateRange, partnerId }: WidgetRendererP
           config={widget.config as ChartWidgetConfig}
           dateRange={dateRange}
           partnerId={partnerId}
-          title={widget.title}
         />
       )
     case 'table':
@@ -49,7 +48,6 @@ export function WidgetRenderer({ widget, dateRange, partnerId }: WidgetRendererP
           config={widget.config as TableWidgetConfig}
           dateRange={dateRange}
           partnerId={partnerId}
-          title={widget.title}
         />
       )
     case 'text':
@@ -58,7 +56,14 @@ export function WidgetRenderer({ widget, dateRange, partnerId }: WidgetRendererP
           config={widget.config as TextWidgetConfig}
           dateRange={dateRange}
           partnerId={partnerId}
-          title={widget.title}
+        />
+      )
+    case 'ai_text':
+      return (
+        <AiTextWidget
+          config={widget.config as AiTextWidgetConfig}
+          dateRange={dateRange}
+          partnerId={partnerId}
         />
       )
     default:

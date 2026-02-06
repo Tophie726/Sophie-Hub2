@@ -3,7 +3,7 @@
 import { cn } from '@/lib/utils'
 import type { TextWidgetProps } from '@/lib/reporting/types'
 
-export function TextWidget({ config, title }: TextWidgetProps) {
+export function TextWidget({ config }: TextWidgetProps) {
   const alignment = config.alignment || 'left'
 
   return (
@@ -14,11 +14,6 @@ export function TextWidget({ config, title }: TextWidgetProps) {
         alignment === 'right' && 'text-right',
       )}
     >
-      {title && (
-        <p className="text-sm font-medium text-foreground mb-2 text-wrap-balance">
-          {title}
-        </p>
-      )}
       <div className="text-sm text-muted-foreground whitespace-pre-wrap">
         {config.content}
       </div>

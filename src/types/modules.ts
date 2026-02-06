@@ -11,8 +11,8 @@
 // Widget Types
 // =============================================================================
 
-/** The four widget types supported by the dashboard system */
-export type WidgetType = 'metric' | 'chart' | 'table' | 'text'
+/** The five widget types supported by the dashboard system */
+export type WidgetType = 'metric' | 'chart' | 'table' | 'text' | 'ai_text'
 
 /** Aggregation functions available for BigQuery widgets */
 export type AggregationType = 'sum' | 'avg' | 'count' | 'min' | 'max'
@@ -75,25 +75,38 @@ export interface TextWidgetConfig {
   alignment: 'left' | 'center' | 'right'
 }
 
+/** Config for an AI-generated text summary widget */
+export interface AiTextWidgetConfig {
+  prompt: string
+  view: string
+  metrics: string[]
+  format: 'summary' | 'bullets' | 'comparison'
+}
+
 /** Union of all widget config types */
 export type WidgetConfig =
   | MetricWidgetConfig
   | ChartWidgetConfig
   | TableWidgetConfig
   | TextWidgetConfig
+  | AiTextWidgetConfig
 
 // =============================================================================
 // Date Range
 // =============================================================================
 
 /** Preset date range options for dashboards */
-export type DateRangePreset = '7d' | '30d' | '90d' | 'custom'
+export type DateRangePreset = '7d' | '14d' | '30d' | '60d' | '90d' | 'mtd' | 'last_month' | 'ytd' | '365d' | 'custom'
+
+/** Comparison period options */
+export type ComparisonPeriod = 'previous_period' | 'same_period_last_year' | 'none'
 
 /** Date range for filtering widget data */
 export interface DateRange {
   preset: DateRangePreset
   start?: string // YYYY-MM-DD
   end?: string   // YYYY-MM-DD
+  comparison?: ComparisonPeriod
 }
 
 // =============================================================================

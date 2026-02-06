@@ -36,7 +36,7 @@ const executivePresets: WidgetPreset[] = [
     description: 'Sum of all ordered product sales',
     template: 'executive',
     widget_type: 'metric',
-    col_span: 1,
+    col_span: 2,
     row_span: 1,
     config: {
       view: 'sales',
@@ -51,7 +51,7 @@ const executivePresets: WidgetPreset[] = [
     description: 'Total number of units ordered',
     template: 'executive',
     widget_type: 'metric',
-    col_span: 1,
+    col_span: 2,
     row_span: 1,
     config: {
       view: 'sales',
@@ -66,7 +66,7 @@ const executivePresets: WidgetPreset[] = [
     description: 'Total Sponsored Products spend',
     template: 'executive',
     widget_type: 'metric',
-    col_span: 1,
+    col_span: 2,
     row_span: 1,
     config: {
       view: 'sp',
@@ -81,7 +81,7 @@ const executivePresets: WidgetPreset[] = [
     description: 'Return on ad spend (sales / spend)',
     template: 'executive',
     widget_type: 'metric',
-    col_span: 1,
+    col_span: 2,
     row_span: 1,
     config: {
       view: 'sp',
@@ -101,7 +101,7 @@ const executivePresets: WidgetPreset[] = [
     description: 'Daily sales revenue over time',
     template: 'executive',
     widget_type: 'chart',
-    col_span: 2,
+    col_span: 4,
     row_span: 1,
     config: {
       view: 'sales',
@@ -118,7 +118,7 @@ const executivePresets: WidgetPreset[] = [
     description: 'Compare PPC revenue against spend',
     template: 'executive',
     widget_type: 'chart',
-    col_span: 2,
+    col_span: 4,
     row_span: 1,
     config: {
       view: 'sp',
@@ -142,7 +142,7 @@ const ppcPresets: WidgetPreset[] = [
     description: 'Total Sponsored Products ad spend',
     template: 'ppc',
     widget_type: 'metric',
-    col_span: 1,
+    col_span: 2,
     row_span: 1,
     config: {
       view: 'sp',
@@ -157,7 +157,7 @@ const ppcPresets: WidgetPreset[] = [
     description: 'Advertising cost of sales percentage',
     template: 'ppc',
     widget_type: 'metric',
-    col_span: 1,
+    col_span: 2,
     row_span: 1,
     config: {
       view: 'sp',
@@ -178,7 +178,7 @@ const ppcPresets: WidgetPreset[] = [
     description: 'Total Sponsored Products impressions',
     template: 'ppc',
     widget_type: 'metric',
-    col_span: 1,
+    col_span: 2,
     row_span: 1,
     config: {
       view: 'sp',
@@ -193,7 +193,7 @@ const ppcPresets: WidgetPreset[] = [
     description: 'Compare click volume against orders',
     template: 'ppc',
     widget_type: 'chart',
-    col_span: 2,
+    col_span: 4,
     row_span: 1,
     config: {
       view: 'sp',
@@ -210,7 +210,7 @@ const ppcPresets: WidgetPreset[] = [
     description: 'Campaign-level performance metrics',
     template: 'ppc',
     widget_type: 'table',
-    col_span: 4,
+    col_span: 8,
     row_span: 2,
     config: {
       view: 'sp',
@@ -226,7 +226,7 @@ const ppcPresets: WidgetPreset[] = [
     description: 'Sponsored Display spend against sales',
     template: 'ppc',
     widget_type: 'chart',
-    col_span: 2,
+    col_span: 4,
     row_span: 1,
     config: {
       view: 'sd',
@@ -250,7 +250,7 @@ const productPresets: WidgetPreset[] = [
     description: 'Total product page sessions',
     template: 'product',
     widget_type: 'metric',
-    col_span: 1,
+    col_span: 2,
     row_span: 1,
     config: {
       view: 'sales',
@@ -265,7 +265,7 @@ const productPresets: WidgetPreset[] = [
     description: 'Average refund rate percentage',
     template: 'product',
     widget_type: 'metric',
-    col_span: 1,
+    col_span: 2,
     row_span: 1,
     config: {
       view: 'refunds',
@@ -280,7 +280,7 @@ const productPresets: WidgetPreset[] = [
     description: 'Daily session count over time',
     template: 'product',
     widget_type: 'chart',
-    col_span: 2,
+    col_span: 4,
     row_span: 1,
     config: {
       view: 'sales',
@@ -297,7 +297,7 @@ const productPresets: WidgetPreset[] = [
     description: 'Units refunded per day',
     template: 'product',
     widget_type: 'chart',
-    col_span: 2,
+    col_span: 4,
     row_span: 1,
     config: {
       view: 'refunds',
@@ -314,7 +314,7 @@ const productPresets: WidgetPreset[] = [
     description: 'Per-ASIN sales and traffic breakdown',
     template: 'product',
     widget_type: 'table',
-    col_span: 4,
+    col_span: 8,
     row_span: 2,
     config: {
       view: 'sales',
@@ -330,7 +330,7 @@ const productPresets: WidgetPreset[] = [
     description: 'Revenue by keyword match type',
     template: 'product',
     widget_type: 'table',
-    col_span: 4,
+    col_span: 8,
     row_span: 2,
     config: {
       view: 'match',

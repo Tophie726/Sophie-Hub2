@@ -7,6 +7,7 @@ import {
   BarChart3,
   Table2,
   FileText,
+  Sparkles,
   ArrowLeft,
   ChevronDown,
 } from 'lucide-react'
@@ -33,6 +34,7 @@ import { MetricConfig } from '@/components/reporting/config/metric-config'
 import { ChartConfig } from '@/components/reporting/config/chart-config'
 import { TableConfig } from '@/components/reporting/config/table-config'
 import { TextConfig } from '@/components/reporting/config/text-config'
+import { AiTextConfig } from '@/components/reporting/config/ai-text-config'
 import { easeOut } from '@/lib/animations'
 import type {
   DashboardWidget,
@@ -42,6 +44,7 @@ import type {
   ChartWidgetConfig,
   TableWidgetConfig,
   TextWidgetConfig,
+  AiTextWidgetConfig,
 } from '@/types/modules'
 
 export interface ConfigChildProps {
@@ -75,7 +78,7 @@ const WIDGET_TYPES: {
     label: 'Metric',
     description: 'Single number with optional comparison',
     icon: <Hash className="h-5 w-5" />,
-    defaultColSpan: 1,
+    defaultColSpan: 2,
     defaultRowSpan: 1,
   },
   {
@@ -83,7 +86,7 @@ const WIDGET_TYPES: {
     label: 'Chart',
     description: 'Line, bar, or area visualization',
     icon: <BarChart3 className="h-5 w-5" />,
-    defaultColSpan: 2,
+    defaultColSpan: 4,
     defaultRowSpan: 2,
   },
   {
@@ -91,7 +94,7 @@ const WIDGET_TYPES: {
     label: 'Table',
     description: 'Data table with sorting',
     icon: <Table2 className="h-5 w-5" />,
-    defaultColSpan: 4,
+    defaultColSpan: 8,
     defaultRowSpan: 2,
   },
   {
@@ -99,7 +102,15 @@ const WIDGET_TYPES: {
     label: 'Text',
     description: 'Static text or notes',
     icon: <FileText className="h-5 w-5" />,
-    defaultColSpan: 2,
+    defaultColSpan: 4,
+    defaultRowSpan: 1,
+  },
+  {
+    type: 'ai_text',
+    label: 'AI Summary',
+    description: 'AI-generated insights from data',
+    icon: <Sparkles className="h-5 w-5" />,
+    defaultColSpan: 4,
     defaultRowSpan: 1,
   },
 ]
@@ -109,13 +120,14 @@ const DEFAULT_CONFIGS: Record<WidgetType, WidgetConfig> = {
   chart: { view: 'sales', chart_type: 'line', x_axis: 'date', y_axis: [], aggregation: 'sum', format: 'currency' } as ChartWidgetConfig,
   table: { view: 'sales', columns: [], sort_by: '', sort_direction: 'desc', limit: 20 } as TableWidgetConfig,
   text: { content: '', alignment: 'left' } as TextWidgetConfig,
+  ai_text: { prompt: '', view: 'sales', metrics: [], format: 'summary' } as AiTextWidgetConfig,
 }
 
 const COL_SPAN_OPTIONS = [
-  { value: '1', label: '1 column' },
-  { value: '2', label: '2 columns' },
-  { value: '3', label: '3 columns' },
-  { value: '4', label: '4 columns (full width)' },
+  { value: '2', label: '2 cols (25%)' },
+  { value: '4', label: '4 cols (50%)' },
+  { value: '6', label: '6 cols (75%)' },
+  { value: '8', label: '8 cols (full width)' },
 ]
 
 const ROW_SPAN_OPTIONS = [
@@ -354,6 +366,16 @@ export function WidgetConfigDialog({
                 title={title}
                 onConfigChange={setConfig}
                 onTitleChange={setTitle}
+              />
+            )}
+            {selectedType === 'ai_text' && (
+              <AiTextConfig
+                config={config as AiTextWidgetConfig}
+                title={title}
+                onConfigChange={setConfig}
+                onTitleChange={setTitle}
+                titleTouched={titleTouched}
+                onTitleTouched={() => setTitleTouched(true)}
               />
             )}
 
