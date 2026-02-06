@@ -24,6 +24,21 @@ import { z } from 'zod'
 const supabase = getAdminClient()
 
 // =============================================================================
+// Server-side response cache (10 min TTL, keyed by query params)
+// =============================================================================
+
+const SERVER_CACHE_TTL = 10 * 60 * 1000 // 10 minutes
+const serverCache = new Map<string, { data: unknown; timestamp: number }>()
+
+// Cleanup stale entries every 5 minutes
+setInterval(() => {
+  const now = Date.now()
+  serverCache.forEach((entry, key) => {
+    if (now - entry.timestamp > SERVER_CACHE_TTL) serverCache.delete(key)
+  })
+}, 5 * 60 * 1000)
+
+// =============================================================================
 // Column whitelist per view (derived from column-metadata.ts)
 // =============================================================================
 
@@ -173,6 +188,14 @@ export async function POST(request: NextRequest) {
     }
 
     const clientId = mapping.external_id
+
+    // Check server-side cache before building/executing query
+    const cacheKey = JSON.stringify({ clientId, view, metrics, aggregation, mode, date_range, group_by, sort_by, sort_direction, limit })
+    const cached = serverCache.get(cacheKey)
+    if (cached && Date.now() - cached.timestamp < SERVER_CACHE_TTL) {
+      return apiSuccess(cached.data as Record<string, unknown>, 200, rateLimitHeaders(rateLimit))
+    }
+
     const fullTable = `\`${BIGQUERY.PROJECT_ID}.${BIGQUERY.DATASET}.${viewName}\``
     const partnerField = PARTNER_FIELD_PER_VIEW[viewName] || 'client_id'
 
@@ -276,6 +299,8 @@ export async function POST(request: NextRequest) {
     }).catch(() => {})
 
     // Format response based on query type
+    let responseData: Record<string, unknown>
+
     if (isRaw) {
       // Table data: { headers, rows, total_rows }
       const headers = metrics
@@ -288,12 +313,12 @@ export async function POST(request: NextRequest) {
         })
       )
 
-      return apiSuccess({
+      responseData = {
         mapped: true,
         clientId,
         type: 'table',
         data: { headers, rows: tableRows, total_rows: tableRows.length },
-      }, 200, rateLimitHeaders(rateLimit))
+      }
     } else if (group_by) {
       // Chart data: { labels, datasets }
       const labels = rows.map((r) => {
@@ -307,23 +332,23 @@ export async function POST(request: NextRequest) {
         data: rows.map((r) => Number(r[metric] ?? 0)),
       }))
 
-      return apiSuccess({
+      responseData = {
         mapped: true,
         clientId,
         type: 'chart',
         data: { labels, datasets },
         rowCount: rows.length,
-      }, 200, rateLimitHeaders(rateLimit))
+      }
     } else if (isAggregated && metrics.length === 1) {
       // Single metric
       const value = rows.length > 0 ? Number(rows[0].value ?? 0) : 0
 
-      return apiSuccess({
+      responseData = {
         mapped: true,
         clientId,
         type: 'metric',
         data: { value },
-      }, 200, rateLimitHeaders(rateLimit))
+      }
     } else {
       // Multi-metric aggregation
       const data: Record<string, number> = {}
@@ -333,13 +358,18 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      return apiSuccess({
+      responseData = {
         mapped: true,
         clientId,
         type: 'metrics',
         data,
-      }, 200, rateLimitHeaders(rateLimit))
+      }
     }
+
+    // Cache the response
+    serverCache.set(cacheKey, { data: responseData, timestamp: Date.now() })
+
+    return apiSuccess(responseData, 200, rateLimitHeaders(rateLimit))
   } catch (error) {
     console.error('[bigquery-query] Error:', error instanceof Error ? error.message : error)
     return ApiErrors.internal('BigQuery query failed')

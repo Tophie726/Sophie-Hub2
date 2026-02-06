@@ -5,6 +5,7 @@ import { ArrowUp, ArrowDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ShimmerGrid } from '@/components/ui/shimmer-grid'
 import { resolveColumnLabel, formatCell } from '@/lib/reporting/formatters'
+import { fetchBigQuery } from '@/lib/bigquery/query-cache'
 import type { TableWidgetProps } from '@/lib/reporting/types'
 import type { TableQueryResult, SortDirection } from '@/types/modules'
 
@@ -20,29 +21,18 @@ export function TableWidget({ config, dateRange, partnerId, title }: TableWidget
     setError(null)
 
     try {
-      const res = await fetch('/api/bigquery/query', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          partner_id: partnerId,
-          view: config.view,
-          metrics: config.columns,
-          mode: 'raw',
-          sort_by: config.sort_by,
-          sort_direction: config.sort_direction,
-          limit: config.limit,
-          date_range: dateRange,
-        }),
+      const result = await fetchBigQuery({
+        partner_id: partnerId,
+        view: config.view,
+        metrics: config.columns,
+        mode: 'raw',
+        sort_by: config.sort_by,
+        sort_direction: config.sort_direction,
+        limit: config.limit,
+        date_range: dateRange,
       })
-
-      if (!res.ok) {
-        const json = await res.json()
-        throw new Error(json.error?.message || 'Failed to load table')
-      }
-
-      const json = await res.json()
-      // API returns { data: { mapped, type, data: { headers, rows, total_rows } } }
-      setData(json.data?.data || json.data)
+      const r = result as Record<string, unknown>
+      setData((r?.data || result) as TableQueryResult)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load table')
     } finally {

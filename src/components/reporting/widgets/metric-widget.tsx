@@ -5,6 +5,7 @@ import { ArrowUpRight, ArrowDownRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ShimmerBar } from '@/components/ui/shimmer-grid'
 import { formatByType } from '@/lib/reporting/formatters'
+import { fetchBigQuery } from '@/lib/bigquery/query-cache'
 import type { MetricWidgetProps, TrendDirection } from '@/lib/reporting/types'
 import type { MetricQueryResult } from '@/types/modules'
 
@@ -28,23 +29,15 @@ export function MetricWidget({ config, dateRange, partnerId, title }: MetricWidg
         // Fetch both metrics across all views in parallel
         const results = await Promise.all(
           views.map(async (view) => {
-            const res = await fetch('/api/bigquery/query', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                partner_id: partnerId,
-                view,
-                metrics: [numerator, denominator],
-                aggregation: config.aggregation,
-                date_range: dateRange,
-              }),
+            const result = await fetchBigQuery({
+              partner_id: partnerId,
+              view,
+              metrics: [numerator, denominator],
+              aggregation: config.aggregation,
+              date_range: dateRange,
             })
-            if (!res.ok) {
-              const json = await res.json()
-              throw new Error(json.error?.message || 'Failed to load metric')
-            }
-            const json = await res.json()
-            return json.data?.data || json.data
+            const r = result as Record<string, unknown>
+            return (r?.data || result) as Record<string, unknown>
           })
         )
 
@@ -80,23 +73,15 @@ export function MetricWidget({ config, dateRange, partnerId, title }: MetricWidg
       if (config.ppc_views && config.ppc_views.length > 1) {
         const results = await Promise.all(
           config.ppc_views.map(async (view) => {
-            const res = await fetch('/api/bigquery/query', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                partner_id: partnerId,
-                view,
-                metrics: [config.metric],
-                aggregation: config.aggregation,
-                date_range: dateRange,
-              }),
+            const result = await fetchBigQuery({
+              partner_id: partnerId,
+              view,
+              metrics: [config.metric],
+              aggregation: config.aggregation,
+              date_range: dateRange,
             })
-            if (!res.ok) {
-              const json = await res.json()
-              throw new Error(json.error?.message || 'Failed to load metric')
-            }
-            const json = await res.json()
-            return json.data?.data || json.data
+            const r = result as Record<string, unknown>
+            return (r?.data || result) as Record<string, unknown>
           })
         )
 
@@ -114,26 +99,15 @@ export function MetricWidget({ config, dateRange, partnerId, title }: MetricWidg
       }
 
       // Single view: default behavior
-      const res = await fetch('/api/bigquery/query', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          partner_id: partnerId,
-          view: config.view,
-          metrics: [config.metric],
-          aggregation: config.aggregation,
-          date_range: dateRange,
-        }),
+      const result = await fetchBigQuery({
+        partner_id: partnerId,
+        view: config.view,
+        metrics: [config.metric],
+        aggregation: config.aggregation,
+        date_range: dateRange,
       })
-
-      if (!res.ok) {
-        const json = await res.json()
-        throw new Error(json.error?.message || 'Failed to load metric')
-      }
-
-      const json = await res.json()
-      // API returns { data: { mapped, type, data: { value } } }
-      setData(json.data?.data || json.data)
+      const r = result as Record<string, unknown>
+      setData((r?.data || result) as MetricQueryResult)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load metric')
     } finally {

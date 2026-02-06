@@ -15,6 +15,7 @@ import {
   Tooltip,
 } from 'recharts'
 import { formatCompact, formatDateShort, resolveColumnLabel, formatByType } from '@/lib/reporting/formatters'
+import { fetchBigQuery } from '@/lib/bigquery/query-cache'
 import type { ChartWidgetProps } from '@/lib/reporting/types'
 import { CHART_COLORS } from '@/lib/reporting/types'
 import type { ChartQueryResult } from '@/types/modules'
@@ -88,27 +89,19 @@ export function ChartWidget({ config, dateRange, partnerId, title, height }: Cha
       if (config.ppc_views && config.ppc_views.length > 1) {
         const results = await Promise.all(
           config.ppc_views.map(async (view) => {
-            const res = await fetch('/api/bigquery/query', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                partner_id: partnerId,
-                view,
-                metrics: config.y_axis,
-                aggregation: config.aggregation,
-                group_by: config.x_axis,
-                date_range: dateRange,
-                sort_by: config.x_axis,
-                sort_direction: 'asc',
-                limit: 365,
-              }),
+            const result = await fetchBigQuery({
+              partner_id: partnerId,
+              view,
+              metrics: config.y_axis,
+              aggregation: config.aggregation,
+              group_by: config.x_axis,
+              date_range: dateRange,
+              sort_by: config.x_axis,
+              sort_direction: 'asc',
+              limit: 365,
             })
-            if (!res.ok) {
-              const json = await res.json()
-              throw new Error(json.error?.message || 'Failed to load chart')
-            }
-            const json = await res.json()
-            return (json.data?.data || json.data) as ChartQueryResult
+            const r = result as Record<string, unknown>
+            return (r?.data || result) as ChartQueryResult
           })
         )
 
@@ -139,30 +132,19 @@ export function ChartWidget({ config, dateRange, partnerId, title, height }: Cha
       }
 
       // Single view: default behavior
-      const res = await fetch('/api/bigquery/query', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          partner_id: partnerId,
-          view: config.view,
-          metrics: config.y_axis,
-          aggregation: config.aggregation,
-          group_by: config.x_axis,
-          date_range: dateRange,
-          sort_by: config.x_axis,
-          sort_direction: 'asc',
-          limit: 365,
-        }),
+      const result = await fetchBigQuery({
+        partner_id: partnerId,
+        view: config.view,
+        metrics: config.y_axis,
+        aggregation: config.aggregation,
+        group_by: config.x_axis,
+        date_range: dateRange,
+        sort_by: config.x_axis,
+        sort_direction: 'asc',
+        limit: 365,
       })
-
-      if (!res.ok) {
-        const json = await res.json()
-        throw new Error(json.error?.message || 'Failed to load chart')
-      }
-
-      const json = await res.json()
-      // API returns { data: { mapped, type, data: { labels, datasets } } }
-      setData(json.data?.data || json.data)
+      const r = result as Record<string, unknown>
+      setData((r?.data || result) as ChartQueryResult)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load chart')
     } finally {

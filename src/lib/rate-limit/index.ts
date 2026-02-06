@@ -63,9 +63,9 @@ export const RATE_LIMITS = {
     windowMs: 60 * 1000, // 1 minute
   },
 
-  /** Partners list: 30 requests per minute (fetches 700+ records) */
+  /** Partners list / dashboard widgets: 120 per minute (dashboards fire many parallel queries) */
   PARTNERS_LIST: {
-    maxRequests: 30,
+    maxRequests: 120,
     windowMs: 60 * 1000, // 1 minute
   },
 
