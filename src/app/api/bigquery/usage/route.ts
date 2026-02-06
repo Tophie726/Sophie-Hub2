@@ -202,7 +202,7 @@ async function fetchSourceBreakdown(days: number): Promise<SourceBreakdown[]> {
           THEN 'BI Tools'
         WHEN LOWER(user_email) LIKE '%@sophiesociety%'
           OR LOWER(user_email) LIKE '%@sophie-society%'
-          THEN 'Console (Team)'
+          THEN 'Manual (Team)'
         ELSE 'Other'
       END as source_category,
       COUNT(*) as query_count,

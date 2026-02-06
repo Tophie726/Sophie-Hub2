@@ -266,7 +266,13 @@ export async function POST(request: NextRequest) {
           duration_ms: durationMs,
           query_mode: mode,
         })
-      ).catch(() => {})
+      ).then((result) => {
+        if (result && typeof result === 'object' && 'error' in result && result.error) {
+          console.error('[bq-usage-log] Insert failed:', result.error)
+        }
+      }).catch((err) => {
+        console.error('[bq-usage-log] Unexpected error:', err)
+      })
     }).catch(() => {})
 
     // Format response based on query type

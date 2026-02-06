@@ -3,8 +3,9 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   ResponsiveContainer,
-  AreaChart,
-  Area,
+  ComposedChart,
+  Bar,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -30,27 +31,21 @@ const PERIODS: { value: Period; label: string }[] = [
   { value: '90d', label: '90d' },
 ]
 
-/** Colors for source breakdown bars */
+/** Colors for source breakdown */
 const SOURCE_COLORS: Record<string, string> = {
   'Sophie Hub': 'bg-blue-500',
   'Daton Pipeline': 'bg-amber-500',
   'BI Tools': 'bg-purple-500',
-  'Console (Team)': 'bg-emerald-500',
+  'Manual (Team)': 'bg-emerald-500',
   'Other': 'bg-gray-400',
 }
 
-const SOURCE_DOT_COLORS: Record<string, string> = {
-  'Sophie Hub': 'bg-blue-500',
-  'Daton Pipeline': 'bg-amber-500',
-  'BI Tools': 'bg-purple-500',
-  'Console (Team)': 'bg-emerald-500',
-  'Other': 'bg-gray-400',
-}
-
-interface TooltipPayloadEntry {
+interface ChartTooltipPayloadEntry {
   value: number
   name: string
   color: string
+  dataKey: string
+  payload: Record<string, number | string>
 }
 
 function ChartTooltip({
@@ -59,10 +54,15 @@ function ChartTooltip({
   label,
 }: {
   active?: boolean
-  payload?: TooltipPayloadEntry[]
+  payload?: ChartTooltipPayloadEntry[]
   label?: string
 }) {
   if (!active || !payload || !payload.length) return null
+
+  // Extract cost and queries from the payload data point
+  const dataPoint = payload[0]?.payload
+  const cost = typeof dataPoint?.cost === 'number' ? dataPoint.cost : 0
+  const queries = typeof dataPoint?.queries === 'number' ? dataPoint.queries : 0
 
   return (
     <div
@@ -73,19 +73,19 @@ function ChartTooltip({
         {label ? formatDateShort(label) : ''}
       </p>
       <div className="flex items-center gap-2">
+        <div className="h-2 w-2 rounded-full bg-primary flex-shrink-0" />
         <span className="text-xs">Cost:</span>
         <span className="text-xs font-medium" style={{ fontVariantNumeric: 'tabular-nums' }}>
-          {formatCurrency(payload[0].value)}
+          {formatCurrency(cost)}
         </span>
       </div>
-      {payload[1] && (
-        <div className="flex items-center gap-2 mt-0.5">
-          <span className="text-xs text-muted-foreground">Queries:</span>
-          <span className="text-xs" style={{ fontVariantNumeric: 'tabular-nums' }}>
-            {formatNumber(payload[1]?.value ?? 0)}
-          </span>
-        </div>
-      )}
+      <div className="flex items-center gap-2 mt-0.5">
+        <div className="h-2 w-2 rounded-full flex-shrink-0" style={{ background: 'hsl(var(--muted-foreground))' }} />
+        <span className="text-xs">Queries:</span>
+        <span className="text-xs font-medium" style={{ fontVariantNumeric: 'tabular-nums' }}>
+          {formatNumber(queries)}
+        </span>
+      </div>
     </div>
   )
 }
@@ -104,9 +104,7 @@ function timeAgo(dateStr: string): string {
 }
 
 export function UsageDashboard({ moduleSlug }: UsageDashboardProps) {
-  // Only show for amazon-reporting module
   if (moduleSlug !== 'amazon-reporting') return null
-
   return <UsageDashboardInner />
 }
 
@@ -117,6 +115,7 @@ function UsageDashboardInner() {
   const [period, setPeriod] = useState<Period>('30d')
   const [sortKey, setSortKey] = useState<SortKey>('estimated_cost')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
+  const [sourceFilter, setSourceFilter] = useState<string | null>(null)
 
   const fetchUsage = useCallback(async (p: Period) => {
     setIsLoading(true)
@@ -142,6 +141,11 @@ function UsageDashboardInner() {
 
   function handlePeriodChange(p: Period) {
     setPeriod(p)
+    setSourceFilter(null)
+  }
+
+  function handleSourceClick(source: string) {
+    setSourceFilter((prev) => (prev === source ? null : source))
   }
 
   function handleSort(key: SortKey) {
@@ -180,6 +184,19 @@ function UsageDashboardInner() {
     return Math.max(...sortedAccounts.map((a) => a.estimated_cost), 0.001)
   }, [sortedAccounts])
 
+  // Filtered overview when a source is selected
+  const filteredOverview = useMemo(() => {
+    if (!data || !sourceFilter) return data?.overview ?? null
+    const src = data.sourceBreakdown.find((s) => s.source === sourceFilter)
+    if (!src) return data.overview
+    return {
+      ...data.overview,
+      total_cost_usd: src.estimated_cost,
+      total_queries: src.query_count,
+      total_bytes_processed: src.total_bytes,
+    }
+  }, [data, sourceFilter])
+
   return (
     <div className="space-y-6">
       {/* Section header + period selector */}
@@ -187,7 +204,9 @@ function UsageDashboardInner() {
         <div>
           <h2 className="text-base font-semibold text-foreground">Data Usage & Cost</h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            BigQuery project costs across all sources
+            {sourceFilter
+              ? `Filtered: ${sourceFilter}`
+              : 'BigQuery project costs across all sources'}
           </p>
         </div>
         <div className="flex items-center rounded-lg p-0.5" style={{ boxShadow: '0 0 0 1px rgba(0,0,0,0.08)' }}>
@@ -208,10 +227,8 @@ function UsageDashboardInner() {
         </div>
       </div>
 
-      {/* Loading state */}
       {isLoading && <UsageLoadingState />}
 
-      {/* Error state */}
       {!isLoading && error && (
         <div
           className="rounded-xl p-6 text-center"
@@ -227,66 +244,61 @@ function UsageDashboardInner() {
         </div>
       )}
 
-      {/* Data loaded */}
-      {!isLoading && !error && data && (
+      {!isLoading && !error && data && filteredOverview && (
         <>
-          {/* Metric cards — total project costs */}
+          {/* Metric cards */}
           <div className="grid grid-cols-2 gap-3 md:gap-4 md:grid-cols-4">
             <MetricCard
               icon={<DollarSign className="h-4 w-4" />}
               label="Total Cost"
-              value={formatCurrency(data.overview.total_cost_usd)}
-              subtitle={`${data.overview.period_days}d billable`}
+              value={formatCurrency(filteredOverview.total_cost_usd)}
+              subtitle={sourceFilter ? sourceFilter : `${filteredOverview.period_days}d billable`}
               color="text-green-600 dark:text-green-400"
             />
             <MetricCard
               icon={<Activity className="h-4 w-4" />}
               label="Queries"
-              value={formatNumber(data.overview.total_queries)}
+              value={formatNumber(filteredOverview.total_queries)}
               subtitle="excl. cached"
               color="text-blue-600 dark:text-blue-400"
             />
             <MetricCard
               icon={<Database className="h-4 w-4" />}
               label="Data Scanned"
-              value={formatBytes(data.overview.total_bytes_processed)}
+              value={formatBytes(filteredOverview.total_bytes_processed)}
               subtitle="billable bytes"
               color="text-purple-600 dark:text-purple-400"
             />
             <MetricCard
               icon={<Users className="h-4 w-4" />}
-              label="Hub Accounts"
+              label="Hub Brands"
               value={formatNumber(data.overview.unique_accounts)}
               subtitle="via Sophie Hub"
               color="text-orange-600 dark:text-orange-400"
             />
           </div>
 
-          {/* Source breakdown + Daily cost trend — side by side on desktop */}
+          {/* Source breakdown + Daily cost trend */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Source breakdown */}
-            <SourceBreakdownCard sources={data.sourceBreakdown} />
+            <SourceBreakdownCard
+              sources={data.sourceBreakdown}
+              activeSource={sourceFilter}
+              onSourceClick={handleSourceClick}
+            />
 
-            {/* Cost trend chart */}
             {data.dailyCosts.length > 0 && (
               <div
                 className="rounded-xl p-4 md:p-6"
                 style={{ boxShadow: '0 0 0 1px rgba(0,0,0,0.08)' }}
               >
                 <p className="text-sm font-medium text-foreground mb-4 text-wrap-balance">
-                  Daily Cost Trend
+                  Daily Cost & Queries
                 </p>
-                <ResponsiveContainer width="100%" height={200}>
-                  <AreaChart
+                <ResponsiveContainer width="100%" height={220}>
+                  <ComposedChart
                     data={data.dailyCosts}
                     margin={{ top: 4, right: 4, bottom: 0, left: 0 }}
                   >
-                    <defs>
-                      <linearGradient id="usage-gradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
-                        <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0.02} />
-                      </linearGradient>
-                    </defs>
                     <CartesianGrid
                       strokeDasharray="3 3"
                       stroke="hsl(var(--border))"
@@ -300,39 +312,55 @@ function UsageDashboardInner() {
                       axisLine={{ stroke: 'hsl(var(--border))', strokeOpacity: 0.4 }}
                       tickFormatter={(d: string) => formatDateShort(d)}
                     />
+                    {/* Left Y-axis: Cost */}
                     <YAxis
+                      yAxisId="cost"
+                      orientation="left"
                       tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
                       tickLine={false}
                       axisLine={false}
                       tickFormatter={(v: number) => `$${formatCompact(v)}`}
-                      width={60}
-                      domain={[0, 'auto']}
+                      width={50}
+                      domain={[0, 'dataMax']}
+                    />
+                    {/* Right Y-axis: Queries */}
+                    <YAxis
+                      yAxisId="queries"
+                      orientation="right"
+                      tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
+                      tickLine={false}
+                      axisLine={false}
+                      tickFormatter={(v: number) => formatCompact(v)}
+                      width={40}
+                      domain={[0, 'dataMax']}
                     />
                     <Tooltip
                       content={<ChartTooltip />}
                       cursor={{ stroke: 'hsl(var(--border))', strokeWidth: 1 }}
                     />
-                    <Area
+                    {/* Bars for queries */}
+                    <Bar
+                      yAxisId="queries"
+                      dataKey="queries"
+                      fill="hsl(var(--muted-foreground))"
+                      fillOpacity={0.15}
+                      radius={[2, 2, 0, 0]}
+                      animationDuration={300}
+                      animationEasing="ease-out"
+                    />
+                    {/* Line for cost */}
+                    <Line
+                      yAxisId="cost"
                       type="monotone"
                       dataKey="cost"
                       stroke="hsl(var(--primary))"
                       strokeWidth={2}
-                      fill="url(#usage-gradient)"
                       dot={false}
                       activeDot={{ r: 4, strokeWidth: 2 }}
                       animationDuration={300}
                       animationEasing="ease-out"
                     />
-                    {/* Hidden series so tooltip can access queries */}
-                    <Area
-                      type="monotone"
-                      dataKey="queries"
-                      stroke="transparent"
-                      fill="transparent"
-                      dot={false}
-                      activeDot={false}
-                    />
-                  </AreaChart>
+                  </ComposedChart>
                 </ResponsiveContainer>
               </div>
             )}
@@ -378,46 +406,15 @@ function UsageDashboardInner() {
                       <th className="text-left px-4 md:px-6 py-2 font-medium text-muted-foreground whitespace-nowrap">
                         Brand
                       </th>
-                      <SortableHeader
-                        label="Queries"
-                        sortKey="query_count"
-                        currentKey={sortKey}
-                        currentDir={sortDir}
-                        onSort={handleSort}
-                      />
-                      <SortableHeader
-                        label="Scanned"
-                        sortKey="total_bytes"
-                        currentKey={sortKey}
-                        currentDir={sortDir}
-                        onSort={handleSort}
-                        className="hidden md:table-cell"
-                      />
-                      <SortableHeader
-                        label="Est. Cost"
-                        sortKey="estimated_cost"
-                        currentKey={sortKey}
-                        currentDir={sortDir}
-                        onSort={handleSort}
-                      />
-                      <SortableHeader
-                        label="Last Query"
-                        sortKey="last_query"
-                        currentKey={sortKey}
-                        currentDir={sortDir}
-                        onSort={handleSort}
-                        className="hidden md:table-cell"
-                      />
+                      <SortableHeader label="Queries" sortKey="query_count" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+                      <SortableHeader label="Scanned" sortKey="total_bytes" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="hidden md:table-cell" />
+                      <SortableHeader label="Est. Cost" sortKey="estimated_cost" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+                      <SortableHeader label="Last Query" sortKey="last_query" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="hidden md:table-cell" />
                     </tr>
                   </thead>
                   <tbody>
                     {sortedAccounts.map((account, idx) => (
-                      <AccountRow
-                        key={account.partner_name + idx}
-                        account={account}
-                        maxCost={maxCost}
-                        isEven={idx % 2 === 0}
-                      />
+                      <AccountRow key={account.partner_name + idx} account={account} maxCost={maxCost} isEven={idx % 2 === 0} />
                     ))}
                   </tbody>
                 </table>
@@ -435,33 +432,17 @@ function UsageDashboardInner() {
 // =============================================================================
 
 function MetricCard({
-  icon,
-  label,
-  value,
-  subtitle,
-  color,
+  icon, label, value, subtitle, color,
 }: {
-  icon: React.ReactNode
-  label: string
-  value: string
-  subtitle?: string
-  color: string
+  icon: React.ReactNode; label: string; value: string; subtitle?: string; color: string
 }) {
   return (
-    <div
-      className="rounded-xl p-4"
-      style={{ boxShadow: '0 0 0 1px rgba(0,0,0,0.08)' }}
-    >
+    <div className="rounded-xl p-4" style={{ boxShadow: '0 0 0 1px rgba(0,0,0,0.08)' }}>
       <div className={cn('flex items-center gap-1.5 mb-2', color)}>
         {icon}
-        <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          {label}
-        </span>
+        <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</span>
       </div>
-      <p
-        className="text-2xl font-bold text-foreground"
-        style={{ fontVariantNumeric: 'tabular-nums' }}
-      >
+      <p className="text-2xl font-bold text-foreground" style={{ fontVariantNumeric: 'tabular-nums' }}>
         {value}
       </p>
       {subtitle && (
@@ -471,17 +452,20 @@ function MetricCard({
   )
 }
 
-function SourceBreakdownCard({ sources }: { sources: SourceBreakdown[] }) {
+function SourceBreakdownCard({
+  sources,
+  activeSource,
+  onSourceClick,
+}: {
+  sources: SourceBreakdown[]
+  activeSource: string | null
+  onSourceClick: (source: string) => void
+}) {
   if (!sources.length) {
     return (
-      <div
-        className="rounded-xl p-4 md:p-6"
-        style={{ boxShadow: '0 0 0 1px rgba(0,0,0,0.08)' }}
-      >
+      <div className="rounded-xl p-4 md:p-6" style={{ boxShadow: '0 0 0 1px rgba(0,0,0,0.08)' }}>
         <p className="text-sm font-medium text-foreground mb-4">Cost by Source</p>
-        <p className="text-sm text-muted-foreground text-center py-8">
-          Source breakdown unavailable.
-        </p>
+        <p className="text-sm text-muted-foreground text-center py-8">Source breakdown unavailable.</p>
       </div>
     )
   }
@@ -489,20 +473,32 @@ function SourceBreakdownCard({ sources }: { sources: SourceBreakdown[] }) {
   const maxPct = Math.max(...sources.map((s) => s.pct), 1)
 
   return (
-    <div
-      className="rounded-xl p-4 md:p-6"
-      style={{ boxShadow: '0 0 0 1px rgba(0,0,0,0.08)' }}
-    >
-      <p className="text-sm font-medium text-foreground mb-4">Cost by Source</p>
+    <div className="rounded-xl p-4 md:p-6" style={{ boxShadow: '0 0 0 1px rgba(0,0,0,0.08)' }}>
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-sm font-medium text-foreground">Cost by Source</p>
+        {activeSource && (
+          <button
+            onClick={() => onSourceClick(activeSource)}
+            className="text-xs text-primary hover:underline"
+          >
+            Clear filter
+          </button>
+        )}
+      </div>
 
-      {/* Stacked bar visualization */}
+      {/* Stacked bar */}
       <div className="flex rounded-full overflow-hidden h-3 mb-5">
         {sources.map((s) => (
           <div
             key={s.source}
-            className={cn('transition-all', SOURCE_COLORS[s.source] || 'bg-gray-400')}
+            className={cn(
+              'transition-all cursor-pointer hover:opacity-80',
+              SOURCE_COLORS[s.source] || 'bg-gray-400',
+              activeSource && activeSource !== s.source && 'opacity-30',
+            )}
             style={{ width: `${Math.max(s.pct, 1)}%` }}
             title={`${s.source}: ${s.pct.toFixed(1)}%`}
+            onClick={() => onSourceClick(s.source)}
           />
         ))}
       </div>
@@ -510,17 +506,21 @@ function SourceBreakdownCard({ sources }: { sources: SourceBreakdown[] }) {
       {/* Source rows */}
       <div className="space-y-3">
         {sources.map((s) => (
-          <div key={s.source} className="flex items-center gap-3">
-            <div className={cn('h-2.5 w-2.5 rounded-full flex-shrink-0', SOURCE_DOT_COLORS[s.source] || 'bg-gray-400')} />
+          <button
+            key={s.source}
+            onClick={() => onSourceClick(s.source)}
+            className={cn(
+              'flex items-center gap-3 w-full text-left rounded-lg p-1.5 -m-1.5 transition-all',
+              'hover:bg-muted/40 active:scale-[0.99]',
+              activeSource === s.source && 'bg-muted/60',
+              activeSource && activeSource !== s.source && 'opacity-40',
+            )}
+          >
+            <div className={cn('h-2.5 w-2.5 rounded-full flex-shrink-0', SOURCE_COLORS[s.source] || 'bg-gray-400')} />
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between gap-2">
-                <span className="text-sm font-medium text-foreground truncate">
-                  {s.source}
-                </span>
-                <span
-                  className="text-sm font-medium text-foreground flex-shrink-0"
-                  style={{ fontVariantNumeric: 'tabular-nums' }}
-                >
+                <span className="text-sm font-medium text-foreground truncate">{s.source}</span>
+                <span className="text-sm font-medium text-foreground flex-shrink-0" style={{ fontVariantNumeric: 'tabular-nums' }}>
                   {formatCurrency(s.estimated_cost)}
                 </span>
               </div>
@@ -536,7 +536,7 @@ function SourceBreakdownCard({ sources }: { sources: SourceBreakdown[] }) {
                 </span>
               </div>
             </div>
-          </div>
+          </button>
         ))}
       </div>
     </div>
@@ -544,19 +544,9 @@ function SourceBreakdownCard({ sources }: { sources: SourceBreakdown[] }) {
 }
 
 function SortableHeader({
-  label,
-  sortKey: key,
-  currentKey,
-  currentDir,
-  onSort,
-  className,
+  label, sortKey: key, currentKey, currentDir, onSort, className,
 }: {
-  label: string
-  sortKey: SortKey
-  currentKey: SortKey
-  currentDir: SortDir
-  onSort: (key: SortKey) => void
-  className?: string
+  label: string; sortKey: SortKey; currentKey: SortKey; currentDir: SortDir; onSort: (key: SortKey) => void; className?: string
 }) {
   const isActive = currentKey === key
   return (
@@ -569,64 +559,31 @@ function SortableHeader({
     >
       <span className="inline-flex items-center gap-1 justify-end">
         {label}
-        {isActive && (
-          currentDir === 'asc'
-            ? <ArrowUp className="h-3 w-3" />
-            : <ArrowDown className="h-3 w-3" />
-        )}
+        {isActive && (currentDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)}
       </span>
     </th>
   )
 }
 
-function AccountRow({
-  account,
-  maxCost,
-  isEven,
-}: {
-  account: AccountUsage
-  maxCost: number
-  isEven: boolean
-}) {
+function AccountRow({ account, maxCost, isEven }: { account: AccountUsage; maxCost: number; isEven: boolean }) {
   const costRatio = account.estimated_cost / maxCost
-
   return (
-    <tr
-      className={cn(
-        'transition-colors hover:bg-muted/40',
-        isEven && 'bg-muted/[0.15]',
-      )}
-    >
+    <tr className={cn('transition-colors hover:bg-muted/40', isEven && 'bg-muted/[0.15]')}>
       <td className="px-4 md:px-6 py-2.5">
         <div className="flex flex-col gap-1">
-          <span className="font-medium text-foreground truncate max-w-[200px]">
-            {account.partner_name}
-          </span>
-          {/* Cost bar — relative width */}
+          <span className="font-medium text-foreground truncate max-w-[200px]">{account.partner_name}</span>
           <div className="h-1 rounded-full bg-muted w-full max-w-[140px]">
-            <div
-              className="h-full rounded-full bg-primary/60 transition-all"
-              style={{ width: `${Math.max(costRatio * 100, 2)}%` }}
-            />
+            <div className="h-full rounded-full bg-primary/60 transition-all" style={{ width: `${Math.max(costRatio * 100, 2)}%` }} />
           </div>
         </div>
       </td>
-      <td
-        className="px-4 md:px-6 py-2.5 text-right whitespace-nowrap"
-        style={{ fontVariantNumeric: 'tabular-nums' }}
-      >
+      <td className="px-4 md:px-6 py-2.5 text-right whitespace-nowrap" style={{ fontVariantNumeric: 'tabular-nums' }}>
         {formatNumber(account.query_count)}
       </td>
-      <td
-        className="px-4 md:px-6 py-2.5 text-right whitespace-nowrap hidden md:table-cell"
-        style={{ fontVariantNumeric: 'tabular-nums' }}
-      >
+      <td className="px-4 md:px-6 py-2.5 text-right whitespace-nowrap hidden md:table-cell" style={{ fontVariantNumeric: 'tabular-nums' }}>
         {formatBytes(account.total_bytes)}
       </td>
-      <td
-        className="px-4 md:px-6 py-2.5 text-right whitespace-nowrap font-medium"
-        style={{ fontVariantNumeric: 'tabular-nums' }}
-      >
+      <td className="px-4 md:px-6 py-2.5 text-right whitespace-nowrap font-medium" style={{ fontVariantNumeric: 'tabular-nums' }}>
         {formatCurrency(account.estimated_cost)}
       </td>
       <td className="px-4 md:px-6 py-2.5 text-right whitespace-nowrap text-muted-foreground hidden md:table-cell">
@@ -639,26 +596,16 @@ function AccountRow({
 function UsageLoadingState() {
   return (
     <div className="space-y-6">
-      {/* Metric card shimmers */}
       <div className="grid grid-cols-2 gap-3 md:gap-4 md:grid-cols-4">
         {[0, 1, 2, 3].map((i) => (
-          <div
-            key={i}
-            className="rounded-xl p-4"
-            style={{ boxShadow: '0 0 0 1px rgba(0,0,0,0.08)' }}
-          >
+          <div key={i} className="rounded-xl p-4" style={{ boxShadow: '0 0 0 1px rgba(0,0,0,0.08)' }}>
             <ShimmerBar width={80} height={12} className="mb-3" />
             <ShimmerBar width={120} height={28} />
           </div>
         ))}
       </div>
-
-      {/* Source + Chart shimmers side by side */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div
-          className="rounded-xl p-4 md:p-6"
-          style={{ boxShadow: '0 0 0 1px rgba(0,0,0,0.08)' }}
-        >
+        <div className="rounded-xl p-4 md:p-6" style={{ boxShadow: '0 0 0 1px rgba(0,0,0,0.08)' }}>
           <ShimmerBar width={120} height={14} className="mb-4" />
           <div className="space-y-4">
             {[0, 1, 2].map((i) => (
@@ -672,23 +619,15 @@ function UsageLoadingState() {
             ))}
           </div>
         </div>
-        <div
-          className="rounded-xl p-4 md:p-6"
-          style={{ boxShadow: '0 0 0 1px rgba(0,0,0,0.08)' }}
-        >
+        <div className="rounded-xl p-4 md:p-6" style={{ boxShadow: '0 0 0 1px rgba(0,0,0,0.08)' }}>
           <ShimmerBar width={140} height={14} className="mb-4" />
           <div
             className="w-full rounded-lg overflow-hidden bg-gradient-to-r from-muted/40 via-muted/15 to-muted/40 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite]"
-            style={{ height: 200 }}
+            style={{ height: 220 }}
           />
         </div>
       </div>
-
-      {/* Table shimmer */}
-      <div
-        className="rounded-xl p-4 md:p-6 overflow-hidden"
-        style={{ boxShadow: '0 0 0 1px rgba(0,0,0,0.08)' }}
-      >
+      <div className="rounded-xl p-4 md:p-6 overflow-hidden" style={{ boxShadow: '0 0 0 1px rgba(0,0,0,0.08)' }}>
         <ShimmerBar width={160} height={14} className="mb-4" />
         <ShimmerGrid variant="table" rows={5} columns={4} />
       </div>
