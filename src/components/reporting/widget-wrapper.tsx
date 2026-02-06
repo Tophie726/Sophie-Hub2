@@ -3,8 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Settings, Trash2, GripVertical } from 'lucide-react'
-import { useSortable } from '@dnd-kit/sortable'
-import { CSS } from '@dnd-kit/utilities'
+import { useDraggable } from '@dnd-kit/core'
 import { Button } from '@/components/ui/button'
 import { easeOut, duration } from '@/lib/animations'
 import type { DashboardWidget } from '@/types/modules'
@@ -12,11 +11,13 @@ import type { DashboardWidget } from '@/types/modules'
 interface WidgetWrapperProps {
   widget: DashboardWidget
   isEditMode: boolean
+  isBeingDragged?: boolean
   onEdit: (widget: DashboardWidget) => void
   onDelete: (widgetId: string) => void
   onResize: (widgetId: string, colSpan: number, rowSpan: number) => void
   gridCellWidth?: number
   gridRowHeight?: number
+  isMobilePreview?: boolean
   children: React.ReactNode
 }
 
@@ -27,11 +28,13 @@ function clamp(value: number, min: number, max: number) {
 export function WidgetWrapper({
   widget,
   isEditMode,
+  isBeingDragged = false,
   onEdit,
   onDelete,
   onResize,
   gridCellWidth = 200,
   gridRowHeight = 200,
+  isMobilePreview = false,
   children,
 }: WidgetWrapperProps) {
   const [isHovered, setIsHovered] = useState(false)
@@ -49,14 +52,11 @@ export function WidgetWrapper({
   const {
     attributes,
     listeners,
-    setNodeRef,
+    setNodeRef: setDragRef,
     setActivatorNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({
+  } = useDraggable({
     id: widget.id,
-    disabled: !isEditMode || isResizing,
+    disabled: !isEditMode || isResizing || isMobilePreview,
   })
 
   const handlePointerMove = useCallback(
@@ -65,7 +65,7 @@ export function WidgetWrapper({
       const { pointerX, pointerY, startWidth, startHeight } = resizeStartRef.current
       const deltaX = e.clientX - pointerX
       const deltaY = e.clientY - pointerY
-      const gap = 16 // gap-4 = 16px
+      const gap = 16
       const newCols = clamp(Math.round((startWidth + deltaX) / (gridCellWidth + gap)), 1, 4)
       const newRows = clamp(Math.round((startHeight + deltaY) / (gridRowHeight + gap)), 1, 3)
       setPreviewSize({ cols: newCols, rows: newRows })
@@ -81,13 +81,10 @@ export function WidgetWrapper({
       setIsResizing(false)
       setPreviewSize(null)
       resizeStartRef.current = null
-      document.removeEventListener('pointermove', handlePointerMove)
-      document.removeEventListener('pointerup', handlePointerUp)
     },
-    [previewSize, widget.id, onResize, handlePointerMove]
+    [previewSize, widget.id, onResize]
   )
 
-  // Store latest handlePointerUp in a ref so pointermove always sees current previewSize
   const pointerUpRef = useRef(handlePointerUp)
   pointerUpRef.current = handlePointerUp
 
@@ -122,9 +119,9 @@ export function WidgetWrapper({
     [handlePointerMove, widget.col_span, widget.row_span]
   )
 
-  // Lock cursor on body during drag or resize so it doesn't flicker
+  // Lock cursor on body during drag or resize
   useEffect(() => {
-    if (isDragging) {
+    if (isBeingDragged) {
       document.body.style.cursor = 'grabbing'
       return () => { document.body.style.cursor = '' }
     }
@@ -132,9 +129,8 @@ export function WidgetWrapper({
       document.body.style.cursor = 'se-resize'
       return () => { document.body.style.cursor = '' }
     }
-  }, [isDragging, isResizing])
+  }, [isBeingDragged, isResizing])
 
-  // Clean up listeners on unmount
   useEffect(() => {
     return () => {
       resizeStartRef.current = null
@@ -144,38 +140,45 @@ export function WidgetWrapper({
   const displayCols = previewSize ? previewSize.cols : widget.col_span
   const displayRows = previewSize ? previewSize.rows : widget.row_span
 
-  const style: React.CSSProperties = {
-    gridColumn: `span ${displayCols}`,
-    gridRow: `span ${displayRows}`,
-    boxShadow: isDragging
-      ? '0 8px 32px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.08)'
-      : '0 0 0 1px rgba(0,0,0,0.08)',
-    transform: CSS.Transform.toString(transform),
-    transition: isResizing
-      ? 'box-shadow 150ms cubic-bezier(0.25, 0.46, 0.45, 0.94)'
-      : transition,
-    zIndex: isDragging ? 50 : isResizing ? 40 : undefined,
-    opacity: isDragging ? 0.9 : 1,
-  }
+  // Explicit grid placement
+  const style: React.CSSProperties = isMobilePreview
+    ? {
+        // Mobile preview: single column, no explicit placement
+        boxShadow: '0 0 0 1px rgba(0,0,0,0.08)',
+      }
+    : {
+        gridColumn: `${widget.grid_column} / span ${displayCols}`,
+        gridRow: `${widget.grid_row} / span ${displayRows}`,
+        boxShadow: isBeingDragged
+          ? '0 8px 32px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.08)'
+          : '0 0 0 1px rgba(0,0,0,0.08)',
+        opacity: isBeingDragged ? 0.25 : 1,
+        transition: isBeingDragged
+          ? 'opacity 150ms ease-out'
+          : isResizing
+            ? 'box-shadow 150ms cubic-bezier(0.25, 0.46, 0.45, 0.94)'
+            : 'opacity 150ms ease-out, box-shadow 150ms ease-out',
+        zIndex: isResizing ? 40 : undefined,
+      }
 
   const showControls = isEditMode || isHovered
 
   return (
     <div
       ref={(node) => {
-        setNodeRef(node)
+        setDragRef(node)
         ;(widgetRef as React.MutableRefObject<HTMLDivElement | null>).current = node
       }}
       className={`relative group rounded-xl bg-card ${
-        isEditMode && !isResizing ? 'ring-2 ring-primary/20 ring-dashed' : ''
-      } ${isResizing ? 'ring-2 ring-primary/30' : ''} ${isDragging ? 'scale-[1.02]' : ''}`}
+        isEditMode && !isResizing && !isBeingDragged ? 'ring-2 ring-primary/20 ring-dashed' : ''
+      } ${isResizing ? 'ring-2 ring-primary/30' : ''}`}
       style={style}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
       {/* Drag handle (edit mode only) */}
       <AnimatePresence>
-        {isEditMode && (
+        {isEditMode && !isBeingDragged && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -186,7 +189,7 @@ export function WidgetWrapper({
             {...listeners}
             className="absolute top-2 left-2 z-10 p-1.5 rounded-md bg-muted/60 backdrop-blur-sm cursor-grab active:cursor-grabbing hover:bg-muted transition-colors"
             style={{ touchAction: 'none' }}
-            title="Drag to reorder"
+            title="Drag to reposition"
           >
             <GripVertical className="h-4 w-4 text-muted-foreground" />
           </motion.div>
@@ -195,7 +198,7 @@ export function WidgetWrapper({
 
       {/* Edit/delete controls */}
       <AnimatePresence>
-        {showControls && (
+        {showControls && !isBeingDragged && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -225,9 +228,9 @@ export function WidgetWrapper({
         )}
       </AnimatePresence>
 
-      {/* Resize corner handle (edit mode only) */}
+      {/* Resize corner handle (edit mode only, not during drag) */}
       <AnimatePresence>
-        {isEditMode && (
+        {isEditMode && !isBeingDragged && !isMobilePreview && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}

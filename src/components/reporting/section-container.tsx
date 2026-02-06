@@ -1,24 +1,29 @@
 'use client'
 
-import { useState, useMemo, useRef, useEffect } from 'react'
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ChevronDown, Plus } from 'lucide-react'
 import {
   DndContext,
-  closestCenter,
+  DragOverlay,
   PointerSensor,
   useSensor,
   useSensors,
 } from '@dnd-kit/core'
-import type { DragEndEvent } from '@dnd-kit/core'
-import {
-  SortableContext,
-  rectSortingStrategy,
-  arrayMove,
-} from '@dnd-kit/sortable'
+import type { DragStartEvent, DragMoveEvent } from '@dnd-kit/core'
 import { Button } from '@/components/ui/button'
 import { WidgetWrapper } from '@/components/reporting/widget-wrapper'
 import { WidgetRenderer } from '@/components/reporting/widget-renderer'
+import { GridCell } from '@/components/reporting/grid-cell'
+import type { CellHighlight } from '@/components/reporting/grid-cell'
+import {
+  useOccupancyMap,
+  pointerToCell,
+  findDropPosition,
+  getCellsForPlacement,
+  getMaxRow,
+} from '@/hooks/use-grid-occupancy'
 import { easeInOut, duration } from '@/lib/animations'
 import type { SectionWithWidgets, DashboardWidget, DateRange } from '@/types/modules'
 
@@ -27,11 +32,12 @@ interface SectionContainerProps {
   dateRange: DateRange
   partnerId?: string
   isEditMode: boolean
+  previewMode?: 'desktop' | 'mobile'
   onAddWidget: (sectionId: string) => void
   onEditWidget: (widget: DashboardWidget) => void
   onDeleteWidget: (widgetId: string) => void
   onToggleCollapse: (sectionId: string, collapsed: boolean) => void
-  onReorderWidgets: (sectionId: string, widgets: DashboardWidget[]) => void
+  onMoveWidget: (widgetId: string, gridColumn: number, gridRow: number) => void
   onResizeWidget: (widgetId: string, colSpan: number, rowSpan: number) => void
 }
 
@@ -40,48 +46,117 @@ export function SectionContainer({
   dateRange,
   partnerId,
   isEditMode,
+  previewMode = 'desktop',
   onAddWidget,
   onEditWidget,
   onDeleteWidget,
   onToggleCollapse,
-  onReorderWidgets,
+  onMoveWidget,
   onResizeWidget,
 }: SectionContainerProps) {
   const [isCollapsed, setIsCollapsed] = useState(section.collapsed)
   const [gridDimensions, setGridDimensions] = useState({ cellWidth: 200, rowHeight: 200 })
   const gridRef = useRef<HTMLDivElement>(null)
+  const gridRectRef = useRef<DOMRect | null>(null)
+
+  // Drag state
+  const [activeWidget, setActiveWidget] = useState<DashboardWidget | null>(null)
+  const [dropTarget, setDropTarget] = useState<{ col: number; row: number } | null>(null)
+  const [dropValid, setDropValid] = useState(false)
+
+  const isMobilePreview = previewMode === 'mobile'
+  const occupancyMap = useOccupancyMap(section.widgets)
+  const maxRow = useMemo(() => Math.max(getMaxRow(section.widgets), 1), [section.widgets])
+  // Show extra row during drag for expansion
+  const totalRows = activeWidget ? maxRow + 1 : maxRow
 
   useEffect(() => {
     const el = gridRef.current
     if (!el) return
     const measure = () => {
-      const gap = 16 // gap-4 = 16px
-      const cellWidth = (el.offsetWidth - gap * 3) / 4 // 4 columns, 3 gaps
-      const rowHeight = 200 // base row height for row_span=1
+      const gap = 16
+      const cols = isMobilePreview ? 1 : 4
+      const cellWidth = (el.offsetWidth - gap * (cols - 1)) / cols
+      const rowHeight = 180
       setGridDimensions({ cellWidth, rowHeight })
     }
     measure()
     const observer = new ResizeObserver(measure)
     observer.observe(el)
     return () => observer.disconnect()
-  }, [])
+  }, [isMobilePreview])
 
-  // Require some pointer movement before starting drag to avoid accidental drags
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 8 },
     })
   )
 
-  const sortedWidgets = useMemo(
-    () => [...section.widgets].sort((a, b) => a.sort_order - b.sort_order),
-    [section.widgets]
-  )
+  const handleDragStart = useCallback((event: DragStartEvent) => {
+    const widget = section.widgets.find((w) => w.id === event.active.id)
+    if (!widget) return
+    setActiveWidget(widget)
+    // Cache grid rect for pointer-to-cell calculations
+    if (gridRef.current) {
+      gridRectRef.current = gridRef.current.getBoundingClientRect()
+    }
+  }, [section.widgets])
 
-  const widgetIds = useMemo(
-    () => sortedWidgets.map((w) => w.id),
-    [sortedWidgets]
-  )
+  const handleDragMove = useCallback((event: DragMoveEvent) => {
+    if (!activeWidget || !gridRectRef.current) return
+
+    const pointerX = (event.activatorEvent as PointerEvent).clientX + (event.delta?.x ?? 0)
+    const pointerY = (event.activatorEvent as PointerEvent).clientY + (event.delta?.y ?? 0)
+
+    const cell = pointerToCell(
+      pointerX,
+      pointerY,
+      gridRectRef.current,
+      gridDimensions.cellWidth,
+      gridDimensions.rowHeight,
+      16 // gap
+    )
+
+    if (!cell) {
+      setDropTarget(null)
+      setDropValid(false)
+      return
+    }
+
+    const pos = findDropPosition(
+      occupancyMap,
+      cell.col,
+      cell.row,
+      activeWidget.col_span,
+      activeWidget.row_span,
+      activeWidget.id
+    )
+
+    if (pos) {
+      setDropTarget(pos)
+      setDropValid(true)
+    } else {
+      setDropTarget({ col: cell.col, row: cell.row })
+      setDropValid(false)
+    }
+  }, [activeWidget, gridDimensions, occupancyMap])
+
+  const handleDragEnd = useCallback(() => {
+    if (activeWidget && dropTarget && dropValid) {
+      onMoveWidget(activeWidget.id, dropTarget.col, dropTarget.row)
+    }
+    setActiveWidget(null)
+    setDropTarget(null)
+    setDropValid(false)
+    gridRectRef.current = null
+  }, [activeWidget, dropTarget, dropValid, onMoveWidget])
+
+  const handleDragCancel = useCallback(() => {
+    setActiveWidget(null)
+    setDropTarget(null)
+    setDropValid(false)
+    gridRectRef.current = null
+  }, [])
 
   function handleToggle() {
     const newState = !isCollapsed
@@ -89,19 +164,50 @@ export function SectionContainer({
     onToggleCollapse(section.id, newState)
   }
 
-  function handleDragEnd(event: DragEndEvent) {
-    const { active, over } = event
-    if (!over || active.id === over.id) return
+  // Build highlighted cells for the drop target
+  const highlightedCells = useMemo(() => {
+    if (!activeWidget || !dropTarget) return new Map<string, CellHighlight>()
+    const cells = getCellsForPlacement(
+      dropTarget.col,
+      dropTarget.row,
+      activeWidget.col_span,
+      activeWidget.row_span
+    )
+    const highlight: CellHighlight = dropValid ? 'valid' : 'invalid'
+    const map = new Map<string, CellHighlight>()
+    for (const key of cells) {
+      map.set(key, highlight)
+    }
+    return map
+  }, [activeWidget, dropTarget, dropValid])
 
-    const oldIndex = sortedWidgets.findIndex((w) => w.id === active.id)
-    const newIndex = sortedWidgets.findIndex((w) => w.id === over.id)
-    if (oldIndex === -1 || newIndex === -1) return
+  // Generate grid cells to render during drag
+  const gridCells = useMemo(() => {
+    if (!activeWidget) return []
+    const cells: { col: number; row: number; highlight: CellHighlight }[] = []
+    const cols = isMobilePreview ? 1 : 4
+    for (let row = 1; row <= totalRows; row++) {
+      for (let col = 1; col <= cols; col++) {
+        const key = `${col},${row}`
+        cells.push({
+          col,
+          row,
+          highlight: highlightedCells.get(key) || 'none',
+        })
+      }
+    }
+    return cells
+  }, [activeWidget, totalRows, highlightedCells, isMobilePreview])
 
-    const reordered = arrayMove(sortedWidgets, oldIndex, newIndex)
-    // Recalculate sort_order for all widgets
-    const updated = reordered.map((w, i) => ({ ...w, sort_order: i }))
-    onReorderWidgets(section.id, updated)
-  }
+  const gridStyle: React.CSSProperties = isMobilePreview
+    ? {
+        gridTemplateColumns: '1fr',
+        gridAutoRows: 'minmax(180px, auto)',
+      }
+    : {
+        gridTemplateColumns: 'repeat(4, 1fr)',
+        gridTemplateRows: `repeat(${totalRows}, minmax(180px, auto))`,
+      }
 
   return (
     <div className="space-y-3">
@@ -150,42 +256,74 @@ export function SectionContainer({
             {section.widgets.length > 0 ? (
               <DndContext
                 sensors={sensors}
-                collisionDetection={closestCenter}
+                onDragStart={handleDragStart}
+                onDragMove={handleDragMove}
                 onDragEnd={handleDragEnd}
+                onDragCancel={handleDragCancel}
               >
-                <SortableContext
-                  items={widgetIds}
-                  strategy={rectSortingStrategy}
+                <div
+                  ref={gridRef}
+                  className="grid gap-4 relative"
+                  style={gridStyle}
                 >
-                  <div
-                    ref={gridRef}
-                    className="grid gap-4"
-                    style={{
-                      gridTemplateColumns: 'repeat(4, 1fr)',
-                      gridAutoFlow: 'dense',
-                      gridAutoRows: 'minmax(180px, auto)',
-                    }}
-                  >
-                    {sortedWidgets.map((widget) => (
-                      <WidgetWrapper
-                        key={widget.id}
+                  {/* Drop target cells (only visible during drag) */}
+                  {gridCells.map((cell) => (
+                    <GridCell
+                      key={`cell-${cell.col}-${cell.row}`}
+                      col={cell.col}
+                      row={cell.row}
+                      highlight={cell.highlight}
+                    />
+                  ))}
+
+                  {/* Widgets */}
+                  {section.widgets.map((widget) => (
+                    <WidgetWrapper
+                      key={widget.id}
+                      widget={widget}
+                      isEditMode={isEditMode && !isMobilePreview}
+                      isBeingDragged={activeWidget?.id === widget.id}
+                      onEdit={onEditWidget}
+                      onDelete={onDeleteWidget}
+                      onResize={onResizeWidget}
+                      gridCellWidth={gridDimensions.cellWidth}
+                      gridRowHeight={gridDimensions.rowHeight}
+                      isMobilePreview={isMobilePreview}
+                    >
+                      <WidgetRenderer
                         widget={widget}
-                        isEditMode={isEditMode}
-                        onEdit={onEditWidget}
-                        onDelete={onDeleteWidget}
-                        onResize={onResizeWidget}
-                        gridCellWidth={gridDimensions.cellWidth}
-                        gridRowHeight={gridDimensions.rowHeight}
-                      >
-                        <WidgetRenderer
-                          widget={widget}
-                          dateRange={dateRange}
-                          partnerId={partnerId}
-                        />
-                      </WidgetWrapper>
-                    ))}
-                  </div>
-                </SortableContext>
+                        dateRange={dateRange}
+                        partnerId={partnerId}
+                      />
+                    </WidgetWrapper>
+                  ))}
+                </div>
+
+                {/* DragOverlay — floating copy that follows pointer */}
+                {typeof document !== 'undefined' &&
+                  createPortal(
+                    <DragOverlay dropAnimation={{
+                      duration: 250,
+                      easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
+                    }}>
+                      {activeWidget ? (
+                        <div
+                          className="rounded-xl bg-card p-4 opacity-90"
+                          style={{
+                            width: gridDimensions.cellWidth * activeWidget.col_span + 16 * (activeWidget.col_span - 1),
+                            boxShadow: '0 12px 40px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.08)',
+                          }}
+                        >
+                          <WidgetRenderer
+                            widget={activeWidget}
+                            dateRange={dateRange}
+                            partnerId={partnerId}
+                          />
+                        </div>
+                      ) : null}
+                    </DragOverlay>,
+                    document.body
+                  )}
               </DndContext>
             ) : (
               <button

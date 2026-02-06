@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { Save, Loader2, ArrowLeft, Building2, ChevronDown, Pencil, Check } from 'lucide-react'
+import { Save, Loader2, ArrowLeft, Building2, ChevronDown, Pencil, Check, Monitor, Smartphone } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import {
@@ -33,6 +33,8 @@ interface DashboardHeaderProps {
   onPartnerChange?: (partnerId: string, partnerName: string) => void
   isEditMode: boolean
   onToggleEditMode: () => void
+  previewMode?: 'desktop' | 'mobile'
+  onPreviewModeChange?: (mode: 'desktop' | 'mobile') => void
 }
 
 export function DashboardHeader({
@@ -48,6 +50,8 @@ export function DashboardHeader({
   onPartnerChange,
   isEditMode,
   onToggleEditMode,
+  previewMode = 'desktop',
+  onPreviewModeChange,
 }: DashboardHeaderProps) {
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [editValue, setEditValue] = useState(title)
@@ -239,6 +243,37 @@ export function DashboardHeader({
               </>
             )}
           </Button>
+
+          {/* Device preview toggle */}
+          {onPreviewModeChange && (
+            <div
+              className="flex items-center p-0.5 rounded-lg"
+              style={{ boxShadow: '0 0 0 1px rgba(0,0,0,0.08)' }}
+            >
+              <button
+                onClick={() => onPreviewModeChange('desktop')}
+                className={`relative p-1.5 rounded-md transition-colors ${
+                  previewMode === 'desktop'
+                    ? 'text-foreground bg-muted'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+                title="Desktop view"
+              >
+                <Monitor className="h-3.5 w-3.5" />
+              </button>
+              <button
+                onClick={() => onPreviewModeChange('mobile')}
+                className={`relative p-1.5 rounded-md transition-colors ${
+                  previewMode === 'mobile'
+                    ? 'text-foreground bg-muted'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+                title="Mobile preview"
+              >
+                <Smartphone className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
 
           <motion.div
             initial={false}
