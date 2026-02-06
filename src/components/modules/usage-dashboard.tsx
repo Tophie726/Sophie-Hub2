@@ -11,11 +11,11 @@ import {
   CartesianGrid,
   Tooltip,
 } from 'recharts'
-import { DollarSign, Activity, Database, Users, ArrowUp, ArrowDown } from 'lucide-react'
+import { DollarSign, Activity, Database, Users, ArrowUp, ArrowDown, ChevronRight, Loader2, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ShimmerBar, ShimmerGrid } from '@/components/ui/shimmer-grid'
 import { formatCurrency, formatNumber, formatCompact, formatDateShort, formatBytes } from '@/lib/reporting/formatters'
-import type { UsageData, AccountUsage, SourceBreakdown } from '@/types/usage'
+import type { UsageData, AccountUsage, SourceBreakdown, SourceDetailEntry } from '@/types/usage'
 
 interface UsageDashboardProps {
   moduleSlug: string
@@ -40,6 +40,14 @@ const SOURCE_COLORS: Record<string, string> = {
   'Other': 'bg-gray-400',
 }
 
+const SOURCE_STROKE_COLORS: Record<string, string> = {
+  'Sophie Hub': 'hsl(217, 91%, 60%)',
+  'Daton (Sync)': 'hsl(38, 92%, 50%)',
+  'BI Tools': 'hsl(270, 67%, 55%)',
+  'Team Queries': 'hsl(152, 69%, 45%)',
+  'Other': 'hsl(0, 0%, 60%)',
+}
+
 /** Descriptions explaining what each source is */
 const SOURCE_DESCRIPTIONS: Record<string, string> = {
   'Sophie Hub': 'Queries from partner dashboards in this app',
@@ -61,14 +69,15 @@ function ChartTooltip({
   active,
   payload,
   label,
+  sourceFilter,
 }: {
   active?: boolean
   payload?: ChartTooltipPayloadEntry[]
   label?: string
+  sourceFilter?: string | null
 }) {
   if (!active || !payload || !payload.length) return null
 
-  // Extract cost and queries from the payload data point
   const dataPoint = payload[0]?.payload
   const cost = typeof dataPoint?.cost === 'number' ? dataPoint.cost : 0
   const queries = typeof dataPoint?.queries === 'number' ? dataPoint.queries : 0
@@ -80,9 +89,13 @@ function ChartTooltip({
     >
       <p className="text-xs text-muted-foreground mb-1">
         {label ? formatDateShort(label) : ''}
+        {sourceFilter && <span className="ml-1 text-muted-foreground/60">({sourceFilter})</span>}
       </p>
       <div className="flex items-center gap-2">
-        <div className="h-2 w-2 rounded-full bg-primary flex-shrink-0" />
+        <div
+          className="h-2 w-2 rounded-full flex-shrink-0"
+          style={{ background: sourceFilter ? (SOURCE_STROKE_COLORS[sourceFilter] || 'hsl(var(--primary))') : 'hsl(var(--primary))' }}
+        />
         <span className="text-xs">Cost:</span>
         <span className="text-xs font-medium" style={{ fontVariantNumeric: 'tabular-nums' }}>
           {formatCurrency(cost)}
@@ -125,6 +138,8 @@ function UsageDashboardInner() {
   const [sortKey, setSortKey] = useState<SortKey>('estimated_cost')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [sourceFilter, setSourceFilter] = useState<string | null>(null)
+  const [sourceDetail, setSourceDetail] = useState<SourceDetailEntry[] | null>(null)
+  const [sourceDetailLoading, setSourceDetailLoading] = useState(false)
 
   const fetchUsage = useCallback(async (p: Period) => {
     setIsLoading(true)
@@ -148,13 +163,36 @@ function UsageDashboardInner() {
     fetchUsage(period)
   }, [period, fetchUsage])
 
+  // Fetch source detail when a source is selected
+  const fetchSourceDetail = useCallback(async (source: string, p: Period) => {
+    setSourceDetailLoading(true)
+    setSourceDetail(null)
+    try {
+      const res = await fetch(`/api/bigquery/usage/source-detail?source=${encodeURIComponent(source)}&period=${p}`)
+      if (!res.ok) return
+      const json = await res.json()
+      setSourceDetail(json.data?.entries || [])
+    } catch {
+      // Silent fail
+    } finally {
+      setSourceDetailLoading(false)
+    }
+  }, [])
+
   function handlePeriodChange(p: Period) {
     setPeriod(p)
     setSourceFilter(null)
+    setSourceDetail(null)
   }
 
   function handleSourceClick(source: string) {
-    setSourceFilter((prev) => (prev === source ? null : source))
+    if (sourceFilter === source) {
+      setSourceFilter(null)
+      setSourceDetail(null)
+    } else {
+      setSourceFilter(source)
+      fetchSourceDetail(source, period)
+    }
   }
 
   function handleSort(key: SortKey) {
@@ -206,6 +244,20 @@ function UsageDashboardInner() {
     }
   }, [data, sourceFilter])
 
+  // Chart data: use filtered source data or total
+  const chartData = useMemo(() => {
+    if (!data) return []
+    if (sourceFilter && data.dailyCostsBySource?.[sourceFilter]) {
+      return data.dailyCostsBySource[sourceFilter]
+    }
+    return data.dailyCosts
+  }, [data, sourceFilter])
+
+  // Chart line color
+  const chartStroke = sourceFilter
+    ? (SOURCE_STROKE_COLORS[sourceFilter] || 'hsl(var(--primary))')
+    : 'hsl(var(--primary))'
+
   return (
     <div className="space-y-6">
       {/* Section header + period selector */}
@@ -214,7 +266,7 @@ function UsageDashboardInner() {
           <h2 className="text-base font-semibold text-foreground">Data Usage & Cost</h2>
           <p className="text-xs text-muted-foreground mt-0.5">
             {sourceFilter
-              ? `Filtered: ${sourceFilter}`
+              ? `Showing: ${sourceFilter}`
               : 'BigQuery project costs across all sources'}
           </p>
         </div>
@@ -295,17 +347,22 @@ function UsageDashboardInner() {
               onSourceClick={handleSourceClick}
             />
 
-            {data.dailyCosts.length > 0 && (
+            {chartData.length > 0 && (
               <div
                 className="rounded-xl p-4 md:p-6"
                 style={{ boxShadow: '0 0 0 1px rgba(0,0,0,0.08)' }}
               >
-                <p className="text-sm font-medium text-foreground mb-4 text-wrap-balance">
-                  Daily Cost & Queries
-                </p>
+                <div className="flex items-center justify-between mb-4">
+                  <p className="text-sm font-medium text-foreground">
+                    Daily Cost & Queries
+                  </p>
+                  {sourceFilter && (
+                    <span className="text-xs text-muted-foreground">{sourceFilter}</span>
+                  )}
+                </div>
                 <ResponsiveContainer width="100%" height={220}>
                   <ComposedChart
-                    data={data.dailyCosts}
+                    data={chartData}
                     margin={{ top: 4, right: 4, bottom: 0, left: 0 }}
                   >
                     <CartesianGrid
@@ -321,7 +378,6 @@ function UsageDashboardInner() {
                       axisLine={{ stroke: 'hsl(var(--border))', strokeOpacity: 0.4 }}
                       tickFormatter={(d: string) => formatDateShort(d)}
                     />
-                    {/* Left Y-axis: Cost */}
                     <YAxis
                       yAxisId="cost"
                       orientation="left"
@@ -332,7 +388,6 @@ function UsageDashboardInner() {
                       width={50}
                       domain={[0, 'dataMax']}
                     />
-                    {/* Right Y-axis: Queries */}
                     <YAxis
                       yAxisId="queries"
                       orientation="right"
@@ -344,10 +399,9 @@ function UsageDashboardInner() {
                       domain={[0, 'dataMax']}
                     />
                     <Tooltip
-                      content={<ChartTooltip />}
+                      content={<ChartTooltip sourceFilter={sourceFilter} />}
                       cursor={{ stroke: 'hsl(var(--border))', strokeWidth: 1 }}
                     />
-                    {/* Bars for queries */}
                     <Bar
                       yAxisId="queries"
                       dataKey="queries"
@@ -357,12 +411,11 @@ function UsageDashboardInner() {
                       animationDuration={300}
                       animationEasing="ease-out"
                     />
-                    {/* Line for cost */}
                     <Line
                       yAxisId="cost"
                       type="monotone"
                       dataKey="cost"
-                      stroke="hsl(var(--primary))"
+                      stroke={chartStroke}
                       strokeWidth={2}
                       dot={false}
                       activeDot={{ r: 4, strokeWidth: 2 }}
@@ -374,6 +427,16 @@ function UsageDashboardInner() {
               </div>
             )}
           </div>
+
+          {/* Source detail panel (when a source is clicked) */}
+          {sourceFilter && (
+            <SourceDetailPanel
+              source={sourceFilter}
+              entries={sourceDetail}
+              isLoading={sourceDetailLoading}
+              onClose={() => { setSourceFilter(null); setSourceDetail(null) }}
+            />
+          )}
 
           {/* Sophie Hub per-brand table */}
           <div
@@ -528,13 +591,9 @@ function SourceBreakdownCard({
             <div className={cn('h-2.5 w-2.5 rounded-full flex-shrink-0 mt-0.5', SOURCE_COLORS[s.source] || 'bg-gray-400')} />
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between gap-2">
-                <div className="min-w-0">
-                  <span className="text-sm font-medium text-foreground truncate block">{s.source}</span>
-                  {SOURCE_DESCRIPTIONS[s.source] && (
-                    <span className="text-[11px] text-muted-foreground/60 leading-tight block">
-                      {SOURCE_DESCRIPTIONS[s.source]}
-                    </span>
-                  )}
+                <div className="min-w-0 flex items-center gap-1.5">
+                  <span className="text-sm font-medium text-foreground truncate">{s.source}</span>
+                  {activeSource === s.source && <ChevronRight className="h-3 w-3 text-primary flex-shrink-0" />}
                 </div>
                 <div className="text-right flex-shrink-0">
                   <span className="text-sm font-medium text-foreground block" style={{ fontVariantNumeric: 'tabular-nums' }}>
@@ -545,6 +604,11 @@ function SourceBreakdownCard({
                   </span>
                 </div>
               </div>
+              {SOURCE_DESCRIPTIONS[s.source] && (
+                <span className="text-[11px] text-muted-foreground/60 leading-tight block mt-0.5">
+                  {SOURCE_DESCRIPTIONS[s.source]}
+                </span>
+              )}
               <div className="flex items-center justify-between gap-2 mt-1">
                 <div className="flex-1 h-1.5 rounded-full bg-muted max-w-[160px]">
                   <div
@@ -560,6 +624,126 @@ function SourceBreakdownCard({
           </button>
         ))}
       </div>
+    </div>
+  )
+}
+
+function SourceDetailPanel({
+  source,
+  entries,
+  isLoading,
+  onClose,
+}: {
+  source: string
+  entries: SourceDetailEntry[] | null
+  isLoading: boolean
+  onClose: () => void
+}) {
+  return (
+    <div
+      className="rounded-xl overflow-hidden"
+      style={{ boxShadow: '0 0 0 1px rgba(0,0,0,0.08)' }}
+    >
+      <div className="p-4 md:p-6 pb-0 md:pb-0">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <div className={cn('h-3 w-3 rounded-full', SOURCE_COLORS[source] || 'bg-gray-400')} />
+            <div>
+              <p className="text-sm font-medium text-foreground">{source} — Breakdown</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Top queriers by user account
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-md hover:bg-muted/60 transition-colors text-muted-foreground hover:text-foreground"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+
+      {isLoading && (
+        <div className="px-4 md:px-6 pb-6 pt-2">
+          <div className="flex items-center justify-center py-8 gap-2 text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span className="text-sm">Loading breakdown…</span>
+          </div>
+        </div>
+      )}
+
+      {!isLoading && entries && entries.length === 0 && (
+        <div className="px-4 md:px-6 pb-6 pt-2">
+          <p className="text-sm text-muted-foreground text-center py-8">
+            No query data found for this source.
+          </p>
+        </div>
+      )}
+
+      {!isLoading && entries && entries.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b">
+                <th className="text-left px-4 md:px-6 py-2 font-medium text-muted-foreground whitespace-nowrap">
+                  User / Service Account
+                </th>
+                <th className="text-right px-4 md:px-6 py-2 font-medium text-muted-foreground whitespace-nowrap">
+                  Queries
+                </th>
+                <th className="text-right px-4 md:px-6 py-2 font-medium text-muted-foreground whitespace-nowrap hidden md:table-cell">
+                  Scanned
+                </th>
+                <th className="text-right px-4 md:px-6 py-2 font-medium text-muted-foreground whitespace-nowrap">
+                  Est. Cost
+                </th>
+                <th className="text-right px-4 md:px-6 py-2 font-medium text-muted-foreground whitespace-nowrap hidden md:table-cell">
+                  Last Query
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {entries.map((entry, idx) => {
+                // Shorten service account emails for readability
+                const displayEmail = entry.user_email.includes('@')
+                  ? entry.user_email.split('@')[0]
+                  : entry.user_email
+
+                return (
+                  <tr
+                    key={entry.user_email}
+                    className={cn('transition-colors hover:bg-muted/40', idx % 2 === 0 && 'bg-muted/[0.15]')}
+                  >
+                    <td className="px-4 md:px-6 py-2.5">
+                      <span className="font-medium text-foreground truncate block max-w-[250px]" title={entry.user_email}>
+                        {displayEmail}
+                      </span>
+                      {entry.user_email.includes('@') && (
+                        <span className="text-[11px] text-muted-foreground/60 truncate block max-w-[250px]">
+                          @{entry.user_email.split('@')[1]}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 md:px-6 py-2.5 text-right whitespace-nowrap" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                      {formatNumber(entry.query_count)}
+                    </td>
+                    <td className="px-4 md:px-6 py-2.5 text-right whitespace-nowrap hidden md:table-cell" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                      {formatBytes(entry.total_bytes)}
+                    </td>
+                    <td className="px-4 md:px-6 py-2.5 text-right whitespace-nowrap font-medium" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                      {formatCurrency(entry.estimated_cost)}
+                    </td>
+                    <td className="px-4 md:px-6 py-2.5 text-right whitespace-nowrap text-muted-foreground hidden md:table-cell">
+                      {timeAgo(entry.last_query)}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   )
 }

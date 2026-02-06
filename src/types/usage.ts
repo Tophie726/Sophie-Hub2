@@ -33,9 +33,21 @@ export interface AccountUsage {
   last_query: string
 }
 
+/** Drill-down into a single source: top queriers by user_email */
+export interface SourceDetailEntry {
+  user_email: string
+  query_count: number
+  total_bytes: number
+  estimated_cost: number
+  first_query: string
+  last_query: string
+}
+
 export interface UsageData {
   overview: UsageOverview
   dailyCosts: DailyCost[]
+  /** Daily costs broken down by source category (for filtered chart view) */
+  dailyCostsBySource: Record<string, DailyCost[]>
   sourceBreakdown: SourceBreakdown[]
   accountUsage: AccountUsage[]
   cached_at: string

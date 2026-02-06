@@ -2,10 +2,12 @@
  * GET /api/bigquery/usage?period=30d
  *
  * Returns BigQuery usage and cost data for the admin dashboard.
- * Combines three data sources:
- *   1. INFORMATION_SCHEMA.JOBS_BY_PROJECT — ground-truth daily totals (excludes cached)
- *   2. INFORMATION_SCHEMA.JOBS_BY_PROJECT — source breakdown by labels/user_email
- *   3. bigquery_query_logs (Supabase) — Sophie Hub per-partner attribution
+ * Uses a single combined INFORMATION_SCHEMA query (date × source) and derives:
+ *   - Daily totals (aggregate across sources)
+ *   - Daily costs per source (for filtered chart)
+ *   - Source breakdown (aggregate across days)
+ *   - Overall totals
+ * Plus Supabase bigquery_query_logs for Sophie Hub per-partner attribution.
  *
  * Admin-only. Cached for 1 hour.
  */
@@ -24,6 +26,24 @@ const supabase = getAdminClient()
 
 const VALID_PERIODS = ['7d', '30d', '90d'] as const
 type Period = (typeof VALID_PERIODS)[number]
+
+/** The CASE expression used to categorize query sources */
+const SOURCE_CASE = `
+  CASE
+    WHEN labels IS NOT NULL AND EXISTS(
+      SELECT 1 FROM UNNEST(labels) l WHERE l.key = 'source' AND l.value = 'sophie-hub'
+    ) THEN 'Sophie Hub'
+    WHEN LOWER(user_email) LIKE '%daton%' THEN 'Daton (Sync)'
+    WHEN LOWER(user_email) LIKE '%powerbi%'
+      OR LOWER(user_email) LIKE '%looker%'
+      OR LOWER(user_email) LIKE '%tableau%'
+      THEN 'BI Tools'
+    WHEN LOWER(user_email) LIKE '%@sophiesociety%'
+      OR LOWER(user_email) LIKE '%@sophie-society%'
+      THEN 'Team Queries'
+    ELSE 'Other'
+  END
+`
 
 function periodToDays(period: Period): number {
   switch (period) {
@@ -54,29 +74,24 @@ export async function GET(request: NextRequest) {
   const startDateStr = startDate.toISOString().split('T')[0]
 
   try {
-    // Run all three data sources in parallel
-    const [infoSchemaResult, sourceResult, supabaseResult] = await Promise.allSettled([
-      fetchInfoSchemaStats(days),
-      fetchSourceBreakdown(days),
+    // Run combined INFORMATION_SCHEMA query + Supabase in parallel
+    const [combinedResult, supabaseResult] = await Promise.allSettled([
+      fetchCombinedStats(days),
       fetchSupabaseStats(startDateStr),
     ])
 
-    // INFORMATION_SCHEMA: daily cost trend + totals
     let dailyCosts: DailyCost[] = []
-    let infoSchemaTotals = { cost: 0, queries: 0, bytes: 0 }
-
-    if (infoSchemaResult.status === 'fulfilled') {
-      dailyCosts = infoSchemaResult.value.dailyCosts
-      infoSchemaTotals = infoSchemaResult.value.totals
-    }
-
-    // Source breakdown
+    let dailyCostsBySource: Record<string, DailyCost[]> = {}
     let sourceBreakdown: SourceBreakdown[] = []
-    if (sourceResult.status === 'fulfilled') {
-      sourceBreakdown = sourceResult.value
+    let totals = { cost: 0, queries: 0, bytes: 0 }
+
+    if (combinedResult.status === 'fulfilled') {
+      dailyCosts = combinedResult.value.dailyCosts
+      dailyCostsBySource = combinedResult.value.dailyCostsBySource
+      sourceBreakdown = combinedResult.value.sourceBreakdown
+      totals = combinedResult.value.totals
     }
 
-    // Supabase logs: per-partner breakdown
     let accountUsage: AccountUsage[] = []
     let uniqueAccounts = 0
 
@@ -86,9 +101,9 @@ export async function GET(request: NextRequest) {
     }
 
     const overview: UsageOverview = {
-      total_cost_usd: infoSchemaTotals.cost,
-      total_queries: infoSchemaTotals.queries,
-      total_bytes_processed: infoSchemaTotals.bytes,
+      total_cost_usd: totals.cost,
+      total_queries: totals.queries,
+      total_bytes_processed: totals.bytes,
       unique_accounts: uniqueAccounts,
       period_days: days,
     }
@@ -96,6 +111,7 @@ export async function GET(request: NextRequest) {
     const data: UsageData = {
       overview,
       dailyCosts,
+      dailyCostsBySource,
       sourceBreakdown,
       accountUsage,
       cached_at: new Date().toISOString(),
@@ -111,11 +127,21 @@ export async function GET(request: NextRequest) {
 }
 
 // =============================================================================
-// INFORMATION_SCHEMA: daily cost trend + totals (excludes cached queries)
+// Combined INFORMATION_SCHEMA query: daily × source in one scan
 // =============================================================================
 
-async function fetchInfoSchemaStats(days: number): Promise<{
+/**
+ * Single query that groups by (date, source_category).
+ * From this we derive:
+ *   - dailyCosts: sum across sources per day
+ *   - dailyCostsBySource: per source per day (for chart filtering)
+ *   - sourceBreakdown: sum across days per source
+ *   - totals: grand totals
+ */
+async function fetchCombinedStats(days: number): Promise<{
   dailyCosts: DailyCost[]
+  dailyCostsBySource: Record<string, DailyCost[]>
+  sourceBreakdown: SourceBreakdown[]
   totals: { cost: number; queries: number; bytes: number }
 }> {
   const bq = new BigQuery({ projectId: BIGQUERY.PROJECT_ID })
@@ -123,6 +149,7 @@ async function fetchInfoSchemaStats(days: number): Promise<{
   const query = `
     SELECT
       DATE(creation_time) as query_date,
+      ${SOURCE_CASE} as source_category,
       COUNT(*) as query_count,
       SUM(total_bytes_processed) as total_bytes,
       SUM(total_bytes_processed) / 1099511627776 * 5.0 as estimated_cost
@@ -133,8 +160,8 @@ async function fetchInfoSchemaStats(days: number): Promise<{
       AND state = 'DONE'
       AND error_result IS NULL
       AND cache_hit != true
-    GROUP BY query_date
-    ORDER BY query_date ASC
+    GROUP BY query_date, source_category
+    ORDER BY query_date ASC, estimated_cost DESC
   `
 
   const [job] = await bq.createQueryJob({
@@ -143,17 +170,23 @@ async function fetchInfoSchemaStats(days: number): Promise<{
   })
   const [rows] = await job.getQueryResults()
 
+  // Accumulators
+  const dailyTotals = new Map<string, { queries: number; bytes: number; cost: number }>()
+  const bySource = new Map<string, { queries: number; bytes: number; cost: number }>()
+  const dailyBySource = new Map<string, Map<string, { queries: number; bytes: number; cost: number }>>()
+
   let totalCost = 0
   let totalQueries = 0
   let totalBytes = 0
 
-  const dailyCosts: DailyCost[] = rows.map((row) => {
+  for (const row of rows) {
     const date = row.query_date instanceof Date
       ? row.query_date.toISOString().split('T')[0]
       : row.query_date?.value
         ? String(row.query_date.value)
         : String(row.query_date ?? '')
 
+    const source = String(row.source_category ?? 'Other')
     const queries = Number(row.query_count ?? 0)
     const bytes = Number(row.total_bytes ?? 0)
     const cost = Number(row.estimated_cost ?? 0)
@@ -162,86 +195,71 @@ async function fetchInfoSchemaStats(days: number): Promise<{
     totalQueries += queries
     totalBytes += bytes
 
-    return { date, queries, bytes, cost }
-  })
+    // Daily totals (all sources combined)
+    const existing = dailyTotals.get(date)
+    if (existing) {
+      existing.queries += queries
+      existing.bytes += bytes
+      existing.cost += cost
+    } else {
+      dailyTotals.set(date, { queries, bytes, cost })
+    }
+
+    // Source totals (all days combined)
+    const srcExisting = bySource.get(source)
+    if (srcExisting) {
+      srcExisting.queries += queries
+      srcExisting.bytes += bytes
+      srcExisting.cost += cost
+    } else {
+      bySource.set(source, { queries, bytes, cost })
+    }
+
+    // Daily per source
+    if (!dailyBySource.has(source)) {
+      dailyBySource.set(source, new Map())
+    }
+    const srcDailyMap = dailyBySource.get(source)!
+    const srcDaily = srcDailyMap.get(date)
+    if (srcDaily) {
+      srcDaily.queries += queries
+      srcDaily.bytes += bytes
+      srcDaily.cost += cost
+    } else {
+      srcDailyMap.set(date, { queries, bytes, cost })
+    }
+  }
+
+  // Build dailyCosts array (sorted by date)
+  const dailyCosts: DailyCost[] = Array.from(dailyTotals.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, d]) => ({ date, queries: d.queries, bytes: d.bytes, cost: d.cost }))
+
+  // Build dailyCostsBySource
+  const dailyCostsBySource: Record<string, DailyCost[]> = {}
+  for (const [source, dayMap] of Array.from(dailyBySource.entries())) {
+    dailyCostsBySource[source] = Array.from(dayMap.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, d]) => ({ date, queries: d.queries, bytes: d.bytes, cost: d.cost }))
+  }
+
+  // Build sourceBreakdown with percentages
+  const sourceBreakdown: SourceBreakdown[] = Array.from(bySource.entries())
+    .map(([source, d]) => ({
+      source,
+      query_count: d.queries,
+      total_bytes: d.bytes,
+      estimated_cost: d.cost,
+      pct: totalCost > 0 ? (d.cost / totalCost) * 100 : 0,
+    }))
+    .sort((a, b) => b.estimated_cost - a.estimated_cost)
 
   return {
     dailyCosts,
+    dailyCostsBySource,
+    sourceBreakdown,
     totals: { cost: totalCost, queries: totalQueries, bytes: totalBytes },
   }
-}
-
-// =============================================================================
-// INFORMATION_SCHEMA: source breakdown (by job labels + user_email)
-// =============================================================================
-
-/**
- * Categorize queries by source using BigQuery job labels and user_email.
- *
- * Sophie Hub queries are tagged with labels.source = 'sophie-hub'.
- * Other sources are identified by user_email patterns:
- *   - Service accounts with 'daton' → Daton pipeline
- *   - Service accounts with 'powerbi' or 'looker' → Power BI / BI tools
- *   - Regular @sophiesociety.com emails → Console / Manual
- *   - Everything else → Other
- */
-async function fetchSourceBreakdown(days: number): Promise<SourceBreakdown[]> {
-  const bq = new BigQuery({ projectId: BIGQUERY.PROJECT_ID })
-
-  // Query that categorizes by source using labels and user_email
-  const query = `
-    SELECT
-      CASE
-        WHEN labels IS NOT NULL AND EXISTS(
-          SELECT 1 FROM UNNEST(labels) l WHERE l.key = 'source' AND l.value = 'sophie-hub'
-        ) THEN 'Sophie Hub'
-        WHEN LOWER(user_email) LIKE '%daton%' THEN 'Daton (Sync)'
-        WHEN LOWER(user_email) LIKE '%powerbi%'
-          OR LOWER(user_email) LIKE '%looker%'
-          OR LOWER(user_email) LIKE '%tableau%'
-          THEN 'BI Tools'
-        WHEN LOWER(user_email) LIKE '%@sophiesociety%'
-          OR LOWER(user_email) LIKE '%@sophie-society%'
-          THEN 'Team Queries'
-        ELSE 'Other'
-      END as source_category,
-      COUNT(*) as query_count,
-      SUM(total_bytes_processed) as total_bytes,
-      SUM(total_bytes_processed) / 1099511627776 * 5.0 as estimated_cost
-    FROM \`region-us\`.INFORMATION_SCHEMA.JOBS_BY_PROJECT
-    WHERE
-      creation_time >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL ${days} DAY)
-      AND job_type = 'QUERY'
-      AND state = 'DONE'
-      AND error_result IS NULL
-      AND cache_hit != true
-    GROUP BY source_category
-    ORDER BY estimated_cost DESC
-  `
-
-  const [job] = await bq.createQueryJob({
-    query,
-    labels: { source: 'sophie-hub', purpose: 'usage-dashboard' },
-  })
-  const [rows] = await job.getQueryResults()
-
-  // Calculate total for percentage
-  let grandTotal = 0
-  const raw = rows.map((row) => {
-    const cost = Number(row.estimated_cost ?? 0)
-    grandTotal += cost
-    return {
-      source: String(row.source_category ?? 'Other'),
-      query_count: Number(row.query_count ?? 0),
-      total_bytes: Number(row.total_bytes ?? 0),
-      estimated_cost: cost,
-    }
-  })
-
-  return raw.map((r) => ({
-    ...r,
-    pct: grandTotal > 0 ? (r.estimated_cost / grandTotal) * 100 : 0,
-  }))
 }
 
 // =============================================================================
@@ -298,7 +316,6 @@ async function fetchSupabaseStats(startDate: string): Promise<{
     }
   }
 
-  // Convert to array, sorted by cost descending
   const accounts: AccountUsage[] = Array.from(byPartner.values())
     .map((a) => ({
       partner_id: a.partner_id,
