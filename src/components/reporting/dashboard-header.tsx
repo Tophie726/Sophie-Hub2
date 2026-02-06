@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { Save, Loader2, ArrowLeft, Building2, ChevronDown } from 'lucide-react'
+import { Save, Loader2, ArrowLeft, Building2, ChevronDown, Pencil, Check } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import {
@@ -31,6 +31,8 @@ interface DashboardHeaderProps {
   moduleSlug: string
   selectedPartnerId?: string | null
   onPartnerChange?: (partnerId: string, partnerName: string) => void
+  isEditMode: boolean
+  onToggleEditMode: () => void
 }
 
 export function DashboardHeader({
@@ -44,6 +46,8 @@ export function DashboardHeader({
   moduleSlug,
   selectedPartnerId,
   onPartnerChange,
+  isEditMode,
+  onToggleEditMode,
 }: DashboardHeaderProps) {
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [editValue, setEditValue] = useState(title)
@@ -215,6 +219,26 @@ export function DashboardHeader({
           )}
 
           <DateCohortPicker dateRange={dateRange} onChange={onDateRangeChange} />
+
+          {/* Edit Layout toggle */}
+          <Button
+            variant={isEditMode ? 'default' : 'outline'}
+            size="sm"
+            className="h-9 px-3 active:scale-[0.97]"
+            onClick={onToggleEditMode}
+          >
+            {isEditMode ? (
+              <>
+                <Check className="h-4 w-4 mr-1.5" />
+                Done
+              </>
+            ) : (
+              <>
+                <Pencil className="h-4 w-4 mr-1.5" />
+                Edit Layout
+              </>
+            )}
+          </Button>
 
           <motion.div
             initial={false}

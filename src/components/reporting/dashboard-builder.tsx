@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -26,6 +26,7 @@ export function DashboardBuilder({ dashboard: initial, moduleSlug }: DashboardBu
   const [dashboard, setDashboard] = useState(initial)
   const [hasChanges, setHasChanges] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [isEditMode, setIsEditMode] = useState(false)
   const [dateRange, setDateRange] = useState<DateRange>({
     preset: (initial.date_range_default as DateRange['preset']) || '30d',
   })
@@ -58,6 +59,14 @@ export function DashboardBuilder({ dashboard: initial, moduleSlug }: DashboardBu
   // Date range
   function handleDateRangeChange(range: DateRange) {
     setDateRange(range)
+  }
+
+  // Edit mode toggle — clicking "Done" triggers save if there are changes
+  function handleToggleEditMode() {
+    if (isEditMode && hasChanges) {
+      handleSave()
+    }
+    setIsEditMode((prev) => !prev)
   }
 
   // Sections
@@ -162,6 +171,33 @@ export function DashboardBuilder({ dashboard: initial, moduleSlug }: DashboardBu
     setTargetSectionId(null)
   }
 
+  // Reorder widgets within a section (from drag-and-drop)
+  const handleReorderWidgets = useCallback((sectionId: string, widgets: DashboardWidget[]) => {
+    setDashboard((prev) => ({
+      ...prev,
+      sections: prev.sections.map((s) =>
+        s.id === sectionId ? { ...s, widgets } : s
+      ),
+    }))
+    markChanged()
+  }, [])
+
+  // Resize widget (from inline resize control)
+  const handleResizeWidget = useCallback((widgetId: string, colSpan: number, rowSpan: number) => {
+    setDashboard((prev) => ({
+      ...prev,
+      sections: prev.sections.map((s) => ({
+        ...s,
+        widgets: s.widgets.map((w) =>
+          w.id === widgetId
+            ? { ...w, col_span: colSpan, row_span: rowSpan }
+            : w
+        ),
+      })),
+    }))
+    markChanged()
+  }, [])
+
   // Save
   async function handleSave() {
     setIsSaving(true)
@@ -228,6 +264,18 @@ export function DashboardBuilder({ dashboard: initial, moduleSlug }: DashboardBu
                 config: widget.config,
               }),
             })
+          } else {
+            // Update existing widgets (for reorder/resize changes)
+            await fetch(`/api/modules/dashboards/${dashboard.id}/widgets`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                widget_id: widget.id,
+                col_span: widget.col_span,
+                row_span: widget.row_span,
+                sort_order: widget.sort_order,
+              }),
+            })
           }
         }
       }
@@ -254,6 +302,8 @@ export function DashboardBuilder({ dashboard: initial, moduleSlug }: DashboardBu
         moduleSlug={moduleSlug}
         selectedPartnerId={selectedPartnerId}
         onPartnerChange={handlePartnerChange}
+        isEditMode={isEditMode}
+        onToggleEditMode={handleToggleEditMode}
       />
 
       <div className="p-4 md:p-8">
@@ -270,10 +320,13 @@ export function DashboardBuilder({ dashboard: initial, moduleSlug }: DashboardBu
                     section={section}
                     dateRange={dateRange}
                     partnerId={selectedPartnerId || undefined}
+                    isEditMode={isEditMode}
                     onAddWidget={handleAddWidget}
                     onEditWidget={handleEditWidget}
                     onDeleteWidget={handleDeleteWidget}
                     onToggleCollapse={handleToggleCollapse}
+                    onReorderWidgets={handleReorderWidgets}
+                    onResizeWidget={handleResizeWidget}
                   />
                 ))}
 

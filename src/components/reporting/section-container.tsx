@@ -1,8 +1,21 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ChevronDown, Plus } from 'lucide-react'
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core'
+import type { DragEndEvent } from '@dnd-kit/core'
+import {
+  SortableContext,
+  rectSortingStrategy,
+  arrayMove,
+} from '@dnd-kit/sortable'
 import { Button } from '@/components/ui/button'
 import { WidgetWrapper } from '@/components/reporting/widget-wrapper'
 import { WidgetRenderer } from '@/components/reporting/widget-renderer'
@@ -13,27 +26,64 @@ interface SectionContainerProps {
   section: SectionWithWidgets
   dateRange: DateRange
   partnerId?: string
+  isEditMode: boolean
   onAddWidget: (sectionId: string) => void
   onEditWidget: (widget: DashboardWidget) => void
   onDeleteWidget: (widgetId: string) => void
   onToggleCollapse: (sectionId: string, collapsed: boolean) => void
+  onReorderWidgets: (sectionId: string, widgets: DashboardWidget[]) => void
+  onResizeWidget: (widgetId: string, colSpan: number, rowSpan: number) => void
 }
 
 export function SectionContainer({
   section,
   dateRange,
   partnerId,
+  isEditMode,
   onAddWidget,
   onEditWidget,
   onDeleteWidget,
   onToggleCollapse,
+  onReorderWidgets,
+  onResizeWidget,
 }: SectionContainerProps) {
   const [isCollapsed, setIsCollapsed] = useState(section.collapsed)
+
+  // Require some pointer movement before starting drag to avoid accidental drags
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 8 },
+    })
+  )
+
+  const sortedWidgets = useMemo(
+    () => [...section.widgets].sort((a, b) => a.sort_order - b.sort_order),
+    [section.widgets]
+  )
+
+  const widgetIds = useMemo(
+    () => sortedWidgets.map((w) => w.id),
+    [sortedWidgets]
+  )
 
   function handleToggle() {
     const newState = !isCollapsed
     setIsCollapsed(newState)
     onToggleCollapse(section.id, newState)
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+
+    const oldIndex = sortedWidgets.findIndex((w) => w.id === active.id)
+    const newIndex = sortedWidgets.findIndex((w) => w.id === over.id)
+    if (oldIndex === -1 || newIndex === -1) return
+
+    const reordered = arrayMove(sortedWidgets, oldIndex, newIndex)
+    // Recalculate sort_order for all widgets
+    const updated = reordered.map((w, i) => ({ ...w, sort_order: i }))
+    onReorderWidgets(section.id, updated)
   }
 
   return (
@@ -81,27 +131,38 @@ export function SectionContainer({
             style={{ overflow: 'hidden' }}
           >
             {section.widgets.length > 0 ? (
-              <div
-                className="grid gap-4"
-                style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleDragEnd}
               >
-                {section.widgets
-                  .sort((a, b) => a.sort_order - b.sort_order)
-                  .map((widget) => (
-                    <WidgetWrapper
-                      key={widget.id}
-                      widget={widget}
-                      onEdit={onEditWidget}
-                      onDelete={onDeleteWidget}
-                    >
-                      <WidgetRenderer
+                <SortableContext
+                  items={widgetIds}
+                  strategy={rectSortingStrategy}
+                >
+                  <div
+                    className="grid gap-4"
+                    style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}
+                  >
+                    {sortedWidgets.map((widget) => (
+                      <WidgetWrapper
+                        key={widget.id}
                         widget={widget}
-                        dateRange={dateRange}
-                        partnerId={partnerId}
-                      />
-                    </WidgetWrapper>
-                  ))}
-              </div>
+                        isEditMode={isEditMode}
+                        onEdit={onEditWidget}
+                        onDelete={onDeleteWidget}
+                        onResize={onResizeWidget}
+                      >
+                        <WidgetRenderer
+                          widget={widget}
+                          dateRange={dateRange}
+                          partnerId={partnerId}
+                        />
+                      </WidgetWrapper>
+                    ))}
+                  </div>
+                </SortableContext>
+              </DndContext>
             ) : (
               <button
                 onClick={() => onAddWidget(section.id)}
