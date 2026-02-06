@@ -129,10 +129,11 @@ POSTHOG_PROJECT_ID=306226  # Sophie Hub project ID
 - [x] **AI-assisted bug fix suggestions** - Two-tier approach (Haiku summaries, Sonnet analysis)
 - [x] **AI-assisted feature implementation suggestions** - Implementation plans with file lists
 - [x] **Comments on feedback** - User comments API for adding context
+- [x] **Comments UI** in feedback detail/admin dialogs
 - [x] **AI result caching** - Results cached to database with "outdated" detection
+- [x] **Feedback security hardening** - XSS fix (`document.write` removal), attachment URL validation, and generic internal/database error responses
 - [ ] MCP integration for Claude Code (PostHog MCP available)
 - [ ] Screenshot display in AI analysis (multimodal)
-- [ ] Comments UI in feedback modal/detail dialog
 
 ### Setup Required
 

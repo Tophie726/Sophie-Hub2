@@ -40,6 +40,14 @@
 - **React's default escaping** prevents XSS
 - **Environment variables** for all secrets (not hardcoded)
 
+### Recent Security Hardening (2026-02-06)
+- **Admin auth bypass fixed** in BigQuery admin routes (`requireRole` result handling corrected)
+- **Feedback XSS vector removed** (`document.write` screenshot path replaced with safe DOM API)
+- **Attachment URL validation centralized** in `src/lib/security/attachment-url.ts`
+- **Attachment allowlist enforced**: `http`, `https`, `data:image/*`, `data:application/pdf`
+- **API error detail leakage reduced**: `ApiErrors.internal/database` now return generic client messages
+- **CSP tightened in production**: removed `unsafe-eval` from production `script-src`
+
 ### Sensitive Files Protection
 | File/Path | Status | Notes |
 |-----------|--------|-------|
@@ -80,7 +88,7 @@
 |------|--------|-------|
 | X-Powered-By hidden | ✅ Done | `poweredByHeader: false` |
 | Stack traces hidden | ⏳ Production | Next.js hides in production mode |
-| Error messages sanitized | ⏳ Review | Don't leak internal details |
+| Error messages sanitized | ✅ Done | Generic `ApiErrors.internal/database` messages |
 | Server version hidden | ✅ Done | No version headers |
 
 ### Authentication & Sessions
@@ -242,26 +250,20 @@ curl https://yourapp.com/api/data-sources  # Should return 401
 
 ## Content Security Policy (CSP)
 
-Add this to next.config.mjs headers for production:
+Current implementation in `next.config.mjs`:
+- **Production**: `script-src` excludes `unsafe-eval`
+- **Development**: `script-src` includes `unsafe-eval` for local tooling/HMR compatibility
 
 ```javascript
 {
   key: 'Content-Security-Policy',
-  value: [
-    "default-src 'self'",
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval'", // Next.js requires these
-    "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: https:",
-    "font-src 'self'",
-    "connect-src 'self' https://*.supabase.co https://accounts.google.com https://oauth2.googleapis.com",
-    "frame-ancestors 'none'",
-    "base-uri 'self'",
-    "form-action 'self'",
-  ].join('; ')
+  value: process.env.NODE_ENV === 'production'
+    ? "default-src 'self'; script-src 'self' 'unsafe-inline' https://us.i.posthog.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.googleusercontent.com; connect-src 'self' https://us.i.posthog.com https://*.supabase.co https://oauth2.googleapis.com; font-src 'self'; frame-ancestors 'none'"
+    : "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://us.i.posthog.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.googleusercontent.com; connect-src 'self' https://us.i.posthog.com https://*.supabase.co https://oauth2.googleapis.com; font-src 'self'; frame-ancestors 'none'"
 }
 ```
 
-**Note:** Test thoroughly - CSP can break functionality if too strict.
+**Note:** `unsafe-inline` remains for compatibility; if stricter CSP is needed later, move to nonce/hash-based script strategy.
 
 ---
 

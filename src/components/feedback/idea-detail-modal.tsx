@@ -24,16 +24,10 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
+import { safeAttachmentHref } from '@/lib/security/attachment-url'
 import { toast } from 'sonner'
 import { formatDistanceToNow } from 'date-fns'
 import { DrawingPad } from './drawing-pad'
-
-function safeHref(url: string): string {
-  const lower = url.toLowerCase().trim()
-  if (lower.startsWith('http://') || lower.startsWith('https://')) return url
-  if (lower.startsWith('data:image/') || lower.startsWith('data:application/pdf')) return url
-  return '#'
-}
 
 type FeedbackType = 'bug' | 'feature' | 'question'
 type FeedbackStatus = 'new' | 'reviewed' | 'in_progress' | 'resolved' | 'wont_fix'
@@ -395,7 +389,7 @@ export function IdeaDetailModal({
                         {comment.attachments.map((att, idx) => (
                           <div key={idx} className="relative group">
                             {att.type === 'image' || att.type === 'drawing' ? (
-                              <a href={safeHref(att.url)} target="_blank" rel="noopener noreferrer">
+                              <a href={safeAttachmentHref(att.url)} target="_blank" rel="noopener noreferrer">
                                 <img
                                   src={att.url}
                                   alt={att.name || 'Attachment'}
@@ -404,7 +398,7 @@ export function IdeaDetailModal({
                               </a>
                             ) : (
                               <a
-                                href={safeHref(att.url)}
+                                href={safeAttachmentHref(att.url)}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="flex items-center gap-1.5 px-2 py-1 bg-muted rounded-md text-xs hover:bg-muted/80 transition-colors"

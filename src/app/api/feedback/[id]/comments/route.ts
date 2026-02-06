@@ -3,18 +3,14 @@ import { requireAuth, requireRole } from '@/lib/auth/api-auth'
 import { ROLES } from '@/lib/auth/roles'
 import { apiSuccess, apiError, apiValidationError } from '@/lib/api/response'
 import { getAdminClient } from '@/lib/supabase/admin'
+import { ATTACHMENT_URL_VALIDATION_MESSAGE, isAllowedAttachmentUrl } from '@/lib/security/attachment-url'
 import { z } from 'zod'
 
 const AttachmentSchema = z.object({
   type: z.enum(['image', 'drawing', 'file']),
   url: z.string().refine(
-    (url) => {
-      const lower = url.toLowerCase().trim()
-      if (lower.startsWith('http://') || lower.startsWith('https://')) return true
-      if (lower.startsWith('data:image/') || lower.startsWith('data:application/pdf')) return true
-      return false
-    },
-    { message: 'URL must use http/https or be a data:image/data:pdf URI' }
+    (url) => isAllowedAttachmentUrl(url),
+    { message: ATTACHMENT_URL_VALIDATION_MESSAGE }
   ),
   name: z.string().optional(),
 })

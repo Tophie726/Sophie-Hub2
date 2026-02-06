@@ -467,6 +467,45 @@ import {
 
 ---
 
+## Recently Implemented (February 2026)
+
+### Security Hardening Sprint ✅
+
+**Auth & access control**
+- Fixed admin-route auth bypass in BigQuery mapping/client-name endpoints by switching to explicit `AuthResult` checks (`authenticated` + `response`) instead of `instanceof` checks.
+
+**Feedback XSS/URL hardening**
+- Removed `document.write()` screenshot rendering path from admin feedback detail modal.
+- Added strict attachment URL validation for feedback comments (http/https + `data:image/*` + `data:application/pdf`).
+- Centralized attachment URL validation and href sanitization in shared helper:
+  - `src/lib/security/attachment-url.ts`
+- Updated API/UI to use the same validator logic for consistency:
+  - `src/app/api/feedback/[id]/comments/route.ts`
+  - `src/components/feedback/admin-comments.tsx`
+  - `src/components/feedback/idea-detail-modal.tsx`
+
+**Error response hardening**
+- `ApiErrors.internal()` and `ApiErrors.database()` now always return generic messages to clients (error details remain in server logs).
+
+**Tests added/updated**
+- Updated API response tests for redacted internal/database errors.
+- Added attachment URL allow/deny matrix tests.
+
+### Heatmap Performance Optimization ✅
+
+**Location:** `src/components/partners/health-heatmap.tsx`
+
+**Problem:** Rendering every partner row/cell at once caused unnecessary DOM pressure on large matrices.
+
+**Solution:** Added row windowing (manual virtualization with overscan):
+- Only render visible partner rows + overscan buffer.
+- Keep full scroll height via absolute-positioned virtual rows.
+- Preserve existing sticky headers, tooltips, and scroll-state behavior.
+
+**Result:** Lower render load and smoother interaction for large partner sets.
+
+---
+
 ## Future Improvements
 
 ### Medium Priority (Post-Launch)

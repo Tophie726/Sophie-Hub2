@@ -4,6 +4,12 @@
 
 A visual "uptime bar" style indicator showing partner health over time. Inspired by server status pages (e.g., GitHub status, AWS status), this feature provides at-a-glance health history for each partner.
 
+## Current Implementation Notes (2026-02)
+
+- Main implementation: `src/components/partners/health-heatmap.tsx`
+- Partner rows now use windowed rendering (row virtualization with overscan) to reduce DOM load on large datasets.
+- API currently pulls up to 5,000 partners (`/api/partners`) and computes weekly status buckets client-side for display.
+
 ---
 
 ## User Stories

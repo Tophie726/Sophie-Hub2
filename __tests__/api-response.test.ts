@@ -146,8 +146,12 @@ describe('ApiErrors convenience methods', () => {
   })
 
   it('internal() returns 500', async () => {
-    const response = ApiErrors.internal()
+    const response = ApiErrors.internal('Top secret stack trace')
+    const body = await response.json()
+
     expect(response.status).toBe(500)
+    expect(body.error.code).toBe(ErrorCodes.INTERNAL_ERROR)
+    expect(body.error.message).toBe('An unexpected error occurred')
   })
 
   it('database() returns 500 with DATABASE_ERROR code', async () => {
@@ -156,7 +160,7 @@ describe('ApiErrors convenience methods', () => {
 
     expect(response.status).toBe(500)
     expect(body.error.code).toBe(ErrorCodes.DATABASE_ERROR)
-    expect(body.error.message).toBe('Connection timeout')
+    expect(body.error.message).toBe('Database error')
   })
 
   it('externalApi() returns 502', async () => {

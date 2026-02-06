@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   MessageCircle,
   Loader2,
@@ -21,6 +21,7 @@ import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
+import { safeAttachmentHref } from '@/lib/security/attachment-url'
 import { toast } from 'sonner'
 import { formatDistanceToNow } from 'date-fns'
 import { DrawingPad } from './drawing-pad'
@@ -28,13 +29,6 @@ import {
   Dialog,
   DialogContent,
 } from '@/components/ui/dialog'
-
-function safeHref(url: string): string {
-  const lower = url.toLowerCase().trim()
-  if (lower.startsWith('http://') || lower.startsWith('https://')) return url
-  if (lower.startsWith('data:image/') || lower.startsWith('data:application/pdf')) return url
-  return '#'
-}
 
 interface CommentAttachment {
   type: 'image' | 'drawing' | 'file'
@@ -80,11 +74,7 @@ export function AdminComments({ feedbackId, submitterEmail }: AdminCommentsProps
   const fileInputRef = useRef<HTMLInputElement>(null)
   const commentsEndRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    fetchComments()
-  }, [feedbackId])
-
-  const fetchComments = async () => {
+  const fetchComments = useCallback(async () => {
     try {
       const res = await fetch(`/api/feedback/${feedbackId}/comments`)
       if (!res.ok) throw new Error('Failed to fetch comments')
@@ -95,7 +85,11 @@ export function AdminComments({ feedbackId, submitterEmail }: AdminCommentsProps
     } finally {
       setLoading(false)
     }
-  }
+  }, [feedbackId])
+
+  useEffect(() => {
+    fetchComments()
+  }, [fetchComments])
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
@@ -533,7 +527,7 @@ function CommentThread({
             {comment.attachments.map((att, idx) => (
               <div key={idx}>
                 {att.type === 'image' || att.type === 'drawing' ? (
-                  <a href={safeHref(att.url)} target="_blank" rel="noopener noreferrer">
+                  <a href={safeAttachmentHref(att.url)} target="_blank" rel="noopener noreferrer">
                     <img
                       src={att.url}
                       alt={att.name || 'Attachment'}
@@ -542,7 +536,7 @@ function CommentThread({
                   </a>
                 ) : (
                   <a
-                    href={safeHref(att.url)}
+                    href={safeAttachmentHref(att.url)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center gap-1 px-2 py-1 bg-muted/50 rounded text-xs hover:bg-muted transition-colors"
@@ -616,7 +610,7 @@ function CommentThread({
                   {reply.attachments.map((att, idx) => (
                     <div key={idx}>
                       {att.type === 'image' || att.type === 'drawing' ? (
-                        <a href={safeHref(att.url)} target="_blank" rel="noopener noreferrer">
+                        <a href={safeAttachmentHref(att.url)} target="_blank" rel="noopener noreferrer">
                           <img
                             src={att.url}
                             alt={att.name || 'Attachment'}
@@ -625,7 +619,7 @@ function CommentThread({
                         </a>
                       ) : (
                         <a
-                          href={safeHref(att.url)}
+                          href={safeAttachmentHref(att.url)}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="flex items-center gap-1 px-1.5 py-0.5 bg-muted/50 rounded text-[10px] hover:bg-muted transition-colors"

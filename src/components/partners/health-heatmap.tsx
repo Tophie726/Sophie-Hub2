@@ -82,6 +82,9 @@ const BUCKET_RISK_SCORE: Record<StatusColorBucket, number> = {
 // Show 3 years of history on desktop, 1 year on mobile
 const WEEKS_DESKTOP = 156  // ~3 years
 const WEEKS_MOBILE = 52    // 1 year
+const ROW_HEIGHT_DESKTOP = 18
+const ROW_HEIGHT_MOBILE = 20
+const ROW_OVERSCAN = 12
 
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
@@ -237,10 +240,14 @@ export function HealthHeatmap({ statusFilter = [], search = '' }: HealthHeatmapP
   // Highlight range for time period selection (click year/quarter/month to highlight)
   const [highlightRange, setHighlightRange] = useState<{ start: number; end: number } | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const rowsContainerRef = useRef<HTMLDivElement>(null)
   const hasScrolledRef = useRef(false)
   const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const isScrollingRef = useRef(false)
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const [virtualScrollTop, setVirtualScrollTop] = useState(0)
+  const [virtualViewportHeight, setVirtualViewportHeight] = useState(0)
+  const [rowsStartOffset, setRowsStartOffset] = useState(0)
 
   // Keep ref in sync with state
   const updateHoveredCell = useCallback((cell: HoveredCell | null) => {
@@ -317,7 +324,7 @@ export function HealthHeatmap({ statusFilter = [], search = '' }: HealthHeatmapP
     } finally {
       setIsLoading(false)
     }
-  }, [filterKey])
+  }, [filterKey, search, statusFilter])
 
   useEffect(() => {
     fetchPartners()
@@ -367,6 +374,9 @@ export function HealthHeatmap({ statusFilter = [], search = '' }: HealthHeatmapP
     let ticking = false
     let lastSaveTime = 0
 
+    setVirtualScrollTop(el.scrollTop)
+    setVirtualViewportHeight(el.clientHeight)
+
     const handleScroll = () => {
       isScrollingRef.current = true
 
@@ -390,6 +400,8 @@ export function HealthHeatmap({ statusFilter = [], search = '' }: HealthHeatmapP
         requestAnimationFrame(() => {
           heatmapCache.scrollLeft = el.scrollLeft
           heatmapCache.scrollTop = el.scrollTop
+          setVirtualScrollTop(el.scrollTop)
+          setVirtualViewportHeight(el.clientHeight)
           ticking = false
         })
       }
@@ -406,6 +418,17 @@ export function HealthHeatmap({ statusFilter = [], search = '' }: HealthHeatmapP
     el.addEventListener('scroll', handleScroll, { passive: true })
     return () => el.removeEventListener('scroll', handleScroll)
   }, [])
+
+  useEffect(() => {
+    const measure = () => {
+      setRowsStartOffset(rowsContainerRef.current?.offsetTop ?? 0)
+      setVirtualViewportHeight(scrollRef.current?.clientHeight ?? 0)
+    }
+
+    measure()
+    window.addEventListener('resize', measure)
+    return () => window.removeEventListener('resize', measure)
+  }, [weeksToShow, partners.length, sortBy])
 
   const scrollLeft = () => {
     if (scrollRef.current) {
@@ -559,6 +582,43 @@ export function HealthHeatmap({ statusFilter = [], search = '' }: HealthHeatmapP
   const cellSize = isMobile ? 14 : 12 // pixels
   const cellGap = 2
   const nameColWidth = isMobile ? 120 : 180
+  const rowHeight = isMobile ? ROW_HEIGHT_MOBILE : ROW_HEIGHT_DESKTOP
+
+  const visibleRange = useMemo(() => {
+    const totalRows = sortedHeatmapData.length
+    if (totalRows === 0) return { start: 0, end: 0 }
+
+    const relativeTop = Math.max(0, virtualScrollTop - rowsStartOffset)
+    const visibleRows = Math.max(1, Math.ceil((virtualViewportHeight || 0) / rowHeight))
+    const start = Math.max(0, Math.floor(relativeTop / rowHeight) - ROW_OVERSCAN)
+    const end = Math.min(totalRows, start + visibleRows + ROW_OVERSCAN * 2)
+
+    return { start, end }
+  }, [rowHeight, rowsStartOffset, sortedHeatmapData.length, virtualScrollTop, virtualViewportHeight])
+
+  const totalRowsHeight = sortedHeatmapData.length * rowHeight
+
+  const virtualRows = useMemo(() => {
+    const rows: Array<{
+      index: number
+      top: number
+      partner: Partner
+      weekStatuses: (string | null)[]
+    }> = []
+
+    for (let index = visibleRange.start; index < visibleRange.end; index++) {
+      const row = sortedHeatmapData[index]
+      if (!row) continue
+      rows.push({
+        index,
+        top: index * rowHeight,
+        partner: row.partner,
+        weekStatuses: row.weekStatuses,
+      })
+    }
+
+    return rows
+  }, [rowHeight, sortedHeatmapData, visibleRange.end, visibleRange.start])
 
   if (isLoading) {
     return <HeatmapShimmer />
@@ -837,6 +897,7 @@ export function HealthHeatmap({ statusFilter = [], search = '' }: HealthHeatmapP
 
             {/* Partner rows - using data attributes for event delegation */}
             <div
+              ref={rowsContainerRef}
               className="relative"
               onMouseMove={(e) => {
                 if (isScrollingRef.current) return
@@ -894,40 +955,52 @@ export function HealthHeatmap({ statusFilter = [], search = '' }: HealthHeatmapP
                 if (hoveredCellRef.current) updateHoveredCell(null)
               }}
             >
-              {sortedHeatmapData.map(({ partner, weekStatuses }, partnerIndex) => (
-                <div key={partner.id} className="flex items-center hover:bg-muted/40">
-                  <Link
-                    href={`/partners/${partner.id}`}
-                    style={{ width: nameColWidth }}
-                    className="shrink-0 px-3 py-0.5 text-xs truncate hover:text-primary hover:underline transition-colors bg-card hover:bg-muted/40 sticky left-0 z-10 border-r border-border/20"
-                    title={partner.brand_name}
+              <div style={{ height: totalRowsHeight, position: 'relative' }}>
+                {virtualRows.map(({ partner, weekStatuses, index, top }) => (
+                  <div
+                    key={partner.id}
+                    className="flex items-center hover:bg-muted/40"
+                    style={{
+                      position: 'absolute',
+                      top,
+                      left: 0,
+                      right: 0,
+                      height: rowHeight,
+                    }}
                   >
-                    {partner.brand_name}
-                  </Link>
-                  <div className="flex items-center">
-                    {weekStatuses.map((status, weekIndex) => {
-                      const bucket = getStatusBucket(status)
-                      const isFuture = weeks[weekIndex] > new Date()
-                      const isDimmed = highlightRange && (weekIndex < highlightRange.start || weekIndex > highlightRange.end)
+                    <Link
+                      href={`/partners/${partner.id}`}
+                      style={{ width: nameColWidth }}
+                      className="shrink-0 px-3 py-0.5 text-xs truncate hover:text-primary hover:underline transition-colors bg-card hover:bg-muted/40 sticky left-0 z-10 border-r border-border/20"
+                      title={partner.brand_name}
+                    >
+                      {partner.brand_name}
+                    </Link>
+                    <div className="flex items-center">
+                      {weekStatuses.map((status, weekIndex) => {
+                        const bucket = getStatusBucket(status)
+                        const isFuture = weeks[weekIndex] > new Date()
+                        const isDimmed = highlightRange && (weekIndex < highlightRange.start || weekIndex > highlightRange.end)
 
-                      return (
-                        <div
-                          key={weekIndex}
-                          data-cell
-                          data-partner={partnerIndex}
-                          data-week={weekIndex}
-                          className={cn(
-                            'rounded-[2px] mx-px',
-                            isFuture ? 'bg-transparent' : BUCKET_COLORS[bucket],
-                            isDimmed && 'opacity-20'
-                          )}
-                          style={{ width: cellSize, height: cellSize }}
-                        />
-                      )
-                    })}
+                        return (
+                          <div
+                            key={weekIndex}
+                            data-cell
+                            data-partner={index}
+                            data-week={weekIndex}
+                            className={cn(
+                              'rounded-[2px] mx-px',
+                              isFuture ? 'bg-transparent' : BUCKET_COLORS[bucket],
+                              isDimmed && 'opacity-20'
+                            )}
+                            style={{ width: cellSize, height: cellSize }}
+                          />
+                        )
+                      })}
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
 
           </div>
