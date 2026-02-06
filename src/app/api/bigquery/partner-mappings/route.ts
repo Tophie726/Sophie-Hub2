@@ -120,7 +120,7 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (partnerError || !partner) {
-      return apiError('Partner not found', 404)
+      return ApiErrors.notFound('Partner')
     }
 
     // Upsert the mapping
@@ -142,6 +142,7 @@ export async function POST(request: NextRequest) {
       // Check for unique constraint violation on external_id
       if (error.code === '23505' && error.message.includes('source_external')) {
         return apiError(
+          'CONFLICT',
           `Client name "${client_name}" is already mapped to another partner`,
           409
         )
@@ -182,7 +183,7 @@ export async function DELETE(request: NextRequest) {
     const mappingId = searchParams.get('id')
 
     if (!mappingId) {
-      return apiError('Mapping ID is required', 400)
+      return apiError('VALIDATION_ERROR', 'Mapping ID is required', 400)
     }
 
     const { error } = await supabase
