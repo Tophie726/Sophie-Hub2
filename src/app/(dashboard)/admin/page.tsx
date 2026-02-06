@@ -3,7 +3,7 @@
 import { motion } from 'framer-motion'
 import Link from 'next/link'
 import { PageHeader } from '@/components/layout/page-header'
-import { Database, GraduationCap, Settings, Shield, Package } from 'lucide-react'
+import { Database, GraduationCap, Settings, Shield, Package, Blocks } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const easeOut: [number, number, number, number] = [0.22, 1, 0.36, 1]
@@ -67,6 +67,15 @@ export default function AdminPage() {
             icon={<Database className="h-6 w-6 text-orange-600" />}
             iconBg="bg-orange-500/10"
             badge="Active"
+          />
+
+          <AdminCard
+            title="Modules"
+            description="Reporting dashboards, widgets, and building blocks for partner views"
+            href="/admin/modules"
+            icon={<Blocks className="h-6 w-6 text-orange-600" />}
+            iconBg="bg-orange-500/10"
+            badge="New"
           />
 
           <AdminCard

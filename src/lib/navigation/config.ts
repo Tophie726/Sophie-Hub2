@@ -16,6 +16,7 @@ import {
   GitPullRequest,
   MessageSquare,
   Lightbulb,
+  Blocks,
   type LucideIcon,
 } from 'lucide-react'
 import { type Role, ROLES, isRoleAtLeast } from '@/lib/auth/roles'
@@ -58,6 +59,7 @@ export const navigation: NavSection[] = [
     requiredRole: ROLES.ADMIN,
     items: [
       { name: 'Data Enrichment', href: '/admin/data-enrichment', icon: Database, highlight: true },
+      { name: 'Modules', href: '/admin/modules', icon: Blocks },
       { name: 'Change Approval', href: '/admin/change-approval', icon: GitPullRequest },
       { name: 'Products', href: '/admin/products', icon: Package },
       { name: 'Feedback Triage', href: '/admin/feedback', icon: MessageSquare },

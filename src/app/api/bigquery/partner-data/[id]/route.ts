@@ -96,6 +96,7 @@ export async function GET(
       type: 'bigquery' as const,
       project_id: 'sophie-society-reporting',
       dataset_id: 'pbi',
+      partner_field: 'client_id',
     }
 
     const data = await bigQueryConnector.getPartnerData(config, viewName, clientName, {

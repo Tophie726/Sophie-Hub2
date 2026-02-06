@@ -11,7 +11,7 @@
  * - Uses service account, not user OAuth
  * - Views are treated as "tabs"
  * - Data is queried at runtime, not synced
- * - Partner filtering via client_name field
+ * - Partner filtering via client_id field
  */
 
 import { BigQuery } from '@google-cloud/bigquery'
@@ -28,6 +28,8 @@ import type {
 
 // Default BigQuery configuration
 const DEFAULT_PROJECT = 'sophie-society-reporting'
+// Note: actual partner field varies by view (client_id vs client_name)
+// This default is used by the generic connector methods
 const DEFAULT_PARTNER_FIELD = 'client_name'
 
 // Unified views we expose (subset of all views)

@@ -29,7 +29,7 @@ export const BIGQUERY = {
   PROJECT_ID: 'sophie-society-reporting',
   /** Dataset containing unified views */
   DATASET: 'pbi',
-  /** Default field used for partner identification */
+  /** Default field used for partner identification (varies by view: client_id or client_name) */
   PARTNER_FIELD: 'client_name',
   /** Unified view names exposed to the app */
   VIEWS: {

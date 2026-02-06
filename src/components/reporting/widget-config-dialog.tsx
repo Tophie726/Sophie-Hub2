@@ -1,0 +1,314 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { motion } from 'framer-motion'
+import {
+  Hash,
+  BarChart3,
+  Table2,
+  FileText,
+  ArrowLeft,
+} from 'lucide-react'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { MetricConfig } from '@/components/reporting/config/metric-config'
+import { ChartConfig } from '@/components/reporting/config/chart-config'
+import { TableConfig } from '@/components/reporting/config/table-config'
+import { TextConfig } from '@/components/reporting/config/text-config'
+import { easeOut, duration } from '@/lib/animations'
+import type {
+  DashboardWidget,
+  WidgetType,
+  WidgetConfig,
+  MetricWidgetConfig,
+  ChartWidgetConfig,
+  TableWidgetConfig,
+  TextWidgetConfig,
+} from '@/types/modules'
+
+interface WidgetConfigDialogProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  widget: DashboardWidget | null
+  onSave: (
+    widgetType: WidgetType,
+    title: string,
+    config: WidgetConfig,
+    colSpan: number,
+    rowSpan: number
+  ) => void
+}
+
+const WIDGET_TYPES: {
+  type: WidgetType
+  label: string
+  description: string
+  icon: React.ReactNode
+  defaultColSpan: number
+  defaultRowSpan: number
+}[] = [
+  {
+    type: 'metric',
+    label: 'Metric',
+    description: 'Single number with optional comparison',
+    icon: <Hash className="h-5 w-5" />,
+    defaultColSpan: 1,
+    defaultRowSpan: 1,
+  },
+  {
+    type: 'chart',
+    label: 'Chart',
+    description: 'Line, bar, or area visualization',
+    icon: <BarChart3 className="h-5 w-5" />,
+    defaultColSpan: 2,
+    defaultRowSpan: 2,
+  },
+  {
+    type: 'table',
+    label: 'Table',
+    description: 'Data table with sorting',
+    icon: <Table2 className="h-5 w-5" />,
+    defaultColSpan: 4,
+    defaultRowSpan: 2,
+  },
+  {
+    type: 'text',
+    label: 'Text',
+    description: 'Static text or notes',
+    icon: <FileText className="h-5 w-5" />,
+    defaultColSpan: 2,
+    defaultRowSpan: 1,
+  },
+]
+
+const DEFAULT_CONFIGS: Record<WidgetType, WidgetConfig> = {
+  metric: { view: 'sales', metric: '', aggregation: 'sum', format: 'currency' } as MetricWidgetConfig,
+  chart: { view: 'sales', chart_type: 'line', x_axis: 'date', y_axis: [], aggregation: 'sum', format: 'currency' } as ChartWidgetConfig,
+  table: { view: 'sales', columns: [], sort_by: '', sort_direction: 'desc', limit: 20 } as TableWidgetConfig,
+  text: { content: '', alignment: 'left' } as TextWidgetConfig,
+}
+
+const COL_SPAN_OPTIONS = [
+  { value: '1', label: '1 column' },
+  { value: '2', label: '2 columns' },
+  { value: '3', label: '3 columns' },
+  { value: '4', label: '4 columns (full width)' },
+]
+
+const ROW_SPAN_OPTIONS = [
+  { value: '1', label: '1 row' },
+  { value: '2', label: '2 rows' },
+  { value: '3', label: '3 rows' },
+]
+
+export function WidgetConfigDialog({
+  open,
+  onOpenChange,
+  widget,
+  onSave,
+}: WidgetConfigDialogProps) {
+  const isEditing = widget !== null
+  const [step, setStep] = useState<'type' | 'config'>(isEditing ? 'config' : 'type')
+  const [selectedType, setSelectedType] = useState<WidgetType>(widget?.widget_type || 'metric')
+  const [title, setTitle] = useState(widget?.title || '')
+  const [config, setConfig] = useState<WidgetConfig>(widget?.config || DEFAULT_CONFIGS.metric)
+  const [colSpan, setColSpan] = useState(widget?.col_span || 1)
+  const [rowSpan, setRowSpan] = useState(widget?.row_span || 1)
+
+  // Reset state when dialog opens/closes or widget changes
+  useEffect(() => {
+    if (open) {
+      if (widget) {
+        setStep('config')
+        setSelectedType(widget.widget_type)
+        setTitle(widget.title)
+        setConfig(widget.config)
+        setColSpan(widget.col_span)
+        setRowSpan(widget.row_span)
+      } else {
+        setStep('type')
+        setSelectedType('metric')
+        setTitle('')
+        setConfig(DEFAULT_CONFIGS.metric)
+        setColSpan(1)
+        setRowSpan(1)
+      }
+    }
+  }, [open, widget])
+
+  function handleTypeSelect(type: WidgetType) {
+    setSelectedType(type)
+    setConfig(DEFAULT_CONFIGS[type])
+    const typeInfo = WIDGET_TYPES.find((t) => t.type === type)
+    setColSpan(typeInfo?.defaultColSpan || 1)
+    setRowSpan(typeInfo?.defaultRowSpan || 1)
+    setStep('config')
+  }
+
+  function handleSave() {
+    if (!title.trim()) return
+    onSave(selectedType, title.trim(), config, colSpan, rowSpan)
+  }
+
+  const canSave = title.trim().length > 0
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-[95vw] md:max-w-[560px] max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            {step === 'config' && !isEditing && (
+              <button
+                onClick={() => setStep('type')}
+                className="p-1 rounded-md hover:bg-muted transition-colors"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </button>
+            )}
+            {isEditing ? 'Edit Widget' : step === 'type' ? 'Add Widget' : `Configure ${WIDGET_TYPES.find((t) => t.type === selectedType)?.label}`}
+          </DialogTitle>
+          <DialogDescription>
+            {step === 'type'
+              ? 'Choose the type of widget to add to your dashboard.'
+              : 'Configure how this widget displays data.'}
+          </DialogDescription>
+        </DialogHeader>
+
+        {step === 'type' ? (
+          <div className="grid grid-cols-2 gap-3 py-2">
+            {WIDGET_TYPES.map((wt) => (
+              <button
+                key={wt.type}
+                onClick={() => handleTypeSelect(wt.type)}
+                className="group text-left p-4 rounded-xl transition-all hover:shadow-md active:scale-[0.97]"
+                style={{ boxShadow: '0 0 0 1px rgba(0,0,0,0.08)' }}
+              >
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted/60 mb-3 group-hover:bg-primary/10 transition-colors">
+                  <span className="text-muted-foreground group-hover:text-primary transition-colors">
+                    {wt.icon}
+                  </span>
+                </div>
+                <p className="text-sm font-medium">{wt.label}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{wt.description}</p>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="space-y-6 py-2">
+            {/* Type-specific config */}
+            {selectedType === 'metric' && (
+              <MetricConfig
+                config={config as MetricWidgetConfig}
+                title={title}
+                onConfigChange={setConfig}
+                onTitleChange={setTitle}
+              />
+            )}
+            {selectedType === 'chart' && (
+              <ChartConfig
+                config={config as ChartWidgetConfig}
+                title={title}
+                onConfigChange={setConfig}
+                onTitleChange={setTitle}
+              />
+            )}
+            {selectedType === 'table' && (
+              <TableConfig
+                config={config as TableWidgetConfig}
+                title={title}
+                onConfigChange={setConfig}
+                onTitleChange={setTitle}
+              />
+            )}
+            {selectedType === 'text' && (
+              <TextConfig
+                config={config as TextWidgetConfig}
+                title={title}
+                onConfigChange={setConfig}
+                onTitleChange={setTitle}
+              />
+            )}
+
+            {/* Size controls */}
+            <div className="pt-2 border-t border-border/40">
+              <p className="text-xs font-medium text-muted-foreground mb-3">Widget Size</p>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Width</Label>
+                  <Select
+                    value={String(colSpan)}
+                    onValueChange={(val) => setColSpan(parseInt(val, 10))}
+                  >
+                    <SelectTrigger className="h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {COL_SPAN_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Height</Label>
+                  <Select
+                    value={String(rowSpan)}
+                    onValueChange={(val) => setRowSpan(parseInt(val, 10))}
+                  >
+                    <SelectTrigger className="h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ROW_SPAN_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {step === 'config' && (
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              className="active:scale-[0.97]"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSave}
+              disabled={!canSave}
+              className="active:scale-[0.97]"
+            >
+              {isEditing ? 'Update Widget' : 'Add Widget'}
+            </Button>
+          </DialogFooter>
+        )}
+      </DialogContent>
+    </Dialog>
+  )
+}
