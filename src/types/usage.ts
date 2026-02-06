@@ -41,6 +41,8 @@ export interface SourceDetailEntry {
   estimated_cost: number
   first_query: string
   last_query: string
+  /** Source category (only populated when source=All) */
+  source_category?: string
 }
 
 export interface UsageData {

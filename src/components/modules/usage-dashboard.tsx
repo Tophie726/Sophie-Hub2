@@ -195,6 +195,11 @@ function UsageDashboardInner() {
     }
   }
 
+  function handleShowAll() {
+    setSourceFilter('All')
+    fetchSourceDetail('All', period)
+  }
+
   function handleSort(key: SortKey) {
     if (sortKey === key) {
       setSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'))
@@ -231,9 +236,9 @@ function UsageDashboardInner() {
     return Math.max(...sortedAccounts.map((a) => a.estimated_cost), 0.001)
   }, [sortedAccounts])
 
-  // Filtered overview when a source is selected
+  // Filtered overview when a source is selected (not 'All')
   const filteredOverview = useMemo(() => {
-    if (!data || !sourceFilter) return data?.overview ?? null
+    if (!data || !sourceFilter || sourceFilter === 'All') return data?.overview ?? null
     const src = data.sourceBreakdown.find((s) => s.source === sourceFilter)
     if (!src) return data.overview
     return {
@@ -244,18 +249,19 @@ function UsageDashboardInner() {
     }
   }, [data, sourceFilter])
 
-  // Chart data: use filtered source data or total
+  // Chart data: use filtered source data or total ('All' shows everything)
   const chartData = useMemo(() => {
     if (!data) return []
-    if (sourceFilter && data.dailyCostsBySource?.[sourceFilter]) {
+    if (sourceFilter && sourceFilter !== 'All' && data.dailyCostsBySource?.[sourceFilter]) {
       return data.dailyCostsBySource[sourceFilter]
     }
     return data.dailyCosts
   }, [data, sourceFilter])
 
-  // Chart line color
-  const chartStroke = sourceFilter
-    ? (SOURCE_STROKE_COLORS[sourceFilter] || 'hsl(var(--primary))')
+  // Chart line color ('All' uses default)
+  const activeSourceFilter = sourceFilter === 'All' ? null : sourceFilter
+  const chartStroke = activeSourceFilter
+    ? (SOURCE_STROKE_COLORS[activeSourceFilter] || 'hsl(var(--primary))')
     : 'hsl(var(--primary))'
 
   return (
@@ -265,7 +271,7 @@ function UsageDashboardInner() {
         <div>
           <h2 className="text-base font-semibold text-foreground">Data Usage & Cost</h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            {sourceFilter
+            {sourceFilter && sourceFilter !== 'All'
               ? `Showing: ${sourceFilter}`
               : 'BigQuery project costs across all sources'}
           </p>
@@ -313,7 +319,7 @@ function UsageDashboardInner() {
               icon={<DollarSign className="h-4 w-4" />}
               label="Total Cost"
               value={formatCurrency(filteredOverview.total_cost_usd)}
-              subtitle={sourceFilter ? sourceFilter : `${filteredOverview.period_days}d billable`}
+              subtitle={sourceFilter && sourceFilter !== 'All' ? sourceFilter : `${filteredOverview.period_days}d billable`}
               color="text-green-600 dark:text-green-400"
             />
             <MetricCard
@@ -345,6 +351,7 @@ function UsageDashboardInner() {
               sources={data.sourceBreakdown}
               activeSource={sourceFilter}
               onSourceClick={handleSourceClick}
+              onShowAll={handleShowAll}
             />
 
             {chartData.length > 0 && (
@@ -356,8 +363,8 @@ function UsageDashboardInner() {
                   <p className="text-sm font-medium text-foreground">
                     Daily Cost & Queries
                   </p>
-                  {sourceFilter && (
-                    <span className="text-xs text-muted-foreground">{sourceFilter}</span>
+                  {activeSourceFilter && (
+                    <span className="text-xs text-muted-foreground">{activeSourceFilter}</span>
                   )}
                 </div>
                 <ResponsiveContainer width="100%" height={220}>
@@ -399,7 +406,7 @@ function UsageDashboardInner() {
                       domain={[0, 'dataMax']}
                     />
                     <Tooltip
-                      content={<ChartTooltip sourceFilter={sourceFilter} />}
+                      content={<ChartTooltip sourceFilter={activeSourceFilter} />}
                       cursor={{ stroke: 'hsl(var(--border))', strokeWidth: 1 }}
                     />
                     <Bar
@@ -428,7 +435,7 @@ function UsageDashboardInner() {
             )}
           </div>
 
-          {/* Source detail panel (when a source is clicked) */}
+          {/* Source detail panel (when a source or "All" is clicked) */}
           {sourceFilter && (
             <SourceDetailPanel
               source={sourceFilter}
@@ -528,10 +535,12 @@ function SourceBreakdownCard({
   sources,
   activeSource,
   onSourceClick,
+  onShowAll,
 }: {
   sources: SourceBreakdown[]
   activeSource: string | null
   onSourceClick: (source: string) => void
+  onShowAll: () => void
 }) {
   if (!sources.length) {
     return (
@@ -543,12 +552,15 @@ function SourceBreakdownCard({
   }
 
   const maxPct = Math.max(...sources.map((s) => s.pct), 1)
+  const totalCost = sources.reduce((sum, s) => sum + s.estimated_cost, 0)
+  const totalBytes = sources.reduce((sum, s) => sum + s.total_bytes, 0)
+  const totalQueries = sources.reduce((sum, s) => sum + s.query_count, 0)
 
   return (
     <div className="rounded-xl p-4 md:p-6" style={{ boxShadow: '0 0 0 1px rgba(0,0,0,0.08)' }}>
       <div className="flex items-center justify-between mb-4">
         <p className="text-sm font-medium text-foreground">Cost by Source</p>
-        {activeSource && (
+        {activeSource && activeSource !== 'All' && (
           <button
             onClick={() => onSourceClick(activeSource)}
             className="text-xs text-primary hover:underline"
@@ -566,7 +578,7 @@ function SourceBreakdownCard({
             className={cn(
               'transition-all cursor-pointer hover:opacity-80',
               SOURCE_COLORS[s.source] || 'bg-gray-400',
-              activeSource && activeSource !== s.source && 'opacity-30',
+              activeSource && activeSource !== 'All' && activeSource !== s.source && 'opacity-30',
             )}
             style={{ width: `${Math.max(s.pct, 1)}%` }}
             title={`${s.source}: ${s.pct.toFixed(1)}%`}
@@ -575,8 +587,42 @@ function SourceBreakdownCard({
         ))}
       </div>
 
-      {/* Source rows */}
+      {/* "All Sources" row */}
       <div className="space-y-3">
+        <button
+          onClick={onShowAll}
+          className={cn(
+            'flex items-center gap-3 w-full text-left rounded-lg p-1.5 -m-1.5 transition-all',
+            'hover:bg-muted/40 active:scale-[0.99]',
+            activeSource === 'All' && 'bg-muted/60',
+          )}
+        >
+          <div className="h-2.5 w-2.5 rounded-full flex-shrink-0 mt-0.5 bg-foreground/40" />
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0 flex items-center gap-1.5">
+                <span className="text-sm font-medium text-foreground">All Sources</span>
+                {activeSource === 'All' && <ChevronRight className="h-3 w-3 text-primary flex-shrink-0" />}
+              </div>
+              <div className="text-right flex-shrink-0">
+                <span className="text-sm font-medium text-foreground block" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                  {formatCurrency(totalCost)}
+                </span>
+                <span className="text-[11px] text-muted-foreground/60 block" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                  {formatBytes(totalBytes)}
+                </span>
+              </div>
+            </div>
+            <span className="text-xs text-muted-foreground flex-shrink-0" style={{ fontVariantNumeric: 'tabular-nums' }}>
+              {formatNumber(totalQueries)} queries · 100%
+            </span>
+          </div>
+        </button>
+
+        {/* Divider */}
+        <div className="border-t border-border/40" />
+
+        {/* Source rows */}
         {sources.map((s) => (
           <button
             key={s.source}
@@ -585,7 +631,7 @@ function SourceBreakdownCard({
               'flex items-center gap-3 w-full text-left rounded-lg p-1.5 -m-1.5 transition-all',
               'hover:bg-muted/40 active:scale-[0.99]',
               activeSource === s.source && 'bg-muted/60',
-              activeSource && activeSource !== s.source && 'opacity-40',
+              activeSource && activeSource !== 'All' && activeSource !== s.source && 'opacity-40',
             )}
           >
             <div className={cn('h-2.5 w-2.5 rounded-full flex-shrink-0 mt-0.5', SOURCE_COLORS[s.source] || 'bg-gray-400')} />
@@ -628,6 +674,11 @@ function SourceBreakdownCard({
   )
 }
 
+/** Capitalize first letter of each word */
+function capitalize(str: string): string {
+  return str.replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
 function SourceDetailPanel({
   source,
   entries,
@@ -639,6 +690,8 @@ function SourceDetailPanel({
   isLoading: boolean
   onClose: () => void
 }) {
+  const isAll = source === 'All'
+
   return (
     <div
       className="rounded-xl overflow-hidden"
@@ -647,9 +700,11 @@ function SourceDetailPanel({
       <div className="p-4 md:p-6 pb-0 md:pb-0">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <div className={cn('h-3 w-3 rounded-full', SOURCE_COLORS[source] || 'bg-gray-400')} />
+            {!isAll && <div className={cn('h-3 w-3 rounded-full', SOURCE_COLORS[source] || 'bg-gray-400')} />}
             <div>
-              <p className="text-sm font-medium text-foreground">{source} — Breakdown</p>
+              <p className="text-sm font-medium text-foreground">
+                {isAll ? 'All Sources — Top Queriers' : `${source} — Breakdown`}
+              </p>
               <p className="text-xs text-muted-foreground mt-0.5">
                 Top queriers by user account
               </p>
@@ -689,6 +744,11 @@ function SourceDetailPanel({
                 <th className="text-left px-4 md:px-6 py-2 font-medium text-muted-foreground whitespace-nowrap">
                   User / Service Account
                 </th>
+                {isAll && (
+                  <th className="text-left px-4 md:px-6 py-2 font-medium text-muted-foreground whitespace-nowrap hidden md:table-cell">
+                    Source
+                  </th>
+                )}
                 <th className="text-right px-4 md:px-6 py-2 font-medium text-muted-foreground whitespace-nowrap">
                   Queries
                 </th>
@@ -705,26 +765,35 @@ function SourceDetailPanel({
             </thead>
             <tbody>
               {entries.map((entry, idx) => {
-                // Shorten service account emails for readability
-                const displayEmail = entry.user_email.includes('@')
+                // Format display name: capitalize, strip dots/underscores
+                const emailPrefix = entry.user_email.includes('@')
                   ? entry.user_email.split('@')[0]
                   : entry.user_email
+                const displayName = capitalize(emailPrefix.replace(/[._]/g, ' '))
 
                 return (
                   <tr
-                    key={entry.user_email}
+                    key={entry.user_email + (entry.source_category || '')}
                     className={cn('transition-colors hover:bg-muted/40', idx % 2 === 0 && 'bg-muted/[0.15]')}
                   >
                     <td className="px-4 md:px-6 py-2.5">
-                      <span className="font-medium text-foreground truncate block max-w-[250px]" title={entry.user_email}>
-                        {displayEmail}
+                      <span className="text-sm font-medium text-foreground truncate block max-w-[280px]" title={entry.user_email}>
+                        {displayName}
                       </span>
                       {entry.user_email.includes('@') && (
-                        <span className="text-[11px] text-muted-foreground/60 truncate block max-w-[250px]">
-                          @{entry.user_email.split('@')[1]}
+                        <span className="text-xs text-muted-foreground/60 truncate block max-w-[280px]">
+                          {entry.user_email}
                         </span>
                       )}
                     </td>
+                    {isAll && (
+                      <td className="px-4 md:px-6 py-2.5 hidden md:table-cell">
+                        <span className="inline-flex items-center gap-1.5">
+                          <div className={cn('h-2 w-2 rounded-full flex-shrink-0', SOURCE_COLORS[entry.source_category || ''] || 'bg-gray-400')} />
+                          <span className="text-xs text-muted-foreground whitespace-nowrap">{entry.source_category || 'Unknown'}</span>
+                        </span>
+                      </td>
+                    )}
                     <td className="px-4 md:px-6 py-2.5 text-right whitespace-nowrap" style={{ fontVariantNumeric: 'tabular-nums' }}>
                       {formatNumber(entry.query_count)}
                     </td>
