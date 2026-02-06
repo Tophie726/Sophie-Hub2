@@ -1,5 +1,7 @@
 'use client'
 
+/* eslint-disable @next/next/no-img-element */
+
 import { useState, useRef } from 'react'
 import { Lightbulb, Loader2, Upload, X, Edit2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'

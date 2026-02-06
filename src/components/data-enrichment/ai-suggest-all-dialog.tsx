@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
@@ -141,19 +141,7 @@ export function AISuggestAllDialog({
   const [error, setError] = useState<string | null>(null)
   const [selectedPositions, setSelectedPositions] = useState<Set<number>>(new Set())
 
-  // Reset state when dialog opens
-  useEffect(() => {
-    if (open) {
-      setProgress(0)
-      setSuggestions([])
-      setStats(null)
-      setError(null)
-      setSelectedPositions(new Set())
-      fetchSuggestions()
-    }
-  }, [open])
-
-  const fetchSuggestions = async () => {
+  const fetchSuggestions = useCallback(async () => {
     setIsLoading(true)
     setError(null)
 
@@ -190,7 +178,19 @@ export function AISuggestAllDialog({
       setIsLoading(false)
       setProgress(100)
     }
-  }
+  }, [columns, tabName])
+
+  // Reset state when dialog opens
+  useEffect(() => {
+    if (open) {
+      setProgress(0)
+      setSuggestions([])
+      setStats(null)
+      setError(null)
+      setSelectedPositions(new Set())
+      fetchSuggestions()
+    }
+  }, [open, fetchSuggestions])
 
   const toggleSelection = (position: number) => {
     setSelectedPositions((prev) => {

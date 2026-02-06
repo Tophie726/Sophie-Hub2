@@ -1,13 +1,10 @@
 import { redirect } from 'next/navigation'
 import { getServerSession } from 'next-auth'
-import { createClient } from '@supabase/supabase-js'
 import { authOptions } from '@/lib/auth/config'
+import { getAdminClient } from '@/lib/supabase/admin'
 
 // Server-side Supabase client for auth lookups
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+const supabase = getAdminClient()
 
 /**
  * Admin layout - protects all /admin/* routes

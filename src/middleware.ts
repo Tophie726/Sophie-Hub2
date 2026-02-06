@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { isValidStagingGateCookie } from '@/lib/security/staging-gate'
 
 const COOKIE_NAME = 'sophie-hub-access'
 
@@ -13,7 +14,7 @@ const PUBLIC_PATHS = [
   '/login.html',
 ]
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // Check if STAGING_PASSWORD is set (via edge config or env)
@@ -32,7 +33,9 @@ export function middleware(request: NextRequest) {
   // Check for auth cookie
   const accessCookie = request.cookies.get(COOKIE_NAME)
 
-  if (accessCookie?.value === 'authenticated') {
+  const hasValidGateCookie = await isValidStagingGateCookie(accessCookie?.value ?? '', stagingPassword)
+
+  if (hasValidGateCookie) {
     return NextResponse.next()
   }
 

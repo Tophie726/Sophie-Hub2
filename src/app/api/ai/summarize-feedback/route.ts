@@ -127,7 +127,6 @@ Reported by: ${feedback.submitted_by_email}`
     })
   } catch (error) {
     console.error('Claude API error:', error)
-    const message = error instanceof Error ? error.message : 'Unknown error'
-    return apiError('AI_ERROR', `Failed to summarize: ${message}`, 500)
+    return apiError('AI_ERROR', 'Failed to summarize feedback', 500)
   }
 }

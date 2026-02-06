@@ -50,7 +50,7 @@ export async function GET() {
       health.checks.database = {
         status: 'down',
         latencyMs: dbLatency,
-        error: error.message,
+        error: 'Database check failed',
       }
       health.status = 'unhealthy'
     } else {
@@ -60,9 +60,10 @@ export async function GET() {
       }
     }
   } catch (error) {
+    console.error('Health check failed:', error)
     health.checks.database = {
       status: 'down',
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: 'Database check failed',
     }
     health.status = 'unhealthy'
   }

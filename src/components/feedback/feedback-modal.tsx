@@ -1,5 +1,7 @@
 'use client'
 
+/* eslint-disable @next/next/no-img-element */
+
 import { useState, useRef, useEffect } from 'react'
 import { Loader2, Camera, Upload, X, Edit2 } from 'lucide-react'
 import { AnimatedBugIcon, AnimatedLightbulbIcon, AnimatedQuestionIcon } from './animated-icons'

@@ -112,6 +112,40 @@ export function ScreenshotEditor({ imageUrl, onSave, onCancel }: ScreenshotEdito
     }
   }, [imageUrl])
 
+  // Handle zoom
+  const handleZoomIn = () => setZoom(prev => Math.min(prev + 0.25, 3))
+  const handleZoomOut = () => setZoom(prev => Math.max(prev - 0.25, 0.25))
+
+  // Fit to container
+  const handleZoomFit = useCallback(() => {
+    if (!image || !containerRef.current) return
+    const containerWidth = containerRef.current.clientWidth - 40
+    const containerHeight = containerRef.current.clientHeight - 40
+    const fitZoom = Math.min(
+      containerWidth / stageSize.width,
+      containerHeight / stageSize.height,
+      1
+    )
+    setZoom(fitZoom)
+    const scaledWidth = stageSize.width * fitZoom
+    const scaledHeight = stageSize.height * fitZoom
+    setStagePos({
+      x: (containerRef.current.clientWidth - scaledWidth) / 2,
+      y: (containerRef.current.clientHeight - scaledHeight) / 2,
+    })
+  }, [image, stageSize.height, stageSize.width])
+
+  // Reset to 100% and center
+  const handleZoomReset = useCallback(() => {
+    if (!containerRef.current) return
+    setZoom(1)
+    // Center the image at 100%
+    setStagePos({
+      x: (containerRef.current.clientWidth - stageSize.width) / 2,
+      y: (containerRef.current.clientHeight - stageSize.height) / 2,
+    })
+  }, [stageSize.height, stageSize.width])
+
   // Handle keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -139,7 +173,7 @@ export function ScreenshotEditor({ imageUrl, onSave, onCancel }: ScreenshotEdito
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [stageSize, image, selectedId])
+  }, [handleZoomFit, handleZoomReset, selectedId])
 
   // Attach transformer to selected shape
   useEffect(() => {
@@ -153,40 +187,6 @@ export function ScreenshotEditor({ imageUrl, onSave, onCancel }: ScreenshotEdito
       transformerRef.current.nodes([])
     }
   }, [selectedId])
-
-  // Handle zoom
-  const handleZoomIn = () => setZoom(prev => Math.min(prev + 0.25, 3))
-  const handleZoomOut = () => setZoom(prev => Math.max(prev - 0.25, 0.25))
-
-  // Fit to container
-  const handleZoomFit = () => {
-    if (!image || !containerRef.current) return
-    const containerWidth = containerRef.current.clientWidth - 40
-    const containerHeight = containerRef.current.clientHeight - 40
-    const fitZoom = Math.min(
-      containerWidth / stageSize.width,
-      containerHeight / stageSize.height,
-      1
-    )
-    setZoom(fitZoom)
-    const scaledWidth = stageSize.width * fitZoom
-    const scaledHeight = stageSize.height * fitZoom
-    setStagePos({
-      x: (containerRef.current.clientWidth - scaledWidth) / 2,
-      y: (containerRef.current.clientHeight - scaledHeight) / 2,
-    })
-  }
-
-  // Reset to 100% and center
-  const handleZoomReset = () => {
-    if (!containerRef.current) return
-    setZoom(1)
-    // Center the image at 100%
-    setStagePos({
-      x: (containerRef.current.clientWidth - stageSize.width) / 2,
-      y: (containerRef.current.clientHeight - stageSize.height) / 2,
-    })
-  }
 
   // Get pointer position relative to stage (accounting for zoom and pan)
   const getPointerPosition = useCallback(() => {
@@ -380,7 +380,7 @@ export function ScreenshotEditor({ imageUrl, onSave, onCancel }: ScreenshotEdito
         radius,
       } : null)
     }
-  }, [isDrawing, currentElement, getPointerPosition, isPanning, tool, lastPanPos])
+  }, [isDrawing, currentElement, getPointerPosition, isPanning, lastPanPos])
 
   // Handle mouse up
   const handleMouseUp = useCallback(() => {

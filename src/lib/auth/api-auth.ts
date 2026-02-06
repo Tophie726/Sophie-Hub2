@@ -1,14 +1,11 @@
 import { getServerSession } from 'next-auth'
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { authOptions } from './config'
 import { Role, Permission, ROLES, hasPermission } from './roles'
+import { getAdminClient } from '@/lib/supabase/admin'
 
 // Server-side Supabase client for auth lookups
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+const supabase = getAdminClient()
 
 interface AuthUser {
   id: string

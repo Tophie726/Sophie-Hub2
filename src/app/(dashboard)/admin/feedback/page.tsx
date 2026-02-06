@@ -1,6 +1,8 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+/* eslint-disable @next/next/no-img-element */
+
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useFeedbackAdminQuery } from '@/lib/hooks/use-feedback-query'
 import { PageHeader } from '@/components/layout/page-header'
@@ -113,7 +115,7 @@ export default function FeedbackAdminPage() {
     type: filter === 'all' ? undefined : filter,
     status: statusFilter === 'all' ? undefined : statusFilter,
   })
-  const feedback = (feedbackRaw || []) as FeedbackItem[]
+  const feedback = useMemo(() => (feedbackRaw || []) as FeedbackItem[], [feedbackRaw])
 
   // AI state - persisted in localStorage
   const [aiEnabled, setAiEnabled] = useState(false)

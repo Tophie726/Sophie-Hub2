@@ -84,17 +84,17 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
   onSourceChangeRef.current = onSourceChange
 
   // Wrapper to propagate source changes up
-  const setActiveSourceId = (sourceId: string | null) => {
+  const setActiveSourceId = useCallback((sourceId: string | null) => {
     setActiveSourceIdInternal(sourceId)
     onSourceChange?.(sourceId)
-  }
+  }, [onSourceChange])
 
   // Wrapper to propagate tab changes up
-  const setActiveTabId = (tabId: string | null) => {
+  const setActiveTabId = useCallback((tabId: string | null) => {
     userHasSelectedTab.current = true // Mark that user made a selection
     setActiveTabIdInternal(tabId)
     onTabChange?.(tabId)
-  }
+  }, [onTabChange])
   const [showSearchModal, setShowSearchModal] = useState(false)
   const [dashboardViewMode, setDashboardViewMode] = useState<'grid' | 'list'>('grid')
 
@@ -239,7 +239,7 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
     } finally {
       setIsLoading(false)
     }
-  }, [handleSourcesLoaded, loadPreviewForSource])
+  }, [handleSourcesLoaded])
 
   // Run once on mount
   useEffect(() => {
@@ -333,7 +333,7 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
     ) {
       setActiveTabId(OVERVIEW_TAB_ID)
     }
-  }, [sheetTabs, activeTabId, activeTab, isLoading, isLoadingPreview])
+  }, [sheetTabs, activeTabId, activeTab, isLoading, isLoadingPreview, setActiveTabId])
 
   // Handle tab status change
   const handleTabStatusChange = async (tabId: string, status: string, notes?: string) => {

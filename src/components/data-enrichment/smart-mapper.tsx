@@ -572,7 +572,7 @@ export function SmartMapper({ spreadsheetId, sheetName, tabName, dataSourceId, o
     }
 
     restoreDraft()
-  }, [rawData, draftKey, draftRestored, dataSourceId, tabName])
+  }, [rawData, draftKey, draftRestored, dataSourceId, tabName, headerAlreadyConfirmed])
 
   // Clear draft when completing (both DB and localStorage)
   const handleCompleteWithClear = async () => {

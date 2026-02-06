@@ -13,15 +13,12 @@
  */
 
 import { NextRequest } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { requireAuth, canAccessPartner } from '@/lib/auth/api-auth'
 import { apiSuccess, ApiErrors } from '@/lib/api/response'
 import { bigQueryConnector, UNIFIED_VIEWS } from '@/lib/connectors/bigquery'
+import { getAdminClient } from '@/lib/supabase/admin'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+const supabase = getAdminClient()
 
 // Map short names to full view names for convenience
 const VIEW_ALIASES: Record<string, string> = {

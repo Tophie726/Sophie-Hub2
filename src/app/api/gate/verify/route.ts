@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
+import { createStagingGateCookieValue } from '@/lib/security/staging-gate'
 
 const STAGING_PASSWORD = process.env.STAGING_PASSWORD || ''
 const COOKIE_NAME = 'sophie-hub-access'
@@ -16,9 +17,11 @@ export async function POST(request: NextRequest) {
     const { password } = body
 
     if (password === STAGING_PASSWORD) {
+      const cookieValue = await createStagingGateCookieValue(STAGING_PASSWORD)
+
       // Set auth cookie
       const cookieStore = await cookies()
-      cookieStore.set(COOKIE_NAME, 'authenticated', {
+      cookieStore.set(COOKIE_NAME, cookieValue, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
