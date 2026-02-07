@@ -434,13 +434,22 @@ export function GWSStaffMapping() {
   async function handleBootstrapStaffFromDirectory() {
     setIsBootstrappingStaff(true)
     try {
+      // Always refresh directory first so seed uses latest accounts.
+      const syncRes = await fetch('/api/google-workspace/sync', { method: 'POST' })
+      if (!syncRes.ok) throw new Error('Directory sync failed')
+      const syncJson = await syncRes.json()
+      const syncResult = syncJson.data
+      if (!syncResult?.success) {
+        throw new Error(syncResult?.error || 'Directory sync failed')
+      }
+
       const res = await fetch('/api/google-workspace/staff/bootstrap', { method: 'POST' })
       if (!res.ok) throw new Error('Staff bootstrap failed')
       const json = await res.json()
       const result = json.data
 
       toast.success(
-        `Created ${result.created_staff || 0} staff, linked ${result.mapped_existing_staff || 0} existing`
+        `Synced ${syncResult.total_pulled || 0} users, created ${result.created_staff || 0} staff, linked ${result.mapped_existing_staff || 0} existing`
       )
 
       // Refresh users with mappings
@@ -504,7 +513,7 @@ export function GWSStaffMapping() {
       }
     } catch (err) {
       console.error('Staff bootstrap error:', err)
-      toast.error('Failed to seed staff from Google Workspace')
+      toast.error(err instanceof Error ? err.message : 'Failed to seed staff from Google Workspace')
     } finally {
       setIsBootstrappingStaff(false)
     }
@@ -701,16 +710,16 @@ export function GWSStaffMapping() {
           </Badge>
         </div>
         <div className="flex items-center gap-2">
-          <Button onClick={handleSync} disabled={isSyncing} variant="outline" size="sm">
+          <Button onClick={handleSync} disabled={isSyncing || isBootstrappingStaff} variant="outline" size="sm">
             {isSyncing ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Syncing...
+                Refreshing...
               </>
             ) : (
               <>
                 <RefreshCw className="h-4 w-4 mr-2" />
-                Sync Directory
+                Refresh Directory
               </>
             )}
           </Button>
@@ -727,7 +736,7 @@ export function GWSStaffMapping() {
               </>
             )}
           </Button>
-          <Button onClick={handleAutoMatch} disabled={isAutoMatching} variant="outline" size="sm">
+          <Button onClick={handleAutoMatch} disabled={isAutoMatching || isBootstrappingStaff} variant="outline" size="sm">
             {isAutoMatching ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -740,7 +749,7 @@ export function GWSStaffMapping() {
               </>
             )}
           </Button>
-          <Button onClick={handleBootstrapStaffFromDirectory} disabled={isBootstrappingStaff} variant="outline" size="sm">
+          <Button onClick={handleBootstrapStaffFromDirectory} disabled={isBootstrappingStaff || isAutoMatching || isSyncing} size="sm">
             {isBootstrappingStaff ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
