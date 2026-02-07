@@ -2,6 +2,8 @@
 
 How to build a new data source connector for Sophie Hub v2.
 
+Need a fast kickoff template first? Use `src/docs/CONNECTOR-PLAYBOOK.md`.
+
 ---
 
 ## 1. Architecture Overview
@@ -191,7 +193,7 @@ CREATE TABLE entity_external_ids (
 -- One-to-one semantics for selected sources
 CREATE UNIQUE INDEX idx_entity_external_ids_one_to_one_sources
   ON entity_external_ids(entity_type, entity_id, source)
-  WHERE source IN ('bigquery', 'slack_user');
+  WHERE source IN ('bigquery', 'slack_user', 'google_workspace_user');
 ```
 
 **Migrations:** `supabase/migrations/20260205_entity_external_ids.sql`, `supabase/migrations/20260207_relax_entity_source_constraint.sql`
@@ -200,7 +202,7 @@ CREATE UNIQUE INDEX idx_entity_external_ids_one_to_one_sources
 
 - `UNIQUE(entity_type, entity_id, source, external_id)` -- Allows one-to-many mappings (for example, one partner mapped to multiple Slack channels).
 - `UNIQUE(source, external_id)` -- A BigQuery client_name can only be mapped to one partner. Prevents duplicate mappings.
-- `idx_entity_external_ids_one_to_one_sources` (partial unique index) -- Keeps one-to-one behavior for `bigquery` and `slack_user`.
+- `idx_entity_external_ids_one_to_one_sources` (partial unique index) -- Keeps one-to-one behavior for `bigquery`, `slack_user`, and `google_workspace_user`.
 
 **Usage patterns:**
 
@@ -238,6 +240,8 @@ const { data } = await supabase
 | `bigquery` | partners | BigQuery `client_name` |
 | `slack_user` | staff | Slack user ID (e.g., `U06ABCDEF`) |
 | `slack_channel` | partners | Slack channel ID (e.g., `C06ABCDEF`) |
+| `google_workspace_user` | staff | Immutable Google user ID |
+| `google_workspace_alias` | staff | Google alias email address |
 | `closeio` | partners | Close.io lead ID |
 | `zoho` | partners | Zoho contact ID |
 

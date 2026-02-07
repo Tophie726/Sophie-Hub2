@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils'
 interface CategoryCardProps {
   title: string
   description: string
-  icon: LucideIcon
+  icon: LucideIcon | React.ComponentType<{ className?: string }>
   iconColor: string
   bgColor: string
   stats?: {

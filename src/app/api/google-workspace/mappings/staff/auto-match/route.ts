@@ -15,7 +15,7 @@ import { apiSuccess, ApiErrors } from '@/lib/api/response'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { invalidateDirectoryUsersCache } from '@/lib/connectors/google-workspace-cache'
 import type { DirectorySnapshotRow } from '@/lib/google-workspace/types'
-import { classifyGoogleAccountEmail } from '@/lib/google-workspace/account-classification'
+import { resolveGoogleAccountType } from '@/lib/google-workspace/account-classification'
 import { isStaffEligibleForAutoMapping } from '@/lib/staff/lifecycle'
 import { refreshGoogleWorkspaceStaffApprovalQueue } from '@/lib/google-workspace/staff-approval-queue'
 
@@ -48,7 +48,11 @@ export async function POST() {
     const gwsUsers = directoryUsers as DirectorySnapshotRow[]
     const sharedGoogleUserIds = new Set(
       gwsUsers
-        .filter(u => classifyGoogleAccountEmail(u.primary_email).type === 'shared_account')
+        .filter(
+          u =>
+            resolveGoogleAccountType(u.primary_email, u.account_type_override).type ===
+            'shared_account'
+        )
         .map(u => u.google_user_id)
     )
 

@@ -19,6 +19,7 @@ export type ConnectorTypeId =
   | 'google_form'
   | 'bigquery'
   | 'slack'
+  | 'google_workspace'
   | 'api'
   | 'csv'
   // Future connectors:
@@ -103,6 +104,21 @@ export interface SlackConnectorConfig {
 }
 
 /**
+ * Configuration for Google Workspace connector
+ * Used for staff identity enrichment via Admin SDK Directory API.
+ * Credentials are env-only (GOOGLE_WORKSPACE_CLIENT_EMAIL, etc.) — never stored in config.
+ */
+export interface GoogleWorkspaceConnectorConfig {
+  type: 'google_workspace'
+  /** Primary Workspace domain to query (e.g., "sophiesociety.com") */
+  domain: string
+  /** Whether to include suspended users in listings (default: true) */
+  include_suspended?: boolean
+  /** Whether to query deleted users (default: false) */
+  include_deleted?: boolean
+}
+
+/**
  * Discriminated union of all connector configurations
  * Use this when storing/retrieving connector config from the database
  */
@@ -111,6 +127,7 @@ export type ConnectorConfig =
   | GoogleFormConnectorConfig
   | BigQueryConnectorConfig
   | SlackConnectorConfig
+  | GoogleWorkspaceConnectorConfig
   | ApiConnectorConfig
   | CsvConnectorConfig
 
@@ -323,6 +340,15 @@ export function isSlackConfig(
   config: ConnectorConfig
 ): config is SlackConnectorConfig {
   return config.type === 'slack'
+}
+
+/**
+ * Type guard to check if a config is for Google Workspace
+ */
+export function isGoogleWorkspaceConfig(
+  config: ConnectorConfig
+): config is GoogleWorkspaceConnectorConfig {
+  return config.type === 'google_workspace'
 }
 
 // =============================================================================

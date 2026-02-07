@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Loader2, Blocks } from 'lucide-react'
+import { Blocks } from 'lucide-react'
 import { ModuleCard } from './module-card'
+import { ShimmerBar } from '@/components/ui/shimmer-grid'
 import type { Module } from '@/types/modules'
 
 export function ModuleHub() {
@@ -30,8 +31,26 @@ export function ModuleHub() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-32">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-w-4xl mx-auto">
+        {Array.from({ length: 3 }, (_, i) => (
+          <div
+            key={i}
+            className="rounded-xl border bg-card p-4 md:p-6"
+            style={{ boxShadow: '0 0 0 1px rgba(0,0,0,0.08)' }}
+          >
+            <div className="flex items-start gap-3 md:gap-4">
+              <ShimmerBar width={44} height={44} className="rounded-xl shrink-0" />
+              <div className="flex-1 space-y-2">
+                <ShimmerBar width="62%" height={16} />
+                <ShimmerBar width="90%" height={12} />
+                <ShimmerBar width="70%" height={12} />
+              </div>
+            </div>
+            <div className="mt-3">
+              <ShimmerBar width="45%" height={10} />
+            </div>
+          </div>
+        ))}
       </div>
     )
   }

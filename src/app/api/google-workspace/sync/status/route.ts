@@ -8,7 +8,7 @@ import { requireRole } from '@/lib/auth/api-auth'
 import { ROLES } from '@/lib/auth/roles'
 import { apiSuccess, ApiErrors } from '@/lib/api/response'
 import { getAdminClient } from '@/lib/supabase/admin'
-import { classifyGoogleAccountEmail } from '@/lib/google-workspace/account-classification'
+import { resolveGoogleAccountType } from '@/lib/google-workspace/account-classification'
 import { isStaffEligibleForAutoMapping } from '@/lib/staff/lifecycle'
 
 function isSnapshotSchemaError(error: unknown): boolean {
@@ -33,7 +33,7 @@ export async function GET() {
     // Get snapshot stats
     const { data: snapshot, error } = await supabase
       .from('google_workspace_directory_snapshot')
-      .select('google_user_id, is_suspended, is_deleted, last_seen_at, primary_email')
+      .select('google_user_id, is_suspended, is_deleted, last_seen_at, primary_email, account_type_override')
 
     if (error) {
       if (isSnapshotSchemaError(error)) {
@@ -92,13 +92,13 @@ export async function GET() {
         !r.is_suspended &&
         !r.is_deleted &&
         !inactiveMappedGoogleUsers.has(r.google_user_id) &&
-        classifyGoogleAccountEmail(r.primary_email).type !== 'shared_account'
+        resolveGoogleAccountType(r.primary_email, r.account_type_override).type !== 'shared_account'
     ).length
     const activeShared = rows.filter(
       r =>
         !r.is_suspended &&
         !r.is_deleted &&
-        classifyGoogleAccountEmail(r.primary_email).type === 'shared_account'
+        resolveGoogleAccountType(r.primary_email, r.account_type_override).type === 'shared_account'
     ).length
     const suspended = rows.filter(r => r.is_suspended && !r.is_deleted).length
     const deleted = rows.filter(r => r.is_deleted).length

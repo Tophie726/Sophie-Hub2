@@ -46,8 +46,11 @@ function FeedbackContent() {
   const searchParams = useSearchParams()
   const tabParam = searchParams.get('tab') as TabValue | null
   const feedbackId = searchParams.get('id')
+  const openParam = searchParams.get('open')
+  const presetTitle = searchParams.get('title') || undefined
+  const presetDescription = searchParams.get('description') || undefined
   const [activeTab, setActiveTab] = useState<TabValue>(tabParam || 'ideas')
-  const [showModal, setShowModal] = useState(false)
+  const [showModal, setShowModal] = useState(openParam === 'idea')
 
   const { data: authUser } = useAuthMe()
   const isAdmin = authUser?.role === 'admin'
@@ -114,6 +117,8 @@ function FeedbackContent() {
       <SubmitIdeaModal
         open={showModal}
         onOpenChange={setShowModal}
+        initialTitle={presetTitle}
+        initialDescription={presetDescription}
       />
     </div>
   )

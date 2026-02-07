@@ -1,5 +1,5 @@
 import { getAdminClient } from '@/lib/supabase/admin'
-import { classifyGoogleAccountEmail } from '@/lib/google-workspace/account-classification'
+import { resolveGoogleAccountType } from '@/lib/google-workspace/account-classification'
 
 type QueueStatus = 'pending' | 'approved' | 'rejected' | 'ignored' | 'resolved'
 
@@ -9,6 +9,7 @@ type SnapshotRow = {
   full_name: string | null
   title: string | null
   org_unit_path: string | null
+  account_type_override: 'person' | 'shared_account' | null
   is_suspended: boolean
   is_deleted: boolean
 }
@@ -37,7 +38,7 @@ export async function refreshGoogleWorkspaceStaffApprovalQueue() {
   const [{ data: snapshot, error: snapshotError }, { data: mappings }, { data: staff, error: staffError }] = await Promise.all([
     supabase
       .from('google_workspace_directory_snapshot')
-      .select('google_user_id, primary_email, full_name, title, org_unit_path, is_suspended, is_deleted'),
+      .select('google_user_id, primary_email, full_name, title, org_unit_path, account_type_override, is_suspended, is_deleted'),
     supabase
       .from('entity_external_ids')
       .select('external_id')
@@ -78,7 +79,10 @@ export async function refreshGoogleWorkspaceStaffApprovalQueue() {
       if (u.is_suspended || u.is_deleted) return false
       if (mappedGoogleUsers.has(u.google_user_id)) return false
 
-      const classification = classifyGoogleAccountEmail(u.primary_email)
+      const classification = resolveGoogleAccountType(
+        u.primary_email,
+        u.account_type_override
+      )
       if (classification.type !== 'person') return false
 
       return !existingStaffEmails.has(u.primary_email.toLowerCase())

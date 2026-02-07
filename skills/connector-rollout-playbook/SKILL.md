@@ -18,6 +18,24 @@ Assume these unless the user says otherwise:
 - API routes are under `src/app/api/{connector}/...` with auth and validation.
 - UI work lands in data enrichment/admin mapping flows.
 - Rollout plan file is `src/docs/{CONNECTOR}-ROLLOUT-PLAN.md`.
+- Collaboration loop convention is in `src/docs/connectors/CONNECTOR-REVIEW-LOOP.md`.
+- Relevant project docs and when to load them are listed in `references/project-doc-map.md`.
+
+## Cross-Skill Dependency (UI/Design)
+
+If any phase includes frontend/UI work, explicitly apply:
+
+- `emil-design-engineering` skill (installed path depends on runtime):
+  - Codex: `/Users/test/.codex/skills/emil-design-engineering/SKILL.md`
+  - Claude Code: `/Users/test/.claude/skills/emil-design-engineering/SKILL.md`
+
+Minimum UI quality checks required from that skill:
+
+- No layout shift on dynamic elements.
+- Touch-first behavior with hover enhancements only where appropriate.
+- Keyboard accessibility and visible focus states.
+- Reduced-motion support for animations.
+- No `transition: all`; use targeted transition properties.
 
 ## Intake Policy (Minimal Questions)
 
@@ -40,7 +58,8 @@ If answers are incomplete, proceed with explicit assumptions and mark them in th
 5. Split work into agent tasks with dependency waves.
 6. Add phase-level validation checks.
 7. Add setup handoff checklist (API keys/scopes/env/migrations).
-8. Apply review gate before declaring complete.
+8. Run Codex <-> Claude review loop files until plan quality gate is met.
+9. Apply review gate before declaring complete.
 
 ## Required Outputs
 
@@ -51,6 +70,8 @@ Produce these outputs unless the user asks for a subset:
 3. Phase validation checklist with pass/fail evidence.
 4. Setup handoff section with exact manual steps.
 5. Claude handoff prompt using `references/claude-agent-team-prompt.md`.
+6. If UI is in scope, include a UI design quality checklist aligned with `emil-design-engineering`.
+7. Connector collaboration folder with numbered loop files and `FINAL-APPROVED-PLAN.md`.
 
 ## Mapping Rules
 
@@ -68,6 +89,7 @@ Use this default split unless the connector is very small:
 - `api-integration`: endpoints, validation, auth, idempotent writes
 - `analytics`: metric logic, recompute behavior, edge cases
 - `ui-ops`: mapping UX, status/health indicators, documentation alignment
+- `ui-ops` also owns Emil design-quality enforcement when UI is in scope
 
 Execution order:
 
@@ -87,6 +109,19 @@ Always include a "Manual Setup Handoff" section containing:
 - Migration files to apply
 - First smoke-test sequence (ordered)
 
+## Collaboration Loop Requirements
+
+For each connector, create `src/docs/connectors/{connector-slug}/` and maintain:
+
+- `00-context.md`
+- `01-codex-proposal.md`
+- `02-claude-agent-plan.md`
+- `03-codex-review.md`
+- `04-claude-revision.md` (and further numbered rounds as needed)
+- `FINAL-APPROVED-PLAN.md`
+
+Implementation should start only after `FINAL-APPROVED-PLAN.md` exists.
+
 ## Review Gate
 
 Do not mark complete until all are true:
@@ -102,4 +137,6 @@ Do not mark complete until all are true:
 
 - Use `references/rollout-template.md` for the connector plan skeleton.
 - Use `references/claude-agent-team-prompt.md` for Claude handoff prompts.
+- Use `references/review-loop-template.md` for Codex <-> Claude file sequencing.
+- Use `references/project-doc-map.md` to know which Sophie Hub MDs to read for each connector phase.
 - For deep implementation details in this repo, use `src/docs/CONNECTOR-GUIDE.md` and `src/docs/CONNECTOR-PLAYBOOK.md`.

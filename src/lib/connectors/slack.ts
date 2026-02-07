@@ -152,8 +152,20 @@ export class SlackConnector extends BaseConnector<SlackConnectorConfig> {
 
   /**
    * List all workspace users (cached, stale-while-revalidate)
+   *
+   * @param options.include_bots - Include bot accounts (default: false)
+   * @param options.include_deleted - Include deactivated accounts (default: false)
    */
-  async listUsers(): Promise<SlackUser[]> {
+  async listUsers(options?: {
+    include_bots?: boolean
+    include_deleted?: boolean
+  }): Promise<SlackUser[]> {
+    // When including bots/deleted, bypass cache (different result set)
+    const includeAll = options?.include_bots || options?.include_deleted
+    if (includeAll) {
+      return slackClient.listUsers(options)
+    }
+
     const cached = getCachedUsers()
     if (cached) {
       // If stale, trigger background refresh

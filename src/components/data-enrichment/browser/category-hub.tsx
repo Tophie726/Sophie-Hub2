@@ -2,8 +2,10 @@
 
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { FileSpreadsheet, FileText, FileQuestion, Database, MessageSquare, Loader2 } from 'lucide-react'
+import { FileSpreadsheet, FileText, FileQuestion, Database, Building2 } from 'lucide-react'
 import { CategoryCard } from './category-card'
+import { SlackIcon } from '@/components/icons/slack-icon'
+import { RoamIcon } from '@/components/icons/roam-icon'
 
 interface DataSourceStats {
   sources: number
@@ -12,7 +14,7 @@ interface DataSourceStats {
 }
 
 interface CategoryHubProps {
-  onSelectCategory: (category: 'sheets' | 'forms' | 'docs' | 'bigquery' | 'slack') => void
+  onSelectCategory: (category: 'sheets' | 'forms' | 'docs' | 'bigquery' | 'slack' | 'google_workspace') => void
 }
 
 const easeOut: [number, number, number, number] = [0.22, 1, 0.36, 1]
@@ -46,8 +48,52 @@ export function CategoryHub({ onSelectCategory }: CategoryHubProps) {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-32">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <div className="space-y-8">
+        {/* Hero skeleton */}
+        <div className="text-center max-w-2xl mx-auto space-y-3 md:space-y-4 px-4">
+          <div className="h-8 md:h-9 w-48 mx-auto rounded-lg bg-muted/40 animate-pulse" />
+          <div className="space-y-2">
+            <div className="h-5 w-80 mx-auto rounded bg-muted/30 animate-pulse" style={{ animationDelay: '75ms' }} />
+            <div className="h-5 w-56 mx-auto rounded bg-muted/30 animate-pulse" style={{ animationDelay: '150ms' }} />
+          </div>
+        </div>
+
+        {/* Card grid skeleton — matches real 3-col layout */}
+        <div className="grid gap-4 md:gap-6 md:grid-cols-2 lg:grid-cols-3 max-w-4xl mx-auto px-4 md:px-0">
+          {Array.from({ length: 7 }, (_, i) => (
+            <div
+              key={i}
+              className="p-5 md:p-8 rounded-2xl border border-border/40 bg-card"
+            >
+              {/* Icon placeholder */}
+              <div
+                className="h-12 w-12 md:h-16 md:w-16 rounded-xl md:rounded-2xl bg-muted/30 mb-4 md:mb-6 animate-pulse"
+                style={{ animationDelay: `${i * 60}ms` }}
+              />
+              {/* Title */}
+              <div
+                className="h-5 md:h-6 w-32 rounded bg-muted/40 mb-2 animate-pulse"
+                style={{ animationDelay: `${i * 60 + 30}ms` }}
+              />
+              {/* Description */}
+              <div className="space-y-1.5 mb-4 md:mb-6">
+                <div
+                  className="h-3.5 w-full rounded bg-muted/25 animate-pulse"
+                  style={{ animationDelay: `${i * 60 + 60}ms` }}
+                />
+                <div
+                  className="h-3.5 w-3/4 rounded bg-muted/25 animate-pulse"
+                  style={{ animationDelay: `${i * 60 + 90}ms` }}
+                />
+              </div>
+              {/* Stats / CTA placeholder */}
+              <div
+                className="h-4 w-24 rounded bg-muted/20 animate-pulse"
+                style={{ animationDelay: `${i * 60 + 120}ms` }}
+              />
+            </div>
+          ))}
+        </div>
       </div>
     )
   }
@@ -95,10 +141,28 @@ export function CategoryHub({ onSelectCategory }: CategoryHubProps) {
         <CategoryCard
           title="Slack"
           description="Map staff and channels, track response times"
-          icon={MessageSquare}
-          iconColor="text-purple-600"
-          bgColor="bg-purple-500/10"
+          icon={SlackIcon}
+          iconColor="text-[#611f69]"
+          bgColor="bg-[#611f69]/10"
           onClick={() => onSelectCategory('slack')}
+        />
+
+        <CategoryCard
+          title="Google Workspace"
+          description="Sync directory users and enrich staff profiles"
+          icon={Building2}
+          iconColor="text-indigo-600"
+          bgColor="bg-indigo-500/10"
+          onClick={() => onSelectCategory('google_workspace')}
+        />
+
+        <CategoryCard
+          title="Ro.am"
+          description="Virtual office activity and attendance signals"
+          icon={RoamIcon}
+          iconColor=""
+          bgColor="bg-zinc-500/10"
+          comingSoon
         />
 
         <CategoryCard

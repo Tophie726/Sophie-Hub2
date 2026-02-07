@@ -17,14 +17,54 @@ export interface SlackUser {
   deleted: boolean
   is_bot: boolean
   is_app_user: boolean
+  is_restricted: boolean        // Multi-channel guest
+  is_ultra_restricted: boolean  // Single-channel guest
+  is_stranger?: boolean         // Slack Connect (external org)
   profile: {
     email?: string
     display_name: string
     real_name: string
+    title?: string
+    phone?: string
+    first_name?: string
+    last_name?: string
+    image_24?: string
+    image_32?: string
     image_48?: string
     image_72?: string
+    image_192?: string
+    image_512?: string
+    image_1024?: string
+    image_original?: string
   }
   tz?: string
+  tz_label?: string
+  tz_offset?: number
+}
+
+/** Classification of a Slack user's account type */
+export type SlackUserType = 'member' | 'multi_channel_guest' | 'single_channel_guest' | 'bot' | 'deactivated' | 'connect'
+
+/** Classify a Slack user into their account type */
+export function classifySlackUser(user: SlackUser): SlackUserType {
+  if (user.deleted) return 'deactivated'
+  if (user.is_bot || user.is_app_user) return 'bot'
+  if (user.is_stranger) return 'connect'
+  if (user.is_ultra_restricted) return 'single_channel_guest'
+  if (user.is_restricted) return 'multi_channel_guest'
+  return 'member'
+}
+
+/** Human-readable label for user type */
+export function userTypeLabel(type: SlackUserType): string {
+  switch (type) {
+    case 'member': return 'Member'
+    case 'multi_channel_guest': return 'Multi-Channel Guest'
+    case 'single_channel_guest': return 'Single-Channel Guest'
+    case 'bot': return 'Bot'
+    case 'deactivated': return 'Deactivated'
+    case 'connect': return 'Slack Connect'
+  }
 }
 
 /** Slack channel from conversations.list */

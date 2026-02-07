@@ -3,7 +3,6 @@
 import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Loader2,
   ArrowLeft,
   ChevronRight,
   FileSpreadsheet,
@@ -20,6 +19,7 @@ import {
   Network,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { ShimmerBar, ShimmerGrid } from '@/components/ui/shimmer-grid'
 import { cn } from '@/lib/utils'
 import { useFlowData } from './hooks/useFlowData'
 import type { EntityType } from '@/types/entities'
@@ -206,8 +206,51 @@ export function DataFlowMap({ onBack }: DataFlowMapProps) {
   // Loading state
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-32">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <div className="flex flex-col h-full">
+        <div className="flex items-center gap-3 px-4 py-3 border-b">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 gap-1.5"
+            onClick={onBack}
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span className="hidden sm:inline">Back</span>
+          </Button>
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <Network className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+            <ShimmerBar width={128} height={14} />
+          </div>
+          <div className="hidden sm:flex items-center gap-2">
+            <ShimmerBar width={92} height={12} />
+            <ShimmerBar width={84} height={12} />
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-4xl mx-auto py-6 px-4 space-y-6">
+            <div className="rounded-xl border bg-card p-4">
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                {Array.from({ length: 4 }, (_, i) => (
+                  <div key={i} className="rounded-lg border bg-background/30 p-3 space-y-2">
+                    <ShimmerBar width={40} height={40} className="rounded-lg" />
+                    <ShimmerBar width="70%" height={12} />
+                    <ShimmerBar width="45%" height={10} />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <ShimmerBar width="100%" height={36} className="rounded-lg" />
+              <ShimmerBar width={112} height={36} className="rounded-lg hidden sm:block" />
+            </div>
+
+            <div className="rounded-xl border bg-card p-4">
+              <ShimmerGrid variant="list" rows={7} cellHeight={56} gap={10} />
+            </div>
+          </div>
+        </div>
       </div>
     )
   }

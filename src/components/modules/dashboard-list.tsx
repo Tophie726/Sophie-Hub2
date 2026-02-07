@@ -3,9 +3,10 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useQueryClient } from '@tanstack/react-query'
-import { Loader2, Plus, LayoutDashboard } from 'lucide-react'
+import { Plus, LayoutDashboard } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { Button } from '@/components/ui/button'
+import { ShimmerBar, ShimmerGrid } from '@/components/ui/shimmer-grid'
 import { CreateDashboardDialog } from './create-dashboard-dialog'
 import { useDashboardsQuery } from '@/lib/hooks/use-module-query'
 import type { Module, Dashboard } from '@/types/modules'
@@ -26,6 +27,12 @@ export function DashboardList({ module }: DashboardListProps) {
   const dashboards = (dashboardsRaw || []) as DashboardWithMeta[]
   const error = queryError ? queryError.message : null
   const [createOpen, setCreateOpen] = useState(false)
+  const [pendingDashboardId, setPendingDashboardId] = useState<string | null>(null)
+
+  function openDashboard(dashboardId: string) {
+    setPendingDashboardId(dashboardId)
+    router.push(`/admin/modules/${module.slug}/${dashboardId}`)
+  }
 
   function handleCreated(dashboard: Dashboard) {
     queryClient.setQueryData(
@@ -40,8 +47,30 @@ export function DashboardList({ module }: DashboardListProps) {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-32">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <div className="space-y-6">
+        <div className="flex items-center justify-end">
+          <ShimmerBar width={140} height={36} className="rounded-md" />
+        </div>
+
+        <div className="space-y-2">
+          <ShimmerBar width={90} height={12} />
+          <div
+            className="rounded-lg overflow-hidden p-3"
+            style={{ boxShadow: '0 0 0 1px rgba(0,0,0,0.08)' }}
+          >
+            <ShimmerGrid variant="table" rows={4} columns={3} cellHeight={28} />
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <ShimmerBar width={140} height={12} />
+          <div
+            className="rounded-lg overflow-hidden p-3"
+            style={{ boxShadow: '0 0 0 1px rgba(0,0,0,0.08)' }}
+          >
+            <ShimmerGrid variant="table" rows={4} columns={4} cellHeight={28} />
+          </div>
+        </div>
       </div>
     )
   }
@@ -110,8 +139,10 @@ export function DashboardList({ module }: DashboardListProps) {
                 {templates.map((d) => (
                   <tr
                     key={d.id}
-                    onClick={() => router.push(`/admin/modules/${module.slug}/${d.id}`)}
-                    className="border-b last:border-0 hover:bg-muted/20 cursor-pointer transition-colors"
+                    onClick={() => openDashboard(d.id)}
+                    className={`border-b last:border-0 hover:bg-muted/20 cursor-pointer transition-colors ${
+                      pendingDashboardId === d.id ? 'bg-primary/5' : ''
+                    }`}
                   >
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
@@ -119,6 +150,9 @@ export function DashboardList({ module }: DashboardListProps) {
                         <span className="px-2 py-0.5 text-[10px] font-medium rounded-full bg-blue-500/10 text-blue-600 shrink-0">
                           Template
                         </span>
+                        {pendingDashboardId === d.id && (
+                          <span className="text-[10px] text-primary">Opening...</span>
+                        )}
                       </div>
                     </td>
                     <td className="px-4 py-3 text-sm text-muted-foreground hidden md:table-cell" style={{ fontVariantNumeric: 'tabular-nums' }}>
@@ -153,11 +187,18 @@ export function DashboardList({ module }: DashboardListProps) {
                 {partnerDashboards.map((d) => (
                   <tr
                     key={d.id}
-                    onClick={() => router.push(`/admin/modules/${module.slug}/${d.id}`)}
-                    className="border-b last:border-0 hover:bg-muted/20 cursor-pointer transition-colors"
+                    onClick={() => openDashboard(d.id)}
+                    className={`border-b last:border-0 hover:bg-muted/20 cursor-pointer transition-colors ${
+                      pendingDashboardId === d.id ? 'bg-primary/5' : ''
+                    }`}
                   >
                     <td className="px-4 py-3">
-                      <span className="font-medium text-sm">{d.title}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-sm">{d.title}</span>
+                        {pendingDashboardId === d.id && (
+                          <span className="text-[10px] text-primary">Opening...</span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-sm text-muted-foreground hidden md:table-cell">
                       {d.partner_name || '-'}

@@ -76,7 +76,7 @@ function getBotToken(): string {
 | `groups:read` | List private channels the bot is in |
 | `users:read` | List workspace members |
 | `users:read.email` | Access user email addresses (critical for staff auto-match) |
-| `users.profile:read` | Access display names and avatars |
+| `users.profile:read` | Access profile fields (display name, avatar, title) |
 | `channels:history` | Read message history in public channels |
 | `groups:history` | Read message history in private channels |
 | `channels:join` | Join public channels to read history |
@@ -104,6 +104,46 @@ Private/public channel behavior:
 Business-plan notes:
 - This connector does not require Enterprise-only APIs (Audit Logs/Discovery).
 - Message availability depends on channel membership timing and workspace retention settings.
+
+---
+
+## 3.2 Slack User Type Classification
+
+The Slack API returns several boolean flags that classify user accounts. Sophie Hub
+exposes these as a `user_type` field on the Staff mapping tab with a clickable
+workspace breakdown card.
+
+| `user_type` | Slack flags | Description |
+|---|---|---|
+| `member` | none of the flags below | Full workspace member (staff) |
+| `multi_channel_guest` | `is_restricted = true` | Guest with access to multiple channels |
+| `single_channel_guest` | `is_ultra_restricted = true` | Guest with access to one channel only |
+| `connect` | `is_stranger = true` | Slack Connect user from external org |
+| `bot` | `is_bot = true` or `is_app_user = true` | Bot/app account |
+| `deactivated` | `deleted = true` | Deactivated account |
+
+**Mapping guidance:**
+- Members are typically Sophie Society staff — auto-match by email
+- Multi-channel guests are often partner contacts or contractors
+- Single-channel guests are typically clients in their partner channel
+- Slack Connect users are external org accounts and not staff-mappable
+- Bots and deactivated accounts are shown for visibility but marked "Not mappable"
+
+Classification logic: `src/lib/slack/types.ts` → `classifySlackUser()`
+
+---
+
+## 3.3 Staff Profile Enrichment
+
+After staff mappings exist, `POST /api/slack/enrich-staff` can enrich mapped
+staff records with Slack profile data:
+
+- `avatar_url` (prefers higher-resolution Slack avatars)
+- `timezone`
+- `title` (only if current staff title is empty)
+- `phone` (only if current staff phone is empty)
+
+This keeps manual staff edits intact while backfilling missing profile fields.
 
 ---
 
@@ -448,6 +488,7 @@ All routes live under `src/app/api/slack/`.
 | GET | `/api/slack/mappings/staff` | Get all staff-Slack user mappings |
 | POST | `/api/slack/mappings/staff` | Save/update a single staff mapping |
 | DELETE | `/api/slack/mappings/staff?id={id}` | Remove a staff mapping |
+| POST | `/api/slack/enrich-staff` | Enrich mapped staff with avatar/title/timezone/phone |
 | POST | `/api/slack/mappings/channels/auto-match` | Run pattern-based auto-match for channels |
 | GET | `/api/slack/mappings/channels` | Get all channel-partner mappings |
 | POST | `/api/slack/mappings/channels` | Save/update a single channel mapping |
@@ -467,6 +508,8 @@ All routes live under `src/app/api/slack/`.
 |--------|-------|---------|
 | GET | `/api/slack/analytics/response-times` | Response time metrics by partner/period |
 | GET | `/api/slack/analytics/summary` | Overall response time dashboard stats |
+| GET | `/api/slack/analytics/channel-activity` | Message activity trends by channel |
+| POST | `/api/slack/analytics/recompute` | Trigger metrics recomputation for a date range |
 
 ### Route pattern
 

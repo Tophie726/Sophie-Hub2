@@ -12,7 +12,7 @@ import { requireRole } from '@/lib/auth/api-auth'
 import { ROLES } from '@/lib/auth/roles'
 import { apiSuccess, ApiErrors } from '@/lib/api/response'
 import { getAdminClient } from '@/lib/supabase/admin'
-import { classifyGoogleAccountEmail } from '@/lib/google-workspace/account-classification'
+import { resolveGoogleAccountType } from '@/lib/google-workspace/account-classification'
 import {
   refreshGoogleWorkspaceStaffApprovalQueue,
   resolveGoogleWorkspaceApprovalByUserId,
@@ -26,6 +26,7 @@ type SnapshotRow = {
   title: string | null
   org_unit_path: string | null
   thumbnail_photo_url: string | null
+  account_type_override: 'person' | 'shared_account' | null
   is_suspended: boolean
   is_deleted: boolean
   is_admin: boolean
@@ -54,7 +55,7 @@ export async function POST() {
 
     const { data: snapshot, error: snapshotError } = await supabase
       .from('google_workspace_directory_snapshot')
-      .select('google_user_id, primary_email, full_name, title, org_unit_path, thumbnail_photo_url, is_suspended, is_deleted, is_admin')
+      .select('*')
       .order('primary_email', { ascending: true })
 
     if (snapshotError) {
@@ -105,7 +106,10 @@ export async function POST() {
         continue
       }
 
-      const classification = classifyGoogleAccountEmail(user.primary_email)
+      const classification = resolveGoogleAccountType(
+        user.primary_email,
+        user.account_type_override
+      )
       if (classification.type === 'shared_account') {
         skippedShared++
         continue
@@ -131,6 +135,21 @@ export async function POST() {
             title: user.title,
             avatar_url: user.thumbnail_photo_url,
             timezone: null,
+            source_data: {
+              google_workspace: {
+                directory_snapshot: {
+                  google_user_id: user.google_user_id,
+                  primary_email: user.primary_email,
+                  full_name: user.full_name,
+                  title: user.title,
+                  org_unit_path: user.org_unit_path,
+                  is_admin: user.is_admin,
+                  is_suspended: user.is_suspended,
+                  is_deleted: user.is_deleted,
+                  thumbnail_photo_url: user.thumbnail_photo_url,
+                },
+              },
+            },
           })
           .select('id')
           .single()

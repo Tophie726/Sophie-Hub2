@@ -36,6 +36,7 @@ export type {
   GoogleFormConnectorConfig,
   BigQueryConnectorConfig,
   SlackConnectorConfig,
+  GoogleWorkspaceConnectorConfig,
   ApiConnectorConfig,
   CsvConnectorConfig,
   // Metadata
@@ -59,6 +60,7 @@ export {
   isGoogleFormConfig,
   isBigQueryConfig,
   isSlackConfig,
+  isGoogleWorkspaceConfig,
   isApiConfig,
   isCsvConfig,
 } from './types'
@@ -89,6 +91,7 @@ export {
 export { GoogleSheetsConnector, googleSheetsConnector } from './google-sheets'
 export { BigQueryConnector, bigQueryConnector, UNIFIED_VIEWS } from './bigquery'
 export { SlackConnector, slackConnector } from './slack'
+export { GoogleWorkspaceConnector, googleWorkspaceConnector } from './google-workspace'
 
 // =============================================================================
 // Auto-Register Connectors
@@ -98,6 +101,7 @@ import { registerConnector } from './registry'
 import { googleSheetsConnector } from './google-sheets'
 import { bigQueryConnector } from './bigquery'
 import { slackConnector } from './slack'
+import { googleWorkspaceConnector } from './google-workspace'
 
 // Register connectors on module load
 // This ensures they're available immediately when the module is imported
@@ -115,6 +119,12 @@ try {
 
 try {
   registerConnector(slackConnector)
+} catch {
+  // Already registered (module was imported multiple times)
+}
+
+try {
+  registerConnector(googleWorkspaceConnector)
 } catch {
   // Already registered (module was imported multiple times)
 }

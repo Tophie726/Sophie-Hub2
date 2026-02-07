@@ -1,8 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import { Loader2, CheckCircle2, XCircle, MessageSquare } from 'lucide-react'
+import { Loader2, CheckCircle2, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { SlackIcon } from '@/components/icons/slack-icon'
 
 interface SlackConnectionCardProps {
   onConnected?: () => void
@@ -39,8 +40,8 @@ export function SlackConnectionCard({ onConnected }: SlackConnectionCardProps) {
   return (
     <div className="rounded-lg border p-6 space-y-4">
       <div className="flex items-center gap-3">
-        <div className="h-10 w-10 rounded-lg bg-purple-500/10 flex items-center justify-center">
-          <MessageSquare className="h-5 w-5 text-purple-600" />
+        <div className="h-10 w-10 rounded-lg bg-[#611f69]/10 flex items-center justify-center">
+          <SlackIcon className="h-5 w-5 text-[#611f69]" />
         </div>
         <div>
           <h3 className="font-semibold">Slack Connection</h3>

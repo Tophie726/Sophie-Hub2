@@ -43,6 +43,8 @@ interface DirectoryUser {
   is_admin: boolean
   account_type?: 'person' | 'shared_account'
   account_type_reason?: string
+  account_type_override?: 'person' | 'shared_account' | null
+  account_type_overridden?: boolean
   title: string | null
   thumbnail_photo_url: string | null
   // Mapping info (joined from API)
@@ -77,6 +79,7 @@ export function GWSStaffMapping() {
   const [filter, setFilter] = useState<FilterType>('all')
   const [selectedStaff, setSelectedStaff] = useState<Record<string, string>>({})
   const [savingUserId, setSavingUserId] = useState<string | null>(null)
+  const [classificationSavingUserId, setClassificationSavingUserId] = useState<string | null>(null)
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
   const [error, setError] = useState<string | null>(null)
   const [syncStatus, setSyncStatus] = useState<{
@@ -621,6 +624,73 @@ export function GWSStaffMapping() {
     }
   }
 
+  async function handleSetAccountTypeOverride(
+    googleUserId: string,
+    accountTypeOverride: 'auto' | 'person' | 'shared_account'
+  ) {
+    setClassificationSavingUserId(googleUserId)
+    try {
+      const res = await fetch('/api/google-workspace/users/classification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          google_user_id: googleUserId,
+          account_type_override: accountTypeOverride,
+        }),
+      })
+      if (!res.ok) {
+        const json = await res.json().catch(() => null)
+        throw new Error(json?.error?.message || 'Failed to update account type')
+      }
+
+      const json = await res.json()
+      const updated = json.data as {
+        account_type: 'person' | 'shared_account'
+        account_type_reason: string
+        account_type_overridden: boolean
+        account_type_override: 'person' | 'shared_account' | null
+      }
+
+      setDirectoryUsers(prev =>
+        prev.map(u =>
+          u.google_user_id === googleUserId
+            ? {
+                ...u,
+                account_type: updated.account_type,
+                account_type_reason: updated.account_type_reason,
+                account_type_overridden: updated.account_type_overridden,
+                account_type_override: updated.account_type_override,
+              }
+            : u
+        )
+      )
+
+      if (updated.account_type === 'shared_account') {
+        setSelectedStaff(prev => {
+          const next = { ...prev }
+          delete next[googleUserId]
+          return next
+        })
+      }
+
+      const statusRes = await fetch('/api/google-workspace/sync/status')
+      if (statusRes.ok) {
+        const statusJson = await statusRes.json()
+        setSyncStatus(normalizeSyncStatus(statusJson.data))
+      }
+
+      toast.success(
+        accountTypeOverride === 'auto'
+          ? 'Account type reset to auto'
+          : `Account set to ${accountTypeOverride === 'person' ? 'person' : 'shared inbox'}`
+      )
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to update account type')
+    } finally {
+      setClassificationSavingUserId(null)
+    }
+  }
+
   const isLoading = isLoadingUsers || isLoadingStaff
 
   if (isLoading) {
@@ -798,6 +868,7 @@ export function GWSStaffMapping() {
         ) : (
           visibleUsers.map((user) => {
             const isSaving = savingUserId === user.google_user_id
+            const isClassificationSaving = classificationSavingUserId === user.google_user_id
             const selectedId = selectedStaff[user.google_user_id]
 
             return (
@@ -841,6 +912,11 @@ export function GWSStaffMapping() {
                         Shared inbox
                       </span>
                     )}
+                    {user.account_type_overridden && (
+                      <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-purple-500/10 text-purple-500 flex-shrink-0">
+                        Override
+                      </span>
+                    )}
                     {user.is_suspended && (
                       <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-red-500/10 text-red-500 flex-shrink-0">
                         Suspended
@@ -864,6 +940,25 @@ export function GWSStaffMapping() {
 
                 {/* Actions */}
                 <div className="flex items-center gap-2 flex-shrink-0">
+                  <Select
+                    value={user.account_type_override || 'auto'}
+                    onValueChange={(v) =>
+                      handleSetAccountTypeOverride(
+                        user.google_user_id,
+                        v as 'auto' | 'person' | 'shared_account'
+                      )
+                    }
+                    disabled={isClassificationSaving}
+                  >
+                    <SelectTrigger className="w-[130px] h-8 text-sm">
+                      <SelectValue placeholder="Type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="auto">Auto</SelectItem>
+                      <SelectItem value="person">Person</SelectItem>
+                      <SelectItem value="shared_account">Shared</SelectItem>
+                    </SelectContent>
+                  </Select>
                   {user.is_mapped ? (
                     <Button
                       variant="ghost"

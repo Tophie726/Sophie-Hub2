@@ -31,21 +31,25 @@
 - Scope:
 - Deliverables:
 - Validation tests:
+- UI/design checks (if UI in scope, using emil-design-engineering):
 
 ### Phase 2: Sync Engine
 - Scope:
 - Deliverables:
 - Validation tests:
+- UI/design checks (if UI in scope, using emil-design-engineering):
 
 ### Phase 3: Analytics
 - Scope:
 - Deliverables:
 - Validation tests:
+- UI/design checks (if UI in scope, using emil-design-engineering):
 
 ### Phase 4: Operational Readiness
 - Scope:
 - Deliverables:
 - Validation tests:
+- UI/design checks (if UI in scope, using emil-design-engineering):
 
 ## F) Agent-Team Plan
 ### Wave 1

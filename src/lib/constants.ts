@@ -22,6 +22,8 @@ export const CACHE = {
   USAGE_TTL: 60 * 60 * 1000,
   /** Slack users/channels cache (5 min) */
   SLACK_TTL: 5 * 60 * 1000,
+  /** Google Workspace directory cache (10 min) - directory changes infrequently */
+  GOOGLE_WORKSPACE_TTL: 10 * 60 * 1000,
 } as const
 
 // =============================================================================

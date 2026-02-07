@@ -58,7 +58,7 @@ export async function GET(request: Request) {
     let query = supabase
       .from('staff')
       .select(
-        'id, staff_code, full_name, email, role, department, title, status, max_clients, current_client_count, services, hire_date, created_at',
+        'id, staff_code, full_name, email, role, department, title, status, max_clients, current_client_count, services, hire_date, avatar_url, timezone, created_at',
         { count: 'exact' }
       )
 

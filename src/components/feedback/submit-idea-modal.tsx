@@ -2,7 +2,7 @@
 
 /* eslint-disable @next/next/no-img-element */
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Lightbulb, Loader2, Upload, X, Edit2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -23,6 +23,8 @@ interface SubmitIdeaModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onSuccess?: () => void
+  initialTitle?: string
+  initialDescription?: string
 }
 
 /**
@@ -30,13 +32,25 @@ interface SubmitIdeaModalProps {
  * Used in the Feedback Center (Ideas tab) - no bug/question options.
  * Supports optional image upload (no auto-screenshot since this is Ideas, not bugs).
  */
-export function SubmitIdeaModal({ open, onOpenChange, onSuccess }: SubmitIdeaModalProps) {
+export function SubmitIdeaModal({
+  open,
+  onOpenChange,
+  onSuccess,
+  initialTitle,
+  initialDescription,
+}: SubmitIdeaModalProps) {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [screenshot, setScreenshot] = useState<string | null>(null)
   const [showEditor, setShowEditor] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    if (initialTitle) setTitle(initialTitle)
+    if (initialDescription) setDescription(initialDescription)
+  }, [open, initialTitle, initialDescription])
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]

@@ -12,6 +12,11 @@ import {
   Sparkles,
   ChevronDown,
   AlertCircle,
+  Users,
+  UserCheck,
+  UserX,
+  Bot,
+  Download,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -24,6 +29,9 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
+import { ShimmerGrid } from '@/components/ui/shimmer-grid'
+
+type SlackUserType = 'member' | 'multi_channel_guest' | 'single_channel_guest' | 'bot' | 'deactivated' | 'connect'
 
 interface SlackUser {
   id: string
@@ -31,9 +39,14 @@ interface SlackUser {
   display_name: string
   email: string | null
   image: string | null
+  image_72: string | null
+  title: string | null
+  timezone: string | null
+  tz_label: string | null
   staff_id: string | null
   staff_name: string | null
   is_mapped: boolean
+  user_type: SlackUserType
 }
 
 interface StaffMember {
@@ -42,8 +55,34 @@ interface StaffMember {
   email: string
 }
 
+interface Breakdown {
+  member: number
+  multi_channel_guest: number
+  single_channel_guest: number
+  bot: number
+  deactivated: number
+  connect: number
+}
+
 const easeOut: [number, number, number, number] = [0.22, 1, 0.36, 1]
 const PAGE_SIZE = 30
+
+const USER_TYPE_CONFIG: Record<SlackUserType, { label: string; color: string; shortLabel: string }> = {
+  member: { label: 'Member', color: 'bg-blue-500/10 text-blue-700 dark:text-blue-400', shortLabel: 'Member' },
+  multi_channel_guest: { label: 'Multi-Channel Guest', color: 'bg-amber-500/10 text-amber-700 dark:text-amber-400', shortLabel: 'MC Guest' },
+  single_channel_guest: { label: 'Single-Channel Guest', color: 'bg-orange-500/10 text-orange-700 dark:text-orange-400', shortLabel: 'SC Guest' },
+  bot: { label: 'Bot', color: 'bg-gray-500/10 text-gray-500', shortLabel: 'Bot' },
+  deactivated: { label: 'Deactivated', color: 'bg-red-500/10 text-red-500', shortLabel: 'Deactivated' },
+  connect: { label: 'Slack Connect', color: 'bg-purple-500/10 text-purple-700 dark:text-purple-400', shortLabel: 'Connect' },
+}
+
+type FilterType = 'all' | 'mapped' | 'unmapped' | SlackUserType
+
+function isStaffMappable(user: SlackUser): boolean {
+  return user.user_type === 'member' ||
+    user.user_type === 'multi_channel_guest' ||
+    user.user_type === 'single_channel_guest'
+}
 
 export function SlackStaffMapping() {
   const [slackUsers, setSlackUsers] = useState<SlackUser[]>([])
@@ -52,11 +91,13 @@ export function SlackStaffMapping() {
   const [isLoadingStaff, setIsLoadingStaff] = useState(true)
   const [isAutoMatching, setIsAutoMatching] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
-  const [filter, setFilter] = useState<'all' | 'mapped' | 'unmapped'>('all')
+  const [filter, setFilter] = useState<FilterType>('all')
   const [selectedStaff, setSelectedStaff] = useState<Record<string, string>>({})
   const [savingUserId, setSavingUserId] = useState<string | null>(null)
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
   const [error, setError] = useState<string | null>(null)
+  const [breakdown, setBreakdown] = useState<Breakdown | null>(null)
+  const [isEnriching, setIsEnriching] = useState(false)
 
   // Fetch Slack users
   useEffect(() => {
@@ -66,6 +107,7 @@ export function SlackStaffMapping() {
         if (!res.ok) throw new Error('Failed to fetch Slack users')
         const json = await res.json()
         setSlackUsers(json.data?.users || [])
+        setBreakdown(json.data?.breakdown || null)
       } catch (err) {
         console.error('Error fetching Slack users:', err)
         setError('Failed to load Slack users. Is the bot token configured?')
@@ -105,17 +147,39 @@ export function SlackStaffMapping() {
   const filteredUsers = useMemo(() => {
     let filtered = slackUsers
 
+    // Default view: show only users that are mappable to staff.
+    if (filter === 'all' || filter === 'mapped' || filter === 'unmapped') {
+      filtered = filtered.filter(isStaffMappable)
+    }
+
     if (searchQuery) {
       const q = searchQuery.toLowerCase()
       filtered = filtered.filter(u =>
         u.name.toLowerCase().includes(q) ||
         u.email?.toLowerCase().includes(q) ||
+        u.title?.toLowerCase().includes(q) ||
+        u.timezone?.toLowerCase().includes(q) ||
         u.staff_name?.toLowerCase().includes(q)
       )
     }
 
     if (filter === 'mapped') filtered = filtered.filter(u => u.is_mapped)
     if (filter === 'unmapped') filtered = filtered.filter(u => !u.is_mapped)
+
+    // User type filters
+    if (filter === 'member' || filter === 'multi_channel_guest' || filter === 'single_channel_guest' || filter === 'bot' || filter === 'deactivated' || filter === 'connect') {
+      filtered = slackUsers.filter(u => u.user_type === filter)
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase()
+        filtered = filtered.filter(u =>
+          u.name.toLowerCase().includes(q) ||
+          u.email?.toLowerCase().includes(q) ||
+          u.title?.toLowerCase().includes(q) ||
+          u.timezone?.toLowerCase().includes(q) ||
+          u.staff_name?.toLowerCase().includes(q)
+        )
+      }
+    }
 
     return filtered
   }, [slackUsers, searchQuery, filter])
@@ -124,7 +188,10 @@ export function SlackStaffMapping() {
 
   const visibleUsers = filteredUsers.slice(0, visibleCount)
   const hasMore = visibleCount < filteredUsers.length
-  const mappedCount = slackUsers.filter(u => u.is_mapped).length
+
+  // Users considered mappable to staff records.
+  const activeUsers = slackUsers.filter(isStaffMappable)
+  const mappedCount = activeUsers.filter(u => u.is_mapped).length
 
   // Auto-match by email
   async function handleAutoMatch() {
@@ -137,11 +204,27 @@ export function SlackStaffMapping() {
 
       toast.success(`Matched ${result.matched} staff members by email`)
 
+      // Auto-enrich profiles for newly matched staff
+      if (result.matched > 0) {
+        try {
+          const enrichRes = await fetch('/api/slack/enrich-staff', { method: 'POST' })
+          if (enrichRes.ok) {
+            const enrichJson = await enrichRes.json()
+            if (enrichJson.data?.enriched > 0) {
+              toast.success(`Enriched ${enrichJson.data.enriched} staff profiles`)
+            }
+          }
+        } catch {
+          // Non-critical — enrichment can be retried manually
+        }
+      }
+
       // Refresh users list
       const refreshRes = await fetch('/api/slack/users')
       if (refreshRes.ok) {
         const refreshJson = await refreshRes.json()
         setSlackUsers(refreshJson.data?.users || [])
+        setBreakdown(refreshJson.data?.breakdown || null)
       }
     } catch (err) {
       console.error('Auto-match error:', err)
@@ -195,7 +278,6 @@ export function SlackStaffMapping() {
     if (!user?.staff_id) return
 
     try {
-      // Need to find the mapping ID — fetch from mappings endpoint
       const mappingsRes = await fetch('/api/slack/mappings/staff')
       if (!mappingsRes.ok) throw new Error('Failed to fetch mappings')
       const mappingsJson = await mappingsRes.json()
@@ -219,15 +301,39 @@ export function SlackStaffMapping() {
     }
   }
 
+  // Enrich staff profiles from Slack
+  async function handleEnrichStaff() {
+    setIsEnriching(true)
+    try {
+      const res = await fetch('/api/slack/enrich-staff', { method: 'POST' })
+      if (!res.ok) throw new Error('Enrichment failed')
+      const json = await res.json()
+      const result = json.data
+
+      toast.success(`Enriched ${result.enriched} staff profiles (avatar, timezone, title)`)
+    } catch (err) {
+      console.error('Enrich error:', err)
+      toast.error('Failed to enrich staff profiles')
+    } finally {
+      setIsEnriching(false)
+    }
+  }
+
   const isLoading = isLoadingUsers || isLoadingStaff
 
   if (isLoading) {
     return (
-      <div className="flex items-center gap-3 py-8 text-muted-foreground">
-        <Loader2 className="h-5 w-5 animate-spin" />
-        <span className="text-sm">
-          {isLoadingUsers ? 'Fetching Slack users...' : 'Loading staff members...'}
-        </span>
+      <div className="space-y-4">
+        {/* Breakdown shimmer */}
+        <div className="rounded-lg border p-4 space-y-3">
+          <ShimmerGrid variant="grid" rows={1} columns={6} cellHeight={48} gap={12} />
+        </div>
+        {/* Stats & filter bar shimmer */}
+        <ShimmerGrid variant="grid" rows={1} columns={3} cellHeight={28} gap={8} />
+        {/* User list shimmer */}
+        <div className="border rounded-lg overflow-hidden">
+          <ShimmerGrid variant="list" rows={8} cellHeight={52} gap={0} />
+        </div>
       </div>
     )
   }
@@ -243,29 +349,111 @@ export function SlackStaffMapping() {
 
   return (
     <div className="space-y-4">
-      {/* Stats */}
+      {/* Workspace Breakdown */}
+      {breakdown && (
+        <div className="rounded-lg border p-4 space-y-3">
+          <h4 className="text-sm font-medium text-muted-foreground">Workspace Breakdown</h4>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+            <BreakdownCard
+              icon={<Users className="h-4 w-4" />}
+              label="Members"
+              count={breakdown.member}
+              color="text-blue-600"
+              bgColor="bg-blue-500/10"
+              active={filter === 'member'}
+              onClick={() => setFilter(filter === 'member' ? 'all' : 'member')}
+            />
+            <BreakdownCard
+              icon={<UserCheck className="h-4 w-4" />}
+              label="MC Guests"
+              sublabel="Multi-channel"
+              count={breakdown.multi_channel_guest}
+              color="text-amber-600"
+              bgColor="bg-amber-500/10"
+              active={filter === 'multi_channel_guest'}
+              onClick={() => setFilter(filter === 'multi_channel_guest' ? 'all' : 'multi_channel_guest')}
+            />
+            <BreakdownCard
+              icon={<UserX className="h-4 w-4" />}
+              label="SC Guests"
+              sublabel="Single-channel"
+              count={breakdown.single_channel_guest}
+              color="text-orange-600"
+              bgColor="bg-orange-500/10"
+              active={filter === 'single_channel_guest'}
+              onClick={() => setFilter(filter === 'single_channel_guest' ? 'all' : 'single_channel_guest')}
+            />
+            {breakdown.connect > 0 && (
+              <BreakdownCard
+                icon={<Link2 className="h-4 w-4" />}
+                label="Connect"
+                sublabel="External orgs"
+                count={breakdown.connect}
+                color="text-purple-600"
+                bgColor="bg-purple-500/10"
+                active={filter === 'connect'}
+                onClick={() => setFilter(filter === 'connect' ? 'all' : 'connect')}
+              />
+            )}
+            <BreakdownCard
+              icon={<Bot className="h-4 w-4" />}
+              label="Bots"
+              count={breakdown.bot}
+              color="text-gray-500"
+              bgColor="bg-gray-500/10"
+              active={filter === 'bot'}
+              onClick={() => setFilter(filter === 'bot' ? 'all' : 'bot')}
+            />
+            <BreakdownCard
+              icon={<UserX className="h-4 w-4" />}
+              label="Deactivated"
+              count={breakdown.deactivated}
+              color="text-red-500"
+              bgColor="bg-red-500/10"
+              active={filter === 'deactivated'}
+              onClick={() => setFilter(filter === 'deactivated' ? 'all' : 'deactivated')}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Mapping Stats */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Badge variant="outline">{slackUsers.length} Slack users</Badge>
+          <Badge variant="outline">{activeUsers.length} active users</Badge>
           <Badge variant="secondary" className="bg-green-500/10 text-green-600">
             {mappedCount} mapped
           </Badge>
           <Badge variant="secondary" className="bg-orange-500/10 text-orange-600">
-            {slackUsers.length - mappedCount} unmapped
+            {activeUsers.length - mappedCount} unmapped
           </Badge>
         </div>
-        <Button
-          onClick={handleAutoMatch}
-          disabled={isAutoMatching}
-          variant="outline"
-          size="sm"
-        >
-          {isAutoMatching ? (
-            <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Matching...</>
-          ) : (
-            <><Sparkles className="h-4 w-4 mr-2" />Auto-match by email</>
-          )}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            onClick={handleEnrichStaff}
+            disabled={isEnriching || mappedCount === 0}
+            variant="outline"
+            size="sm"
+          >
+            {isEnriching ? (
+              <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Enriching...</>
+            ) : (
+              <><Download className="h-4 w-4 mr-2" />Enrich profiles</>
+            )}
+          </Button>
+          <Button
+            onClick={handleAutoMatch}
+            disabled={isAutoMatching}
+            variant="outline"
+            size="sm"
+          >
+            {isAutoMatching ? (
+              <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Matching...</>
+            ) : (
+              <><Sparkles className="h-4 w-4 mr-2" />Auto-match by email</>
+            )}
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -279,14 +467,20 @@ export function SlackStaffMapping() {
             className="pl-9 h-9"
           />
         </div>
-        <Select value={filter} onValueChange={(v) => setFilter(v as typeof filter)}>
-          <SelectTrigger className="w-[140px] h-9">
+        <Select value={filter} onValueChange={(v) => setFilter(v as FilterType)}>
+          <SelectTrigger className="w-[180px] h-9">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All</SelectItem>
+            <SelectItem value="all">All Active</SelectItem>
             <SelectItem value="mapped">Mapped</SelectItem>
             <SelectItem value="unmapped">Unmapped</SelectItem>
+            <SelectItem value="member">Members Only</SelectItem>
+            <SelectItem value="multi_channel_guest">MC Guests</SelectItem>
+            <SelectItem value="single_channel_guest">SC Guests</SelectItem>
+            <SelectItem value="connect">Slack Connect</SelectItem>
+            <SelectItem value="bot">Bots</SelectItem>
+            <SelectItem value="deactivated">Deactivated</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -301,6 +495,7 @@ export function SlackStaffMapping() {
           visibleUsers.map((user) => {
             const isSaving = savingUserId === user.id
             const selectedId = selectedStaff[user.id]
+            const typeConfig = USER_TYPE_CONFIG[user.user_type]
 
             return (
               <motion.div
@@ -312,6 +507,9 @@ export function SlackStaffMapping() {
                 transition={{ duration: 0.2, ease: easeOut }}
                 className="flex items-center gap-3 p-3 hover:bg-muted/50"
               >
+                {/* Avatar */}
+                <SlackAvatar name={user.name} src={user.image_72 || user.image} />
+
                 {/* User info */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
@@ -321,9 +519,26 @@ export function SlackStaffMapping() {
                       <Unlink className="h-4 w-4 text-muted-foreground/50 flex-shrink-0" />
                     )}
                     <span className="font-medium truncate">{user.name}</span>
+                    {user.title && (
+                      <span className="text-xs text-muted-foreground truncate hidden lg:inline">
+                        {user.title}
+                      </span>
+                    )}
+                    {user.user_type !== 'member' && (
+                      <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full flex-shrink-0 ${typeConfig.color}`}>
+                        {typeConfig.shortLabel}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 ml-6">
                     {user.email && (
-                      <span className="text-xs text-muted-foreground truncate hidden md:inline">
+                      <span className="text-xs text-muted-foreground truncate">
                         {user.email}
+                      </span>
+                    )}
+                    {user.timezone && (
+                      <span className="text-[10px] text-muted-foreground/70 truncate hidden md:inline" title={user.tz_label || user.timezone}>
+                        {user.timezone}
                       </span>
                     )}
                   </div>
@@ -346,7 +561,7 @@ export function SlackStaffMapping() {
                       <X className="h-4 w-4 mr-1" />
                       Remove
                     </Button>
-                  ) : (
+                  ) : isStaffMappable(user) ? (
                     <>
                       <Select
                         value={selectedId || ''}
@@ -380,6 +595,8 @@ export function SlackStaffMapping() {
                         )}
                       </Button>
                     </>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">Not mappable</span>
                   )}
                 </div>
               </motion.div>
@@ -400,7 +617,71 @@ export function SlackStaffMapping() {
 
       <p className="text-xs text-muted-foreground">
         Map Slack users to Sophie Hub staff members. Use auto-match to bulk-match by email address.
+        Slack Connect users are external by definition and are marked &ldquo;Not mappable&rdquo;.
+        After mapping, click &ldquo;Enrich profiles&rdquo; to pull avatars, titles, and timezones into staff records.
       </p>
+    </div>
+  )
+}
+
+/** Clickable breakdown card */
+function BreakdownCard({
+  icon,
+  label,
+  sublabel,
+  count,
+  color,
+  bgColor,
+  active,
+  onClick,
+}: {
+  icon: React.ReactNode
+  label: string
+  sublabel?: string
+  count: number
+  color: string
+  bgColor: string
+  active: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex items-center gap-2.5 rounded-lg p-2.5 text-left transition-all ${
+        active ? 'ring-2 ring-primary/50 ' + bgColor : 'hover:' + bgColor
+      }`}
+    >
+      <div className={`flex h-8 w-8 items-center justify-center rounded-md ${bgColor} ${color} flex-shrink-0`}>
+        {icon}
+      </div>
+      <div className="min-w-0">
+        <p className="text-lg font-bold tabular-nums leading-tight">{count}</p>
+        <p className="text-[11px] text-muted-foreground leading-tight truncate">{label}</p>
+        {sublabel && <p className="text-[10px] text-muted-foreground/70 leading-tight">{sublabel}</p>}
+      </div>
+    </button>
+  )
+}
+
+/** Slack user avatar with initial fallback */
+function SlackAvatar({ name, src }: { name: string; src: string | null }) {
+  if (src) {
+    return (
+      // Slack CDN images — external domain, using img intentionally
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={src}
+        alt=""
+        className="h-8 w-8 rounded-full flex-shrink-0 object-cover"
+      />
+    )
+  }
+
+  return (
+    <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+      <span className="text-xs font-medium text-muted-foreground">
+        {name.charAt(0).toUpperCase()}
+      </span>
     </div>
   )
 }

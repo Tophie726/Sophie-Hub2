@@ -91,6 +91,7 @@ export async function POST() {
 
       const existing = existingByGoogleId.get(user.id)
       const primaryPhone = user.phones?.find(p => p.primary)?.value || user.phones?.[0]?.value || null
+      const aliases = Array.from(new Set([...(user.aliases || []), ...(user.nonEditableAliases || [])]))
 
       // Detect drift events
       if (!existing) {
@@ -136,20 +137,38 @@ export async function POST() {
             google_user_id: user.id,
             primary_email: user.primaryEmail,
             full_name: user.name.fullName,
+            given_name: user.name.givenName || null,
+            family_name: user.name.familyName || null,
             org_unit_path: user.orgUnitPath || null,
             is_suspended: user.suspended,
             is_deleted: false, // User is present in pull → not deleted
             is_admin: user.isAdmin,
+            is_delegated_admin: user.isDelegatedAdmin || false,
             title: user.title || null,
             phone: primaryPhone,
             thumbnail_photo_url: user.thumbnailPhotoUrl || null,
-            aliases: [...(user.aliases || []), ...(user.nonEditableAliases || [])],
+            aliases,
+            non_editable_aliases: user.nonEditableAliases || [],
+            creation_time: user.creationTime || null,
+            last_login_time: user.lastLoginTime || null,
+            department: user.department || null,
+            cost_center: user.costCenter || null,
+            location: user.location || null,
+            manager_email: user.managerEmail || null,
+            raw_profile: user.rawProfile || null,
             last_seen_at: now,
           },
           { onConflict: 'google_user_id' }
         )
 
       if (error) {
+        if (isSnapshotSchemaError(error)) {
+          return apiSuccess({
+            success: false,
+            error: 'Google Workspace snapshot table is missing or out of date. Please apply migration: supabase/migrations/20260212_google_workspace_snapshot_extended.sql',
+            tombstoned: 0,
+          })
+        }
         console.error(`Failed to upsert snapshot for ${user.primaryEmail}:`, error)
       } else {
         upserted++

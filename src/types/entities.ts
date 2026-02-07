@@ -210,6 +210,8 @@ export interface StaffListItem {
   current_client_count: number | null
   services: string[] | null
   hire_date: string | null
+  avatar_url: string | null
+  timezone: string | null
   created_at: string
 }
 
@@ -283,6 +285,8 @@ export interface StaffDetail {
   hire_date: string | null
   probation_end_date: string | null
   departure_date: string | null
+  avatar_url: string | null
+  timezone: string | null
   dashboard_url: string | null
   calendly_url: string | null
   source_data?: Record<string, unknown> | null

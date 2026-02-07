@@ -672,6 +672,7 @@ Screenshots are shown in:
 
 ## Future Enhancements
 
+- [ ] **My Feedback History** — "Mine" filter on `/feedback` so users can see their own submissions, comments, drawings, and votes in one place. Currently feedback is visible but not filterable by submitter. (Nice to have)
 - [ ] Public changelog page
 - [ ] Slack notifications for new bugs
 - [ ] AI-suggested duplicate detection

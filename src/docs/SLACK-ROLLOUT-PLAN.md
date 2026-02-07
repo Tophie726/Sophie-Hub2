@@ -1000,3 +1000,117 @@ Additional follow-up fixes were applied after validating the first pass:
 Validation:
 - `next lint` on Slack sync/analytics files: pass
 - `tsc --noEmit`: only pre-existing test-file Zod mismatch remains
+
+---
+
+## Phase 4: Operational Readiness
+
+### 4.0 Slack App Setup (Manual — Owner: Tomas)
+
+Prerequisites before any live testing:
+1. Create Slack app at https://api.slack.com/apps
+2. Add 8 bot scopes: `channels:read`, `channels:history`, `channels:join`, `groups:read`, `groups:history`, `users:read`, `users:read.email`, `users.profile:read`
+3. Install to workspace, copy `xoxb-...` token
+4. Set env vars: `SLACK_BOT_TOKEN` + `CRON_SECRET` (local + Vercel)
+5. Verify: `POST /api/slack/test-connection` returns workspace name
+
+### 4.1 Pre-flight Build Verification
+
+| Check | Status | Notes |
+|-------|--------|-------|
+| `npm run build` | PASS | All 16 Slack routes + 8 UI components compile clean |
+| `tsc --noEmit` | PASS | Only pre-existing test-file Zod mismatch (unrelated) |
+| Auth on all routes | PASS | All API routes use `requireRole(ROLES.ADMIN)` or CRON_SECRET |
+| Zod validation | PASS | Recompute + mapping routes validate input schemas |
+| Cron config | PASS | `vercel.json`: sync every 5min, analytics daily 6am UTC |
+
+### 4.2 First Live Test Sequence
+
+Once Slack app is set up, execute in order:
+
+1. **Test connection**: `POST /api/slack/test-connection` — should return workspace name
+2. **Staff auto-match**: `POST /api/slack/mappings/staff/auto-match` — map staff by email
+3. **Channel auto-match**: `POST /api/slack/mappings/channels/auto-match` — map channels by naming convention
+4. **Single channel sync**: `POST /api/slack/sync/channel/{channelId}` — test one channel
+5. **Full sync run**: `POST /api/slack/sync/start` — creates run, cron picks it up
+6. **Monitor progress**: `GET /api/slack/sync/status` — poll until complete
+7. **Compute analytics**: `POST /api/slack/analytics/recompute` — for last 7 days
+8. **View dashboard**: UI Sync + Analytics tabs should show live data
+
+### 4.3 Operational Go/No-Go Checklist
+
+| Criterion | Required | Status |
+|-----------|----------|--------|
+| Bot connects to workspace | Yes | Pending setup |
+| Staff auto-match finds matches | Yes | Pending |
+| Channel auto-match finds matches | Yes | Pending |
+| Single channel sync completes without error | Yes | Pending |
+| Full sync run processes all mapped channels | Yes | Pending |
+| Sync UI shows live progress | Yes | Pending |
+| Analytics recompute produces metrics | Yes | Pending |
+| Cron endpoints accept CRON_SECRET auth | Yes | Pending |
+| No P1 errors in Vercel function logs | Yes | Pending |
+
+### 4.4 File Inventory (Phase 1-3 Complete)
+
+**Backend (5 files, ~2,300 lines)**
+- `src/lib/slack/client.ts` (353 lines) — Rate-limited Slack API wrapper
+- `src/lib/slack/types.ts` (276 lines) — All Slack TypeScript types
+- `src/lib/slack/sync.ts` (840 lines) — Two-watermark sync engine with CAS lease
+- `src/lib/slack/analytics.ts` (353 lines) — Response time algorithm (7-day lookahead)
+- `src/lib/slack/analytics-utils.ts` (157 lines) — Pure math utilities
+
+**API Routes (17 files)**
+- `api/slack/test-connection` — POST: verify bot token
+- `api/slack/channels` — GET: list workspace channels (cached)
+- `api/slack/users` — GET: list workspace users (cached)
+- `api/slack/mappings/staff` — GET/POST/DELETE: staff-Slack mappings
+- `api/slack/mappings/staff/auto-match` — POST: bulk email match
+- `api/slack/enrich-staff` — POST: enrich mapped staff profiles from Slack
+- `api/slack/mappings/channels` — GET/POST/DELETE: channel-partner mappings
+- `api/slack/mappings/channels/auto-match` — POST: bulk name pattern match
+- `api/slack/sync/start` — POST: create sync run
+- `api/slack/sync/status` — GET: run progress + per-channel state
+- `api/slack/sync/channel/[channelId]` — POST: single channel sync
+- `api/slack/analytics/response-times` — GET: filterable metrics
+- `api/slack/analytics/channel-activity` — GET: message volume
+- `api/slack/analytics/summary` — GET: dashboard KPIs
+- `api/slack/analytics/recompute` — POST: trigger recomputation
+- `api/cron/slack-sync` — POST: 5-min chunked sync cron
+- `api/cron/slack-analytics` — POST: daily rolling analytics cron
+
+**UI Components (8 files)**
+- `slack-connection-card.tsx` — Bot connection test
+- `slack-staff-mapping.tsx` — Staff-Slack user mapping table
+- `slack-channel-mapping.tsx` — Channel-partner mapping table
+- `slack-mapping-hub.tsx` — 4-tab hub (Staff/Channels/Sync/Analytics)
+- `slack-sync-status.tsx` — Sync progress with per-channel table
+- `slack-analytics-summary.tsx` — KPI cards + sparklines + leaderboard
+- `slack-response-chart.tsx` — Recharts line + stacked bar
+- `slack-channel-heatmap.tsx` — GitHub-style activity heatmap
+
+**Migrations (5 files)**
+- `20260207_slack_sync_state.sql` — Channel sync tracking
+- `20260207_staff_profile_enrichment.sql` — Add avatar_url, timezone to staff
+- `20260208_slack_sync_state_v2.sql` — Add oldest_ts, bot_is_member
+- `20260208_slack_messages.sql` — Message metadata + sync runs
+- `20260210_slack_response_metrics.sql` — Pre-computed daily metrics
+
+**Docs (2 files)**
+- `src/docs/SLACK-CONNECTOR.md` — Full technical docs
+- `src/docs/SLACK-ROLLOUT-PLAN.md` — This file
+
+---
+
+### 4.5 UI Polish Pass (2026-02-07)
+
+| Change | Files | Detail |
+|--------|-------|--------|
+| Slack brand icon | `components/icons/slack-icon.tsx` (new), `category-hub.tsx`, `slack-connection-card.tsx` | Replaced generic MessageSquare with official Slack hashtag logo SVG. Brand color `#611f69`. |
+| User type classification | `lib/slack/types.ts` | Added `SlackUserType`, `classifySlackUser()`, `userTypeLabel()`. Types: member, multi_channel_guest, single_channel_guest, bot, deactivated, connect. |
+| Users API breakdown | `api/slack/users/route.ts` | Returns `breakdown` object with counts per user type + profile fields (`image_72`, `title`, `timezone`) used for enrichment. |
+| Staff mapping breakdown cards | `components/slack/slack-staff-mapping.tsx` | Clickable workspace breakdown cards (Members, MC Guests, SC Guests, Connect, Bots, Deactivated). Cards act as filters. User type badges inline per row. Bots/deactivated show "Not mappable". |
+| Staff profile enrichment | `api/slack/enrich-staff/route.ts`, `components/slack/slack-staff-mapping.tsx` | Added `Enrich profiles` action to backfill avatar/title/timezone/phone for mapped staff; preserves existing title/phone when already set. |
+| CategoryCard icon type | `category-card.tsx` | `icon` prop now accepts `LucideIcon | React.ComponentType` for custom SVG icons. |
+| Connector listUsers options | `lib/connectors/slack.ts` | `listUsers()` now accepts `include_bots`/`include_deleted` options (bypasses cache when used). |
+| Docs update | `SLACK-CONNECTOR.md` §3.2-3.3 | Added user type classification and staff profile enrichment documentation. |
