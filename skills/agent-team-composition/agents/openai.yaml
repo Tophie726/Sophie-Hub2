@@ -1,0 +1,4 @@
+interface:
+  display_name: "Agent Team Composition"
+  short_description: "Plan Claude agent teams with clear task ownership."
+  default_prompt: "Use $agent-team-composition to design a practical multi-agent execution plan for this codebase task."
