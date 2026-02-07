@@ -1,0 +1,4 @@
+interface:
+  display_name: "Connector Rollout Playbook"
+  short_description: "Plan and run new data connector rollouts with agent teams"
+  default_prompt: "Use this skill to plan and deliver a new data connector with mapping, sync, analytics, and operational readiness phases."
