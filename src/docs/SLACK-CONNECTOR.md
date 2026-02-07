@@ -81,6 +81,30 @@ function getBotToken(): string {
 | `groups:history` | Read message history in private channels |
 | `channels:join` | Join public channels to read history |
 
+### 3.1 Slack App Setup Checklist (Business Plan)
+
+Use this checklist to set up the Slack API connection end-to-end:
+
+1. Create a Slack app in your workspace (`https://api.slack.com/apps` -> `Create New App`).
+2. Under `OAuth & Permissions`, add the bot scopes listed above.
+3. Install the app to the workspace and copy the Bot User OAuth token (`xoxb-...`).
+4. Add environment variables:
+   - `.env.local`: `SLACK_BOT_TOKEN=...`
+   - Deployment env: `SLACK_BOT_TOKEN=...`
+   - Deployment env: `CRON_SECRET=...` (for `/api/cron/slack-sync` and `/api/cron/slack-analytics`)
+5. Verify connection from UI/API (`POST /api/slack/test-connection`).
+6. Seed channel/user mappings from Slack screens.
+7. Trigger first sync with `POST /api/slack/sync/start`.
+8. Monitor progress with `GET /api/slack/sync/status`.
+
+Private/public channel behavior:
+- Public channels: bot can self-join (`channels:join`) and then read history.
+- Private channels: bot must be explicitly invited by a workspace admin.
+
+Business-plan notes:
+- This connector does not require Enterprise-only APIs (Audit Logs/Discovery).
+- Message availability depends on channel membership timing and workspace retention settings.
+
 ---
 
 ## 4. Database Tables
@@ -103,7 +127,9 @@ CREATE TABLE slack_sync_state (
   channel_name TEXT NOT NULL,
   partner_id UUID REFERENCES partners(id),
   latest_ts TEXT,                    -- Slack timestamp of most recent synced message
+  oldest_ts TEXT,                    -- Oldest synced boundary (historical backfill)
   is_backfill_complete BOOLEAN DEFAULT false,
+  bot_is_member BOOLEAN DEFAULT false,
   message_count INTEGER DEFAULT 0,
   last_synced_at TIMESTAMPTZ,
   error TEXT,
@@ -120,17 +146,23 @@ Stores message metadata (NOT content) for response time calculation.
 CREATE TABLE slack_messages (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   channel_id TEXT NOT NULL,
-  message_ts TEXT NOT NULL,           -- Slack's unique message timestamp
-  thread_ts TEXT,                     -- Parent thread timestamp (NULL if top-level)
-  sender_slack_id TEXT NOT NULL,
-  sender_staff_id UUID,              -- Resolved via entity_external_ids
-  sender_is_staff BOOLEAN NOT NULL,  -- true = Sophie staff, false = partner/external
-  created_at TIMESTAMPTZ NOT NULL,   -- Parsed from message_ts
+  message_ts TEXT NOT NULL,                    -- Slack's unique message timestamp
+  thread_ts TEXT,                              -- Parent thread timestamp (NULL if top-level)
+  sender_slack_id TEXT,                        -- user sender id (nullable for bot/system)
+  sender_bot_id TEXT,                          -- bot sender id (nullable)
+  sender_type TEXT NOT NULL CHECK (sender_type IN ('user', 'bot', 'system')),
+  sender_staff_id UUID,                        -- Resolved via entity_external_ids for user senders
+  sender_is_staff BOOLEAN NOT NULL DEFAULT false,
+  is_bot BOOLEAN NOT NULL DEFAULT false,
+  posted_at TIMESTAMPTZ NOT NULL,              -- Parsed from message_ts
 
-  CONSTRAINT slack_messages_unique UNIQUE(channel_id, message_ts)
+  CONSTRAINT slack_messages_unique UNIQUE(channel_id, message_ts),
+  CONSTRAINT slack_messages_sender_present CHECK (
+    sender_slack_id IS NOT NULL OR sender_bot_id IS NOT NULL OR sender_type = 'system'
+  )
 );
 
-CREATE INDEX idx_slack_messages_channel_ts ON slack_messages(channel_id, created_at);
+CREATE INDEX idx_slack_messages_channel_ts ON slack_messages(channel_id, posted_at);
 CREATE INDEX idx_slack_messages_thread ON slack_messages(thread_ts) WHERE thread_ts IS NOT NULL;
 ```
 
@@ -143,19 +175,26 @@ CREATE TABLE slack_response_metrics (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   channel_id TEXT NOT NULL,
   partner_id UUID NOT NULL,
-  pod_leader_id UUID,                -- Staff member responsible
-  period_start DATE NOT NULL,
-  period_end DATE NOT NULL,
-  avg_response_minutes REAL,
-  median_response_minutes REAL,
-  p95_response_minutes REAL,
-  total_partner_messages INTEGER,
-  total_staff_replies INTEGER,
-  messages_without_reply INTEGER,
-  created_at TIMESTAMPTZ DEFAULT now(),
+  pod_leader_id UUID,                         -- staff attributed at compute time
+  date DATE NOT NULL,                         -- daily aggregate grain
+  total_messages INTEGER NOT NULL DEFAULT 0,
+  staff_messages INTEGER NOT NULL DEFAULT 0,
+  partner_messages INTEGER NOT NULL DEFAULT 0,
+  avg_response_time_mins NUMERIC(10,2),
+  median_response_time_mins NUMERIC(10,2),
+  p95_response_time_mins NUMERIC(10,2),
+  max_response_time_mins NUMERIC(10,2),
+  min_response_time_mins NUMERIC(10,2),
+  responses_under_30m INTEGER NOT NULL DEFAULT 0,
+  responses_30m_to_1h INTEGER NOT NULL DEFAULT 0,
+  responses_1h_to_4h INTEGER NOT NULL DEFAULT 0,
+  responses_4h_to_24h INTEGER NOT NULL DEFAULT 0,
+  responses_over_24h INTEGER NOT NULL DEFAULT 0,
+  unanswered_count INTEGER NOT NULL DEFAULT 0,
+  computed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  algorithm_version INTEGER NOT NULL DEFAULT 1,
 
-  CONSTRAINT slack_response_metrics_unique
-    UNIQUE(channel_id, period_start, period_end)
+  CONSTRAINT slack_response_metrics_unique UNIQUE(channel_id, date)
 );
 ```
 

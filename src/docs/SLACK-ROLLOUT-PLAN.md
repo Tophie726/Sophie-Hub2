@@ -986,3 +986,17 @@ All 7 findings addressed in a single pass:
 | P3 | Unused vars removed | Removed `threadStaffCount` and `threadPartnerCount` from analytics.ts. |
 
 TypeScript compiles clean (only pre-existing test file error).
+
+#### Codex verification (round 2)
+
+Additional follow-up fixes were applied after validating the first pass:
+
+| # | Fix | Detail |
+|---|-----|--------|
+| P1-4a | No offset advancement on lease-loss | `processChunk()` now advances `next_channel_offset` by `processedChannels`, not fetched channels, preventing skipped channels when chunk aborts mid-loop. |
+| P1-4b | Lease heartbeat made ownership-safe | `renewLeaseHeartbeat()` now uses CAS on `worker_lease_expires_at` (`eq(expectedLeaseExpiresAt)`), and progress updates are also CAS-gated. Stale workers cannot advance run state. |
+| P3-2 | Lint regression fixed in sync engine | Removed unused `supabase` binding in `syncChannel`; Slack-phase lint now passes cleanly. |
+
+Validation:
+- `next lint` on Slack sync/analytics files: pass
+- `tsc --noEmit`: only pre-existing test-file Zod mismatch remains

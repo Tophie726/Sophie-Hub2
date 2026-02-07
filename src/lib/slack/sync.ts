@@ -247,7 +247,6 @@ export async function syncChannel(
   channel: ChannelSyncStateV2,
   staffLookup: Map<string, string>
 ): Promise<SyncChannelResult> {
-  const supabase = getAdminClient()
   const result: SyncChannelResult = {
     channel_id: channel.channel_id,
     channel_name: channel.channel_name,
@@ -256,20 +255,14 @@ export async function syncChannel(
   }
 
   try {
-    // 1. Attempt to join the channel if not already a member.
+    // 1. Best-effort public join if channel is not yet marked as accessible.
     //    bot_is_member is only set to true AFTER a successful history read (below),
     //    not after the join attempt, because join can succeed on public channels
     //    but fail silently on private channels where the bot has no access.
     if (!channel.bot_is_member) {
       const membership = await ensureBotMembership(channel.channel_id, false)
-      if (!membership.isMember) {
-        // Public join failed — try private fallback (just logs warning)
-        const privateMembership = await ensureBotMembership(channel.channel_id, true)
-        if (!privateMembership.isMember) {
-          result.error = privateMembership.error || 'Bot cannot access channel'
-          await updateSyncState(channel.channel_id, { error: result.error })
-          return result
-        }
+      if (!membership.isMember && membership.error) {
+        console.warn(`joinChannel warning for ${channel.channel_id}: ${membership.error}`)
       }
       // Do NOT set bot_is_member here — wait for successful history read
     }
@@ -299,7 +292,11 @@ export async function syncChannel(
     result.messages_synced = totalInserted
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err)
-    result.error = errorMsg
+    if (errorMsg.includes('not_in_channel')) {
+      result.error = 'Bot is not in this channel. For private channels, invite the bot and retry.'
+    } else {
+      result.error = errorMsg
+    }
     console.error(`syncChannel ${channel.channel_id} (${channel.channel_name}) error:`, errorMsg)
     await updateSyncState(channel.channel_id, { error: errorMsg })
   }
@@ -542,30 +539,36 @@ export async function acquireLease(runId: string): Promise<Record<string, unknow
 }
 
 /**
- * Renew the lease heartbeat for an active sync run.
- * Called between channels to prevent lease expiry during long chunks.
- * Returns true if heartbeat was renewed, false if lease was lost.
+ * Renew lease using compare-and-swap on worker_lease_expires_at.
+ * Returns the new lease expiry timestamp if renewed, null if lease was lost.
  */
-async function renewLeaseHeartbeat(runId: string): Promise<boolean> {
+async function renewLeaseHeartbeat(
+  runId: string,
+  expectedLeaseExpiresAt: string | null
+): Promise<string | null> {
+  if (!expectedLeaseExpiresAt) return null
+
   const supabase = getAdminClient()
+  const newLeaseExpiresAt = new Date(
+    Date.now() + LEASE_DURATION_MINUTES * 60 * 1000
+  ).toISOString()
 
   const { data, error } = await supabase
     .from('slack_sync_runs')
     .update({
-      worker_lease_expires_at: new Date(
-        Date.now() + LEASE_DURATION_MINUTES * 60 * 1000
-      ).toISOString(),
+      worker_lease_expires_at: newLeaseExpiresAt,
       last_heartbeat_at: new Date().toISOString(),
     })
     .eq('id', runId)
     .eq('status', 'running')
-    .select('id')
+    .eq('worker_lease_expires_at', expectedLeaseExpiresAt)
+    .select('worker_lease_expires_at')
     .single()
 
   if (error || !data) {
-    return false
+    return null
   }
-  return true
+  return String(data.worker_lease_expires_at || newLeaseExpiresAt)
 }
 
 /**
@@ -590,6 +593,7 @@ export async function processChunk(runId: string): Promise<SyncRunSummary> {
   }
 
   const offset = (run.next_channel_offset as number) || 0
+  let leaseExpiresAt = (run.worker_lease_expires_at as string | null) || null
 
   // 2. Fetch mapped channels using stable ordering by channel_id (immutable).
   //    Using last_synced_at would cause offset drift because we mutate it per-channel
@@ -625,17 +629,20 @@ export async function processChunk(runId: string): Promise<SyncRunSummary> {
   let syncedCount = 0
   let failedCount = 0
   let totalMessages = 0
+  let processedChannels = 0
+  let leaseLost = false
 
   for (const ch of channels) {
     const channel = ch as unknown as ChannelSyncStateV2
 
-    // Renew lease heartbeat before each channel to prevent expiry during long chunks.
-    // If lease renewal fails (another worker claimed it), abort immediately.
-    const leaseRenewed = await renewLeaseHeartbeat(runId)
-    if (!leaseRenewed) {
+    // Renew lease heartbeat with CAS before each channel to prove ownership.
+    const renewedLease = await renewLeaseHeartbeat(runId, leaseExpiresAt)
+    if (!renewedLease) {
       console.warn(`Lease lost for run ${runId} — aborting chunk mid-processing`)
+      leaseLost = true
       break
     }
+    leaseExpiresAt = renewedLease
 
     const result = await syncChannel(channel, staffLookup)
 
@@ -645,6 +652,7 @@ export async function processChunk(runId: string): Promise<SyncRunSummary> {
     } else {
       failedCount++
     }
+    processedChannels++
 
     console.log(
       `syncChannel: ${channel.channel_name} — ${result.success ? 'OK' : 'FAIL'}` +
@@ -653,29 +661,39 @@ export async function processChunk(runId: string): Promise<SyncRunSummary> {
   }
 
   // 5. Update run progress
-  const newOffset = offset + channels.length
+  const newOffset = offset + processedChannels
   const totalChannels = (run.total_channels as number) || 0
-  const isComplete = newOffset >= totalChannels || channels.length < CHANNELS_PER_CHUNK
+  const isComplete = !leaseLost && (newOffset >= totalChannels || channels.length < CHANNELS_PER_CHUNK)
+  const skippedCount = channels.length - processedChannels
 
-  await supabase
-    .from('slack_sync_runs')
-    .update({
-      synced_channels: ((run.synced_channels as number) || 0) + syncedCount,
-      failed_channels: ((run.failed_channels as number) || 0) + failedCount,
-      total_messages_synced: ((run.total_messages_synced as number) || 0) + totalMessages,
-      next_channel_offset: newOffset,
-      last_heartbeat_at: new Date().toISOString(),
-      ...(isComplete
-        ? { status: 'completed', completed_at: new Date().toISOString() }
-        : {}),
-    })
-    .eq('id', runId)
+  // Persist progress only while we still hold the lease.
+  // CAS on worker_lease_expires_at prevents a stale worker from advancing offset.
+  if (!leaseLost && leaseExpiresAt) {
+    const { error: progressError } = await supabase
+      .from('slack_sync_runs')
+      .update({
+        synced_channels: ((run.synced_channels as number) || 0) + syncedCount,
+        failed_channels: ((run.failed_channels as number) || 0) + failedCount,
+        total_messages_synced: ((run.total_messages_synced as number) || 0) + totalMessages,
+        next_channel_offset: newOffset,
+        last_heartbeat_at: new Date().toISOString(),
+        ...(isComplete
+          ? { status: 'completed', completed_at: new Date().toISOString() }
+          : {}),
+      })
+      .eq('id', runId)
+      .eq('worker_lease_expires_at', leaseExpiresAt)
+
+    if (progressError) {
+      console.warn(`Progress update skipped for run ${runId} (lease changed): ${progressError.message}`)
+    }
+  }
 
   const summary: SyncRunSummary = {
     run_id: runId,
     channels_synced: syncedCount,
     channels_failed: failedCount,
-    channels_skipped: 0,
+    channels_skipped: skippedCount,
     total_messages: totalMessages,
     duration_ms: Date.now() - startTime,
   }
