@@ -114,11 +114,14 @@ export async function computeResponseTimes(
   const windowEnd = new Date(anchorDate + 'T00:00:00Z')
   windowEnd.setUTCDate(windowEnd.getUTCDate() + LOOKAHEAD_DAYS + 1)
 
-  // Fetch messages for the lookahead window
+  // Fetch messages for the lookahead window.
+  // Exclude system events (sender_type='system') — they are not conversational
+  // and should not be counted as partner messages or affect response times.
   const { data: rawMessages, error } = await supabase
     .from('slack_messages')
-    .select('message_ts, thread_ts, sender_is_staff, is_bot, posted_at')
+    .select('message_ts, thread_ts, sender_is_staff, is_bot, sender_type, posted_at')
     .eq('channel_id', channelId)
+    .neq('sender_type', 'system')
     .gte('posted_at', anchorDayStart.toISOString())
     .lt('posted_at', windowEnd.toISOString())
     .order('posted_at', { ascending: true })
@@ -157,15 +160,11 @@ export async function computeResponseTimes(
   // Process each thread independently
   let threadResponseTimes: number[] = []
   let threadUnanswered = 0
-  let threadStaffCount = 0
-  let threadPartnerCount = 0
 
   for (const threadMsgs of Array.from(threadMap.values())) {
     const threadResult = processMessageSequence(threadMsgs, anchorDayStart, anchorDayEnd)
     threadResponseTimes = threadResponseTimes.concat(threadResult.responseTimes)
     threadUnanswered += threadResult.unanswered
-    threadStaffCount += threadResult.staffCount
-    threadPartnerCount += threadResult.partnerCount
   }
 
   // Merge results

@@ -49,6 +49,23 @@ const SKIP_SUBTYPES = new Set([
   'channel_unarchive',
   'pinned_item',
   'unpinned_item',
+  'message_changed',
+  'message_deleted',
+  'me_message',
+  'file_share',
+  'tombstone',
+  'thread_broadcast',
+  'bot_add',
+  'bot_remove',
+  'channel_convert',
+  'ekm_access_denied',
+  'group_join',
+  'group_leave',
+  'group_topic',
+  'group_purpose',
+  'group_name',
+  'group_archive',
+  'group_unarchive',
 ])
 
 /** Batch size for message upserts */
@@ -239,12 +256,14 @@ export async function syncChannel(
   }
 
   try {
-    // 1. Ensure bot membership
+    // 1. Attempt to join the channel if not already a member.
+    //    bot_is_member is only set to true AFTER a successful history read (below),
+    //    not after the join attempt, because join can succeed on public channels
+    //    but fail silently on private channels where the bot has no access.
     if (!channel.bot_is_member) {
-      // We don't have is_private in sync_state directly; try joining and handle errors
       const membership = await ensureBotMembership(channel.channel_id, false)
       if (!membership.isMember) {
-        // Try as private channel
+        // Public join failed — try private fallback (just logs warning)
         const privateMembership = await ensureBotMembership(channel.channel_id, true)
         if (!privateMembership.isMember) {
           result.error = privateMembership.error || 'Bot cannot access channel'
@@ -252,11 +271,7 @@ export async function syncChannel(
           return result
         }
       }
-      // Update bot_is_member
-      await supabase
-        .from('slack_sync_state')
-        .update({ bot_is_member: true })
-        .eq('channel_id', channel.channel_id)
+      // Do NOT set bot_is_member here — wait for successful history read
     }
 
     let totalInserted = 0
@@ -271,10 +286,12 @@ export async function syncChannel(
       totalInserted += backfillInserted
     }
 
-    // 4. Update sync state on success
+    // 4. Update sync state on success.
+    //    Set bot_is_member = true now that we've confirmed successful history reads.
     await updateSyncState(channel.channel_id, {
       message_count: (channel.message_count || 0) + totalInserted,
       last_synced_at: new Date().toISOString(),
+      bot_is_member: true,
       error: null,
     })
 
@@ -314,6 +331,8 @@ async function syncForward(
   let maxTs: string | null = null
   let pagesProcessed = 0
 
+  let forwardFullyConsumed = false
+
   do {
     const page = await getChannelHistoryPage(channel.channel_id, {
       oldest,
@@ -335,10 +354,19 @@ async function syncForward(
 
     cursor = page.next_cursor
     pagesProcessed++
+
+    // If there are no more pages, we fully consumed the forward window
+    if (!cursor) {
+      forwardFullyConsumed = true
+    }
   } while (cursor && pagesProcessed < MAX_PAGES_PER_CHANNEL)
 
-  // Update latest_ts if we found newer messages
-  if (maxTs) {
+  // CRITICAL: Only advance latest_ts if forward window was fully consumed.
+  // If we hit the page cap with more pages remaining, advancing the watermark
+  // would create an unrecoverable gap — messages between old latest_ts and
+  // the new max would never be fetched. Instead, leave latest_ts unchanged
+  // so the next sync run resumes from the same point.
+  if (maxTs && forwardFullyConsumed) {
     await supabase
       .from('slack_sync_state')
       .update({ latest_ts: maxTs })
@@ -514,6 +542,33 @@ export async function acquireLease(runId: string): Promise<Record<string, unknow
 }
 
 /**
+ * Renew the lease heartbeat for an active sync run.
+ * Called between channels to prevent lease expiry during long chunks.
+ * Returns true if heartbeat was renewed, false if lease was lost.
+ */
+async function renewLeaseHeartbeat(runId: string): Promise<boolean> {
+  const supabase = getAdminClient()
+
+  const { data, error } = await supabase
+    .from('slack_sync_runs')
+    .update({
+      worker_lease_expires_at: new Date(
+        Date.now() + LEASE_DURATION_MINUTES * 60 * 1000
+      ).toISOString(),
+      last_heartbeat_at: new Date().toISOString(),
+    })
+    .eq('id', runId)
+    .eq('status', 'running')
+    .select('id')
+    .single()
+
+  if (error || !data) {
+    return false
+  }
+  return true
+}
+
+/**
  * Process a chunk of channels for a sync run.
  * Called by the cron handler each invocation.
  */
@@ -536,12 +591,14 @@ export async function processChunk(runId: string): Promise<SyncRunSummary> {
 
   const offset = (run.next_channel_offset as number) || 0
 
-  // 2. Fetch mapped channels ordered by last_synced_at (oldest first)
+  // 2. Fetch mapped channels using stable ordering by channel_id (immutable).
+  //    Using last_synced_at would cause offset drift because we mutate it per-channel
+  //    within the same run. channel_id is immutable so offset pagination is safe.
   const { data: channels, error: channelsError } = await supabase
     .from('slack_sync_state')
     .select('*')
     .not('partner_id', 'is', null)
-    .order('last_synced_at', { ascending: true, nullsFirst: true })
+    .order('channel_id', { ascending: true })
     .range(offset, offset + CHANNELS_PER_CHUNK - 1)
 
   if (channelsError || !channels) {
@@ -564,13 +621,22 @@ export async function processChunk(runId: string): Promise<SyncRunSummary> {
   // 3. Build staff lookup once for the chunk
   const staffLookup = await buildStaffLookup()
 
-  // 4. Process channels sequentially (rate-limited)
+  // 4. Process channels sequentially (rate-limited) with heartbeat renewal
   let syncedCount = 0
   let failedCount = 0
   let totalMessages = 0
 
   for (const ch of channels) {
     const channel = ch as unknown as ChannelSyncStateV2
+
+    // Renew lease heartbeat before each channel to prevent expiry during long chunks.
+    // If lease renewal fails (another worker claimed it), abort immediately.
+    const leaseRenewed = await renewLeaseHeartbeat(runId)
+    if (!leaseRenewed) {
+      console.warn(`Lease lost for run ${runId} — aborting chunk mid-processing`)
+      break
+    }
+
     const result = await syncChannel(channel, staffLookup)
 
     if (result.success) {

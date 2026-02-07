@@ -946,3 +946,43 @@ _Updated by agents as work is completed. Each entry records what was done, files
 4. Consider pagination on analytics routes if date ranges grow large
 
 **Team execution:** 4 agents, 18 tasks, all completed. sync-engine + analytics-engine ran in parallel (Wave 1), api-dev consumed both (Wave 2), ui-dev consumed api-dev (Wave 3). Total wall-clock: ~25 minutes.
+
+### Codex Strict Review (2026-02-07, post-commit `6812ed2`)
+
+Status: **Not ready to deploy**. Core routing and UI are in place, but several correctness issues remain in sync/analytics logic.
+
+| Severity | Finding | Location | Why it matters |
+|---|---|---|---|
+| P1 | Forward sync can skip messages permanently when page-capped | `src/lib/slack/sync.ts` (`MAX_PAGES_PER_CHANNEL`, forward loop, `latest_ts` update) | If >10 forward pages exist, watermark still advances to newest fetched message and leaves an unrecoverable gap. |
+| P1 | Offset paging over mutable `last_synced_at` can skip channels in-run | `src/lib/slack/sync.ts` (channel query `order('last_synced_at')` + `range(offset, ...)` + per-channel `last_synced_at` update) | Sorting key changes while offset cursor is advancing; channel ordering drifts and rows may be skipped. |
+| P1 | Private-channel membership fallback can set `bot_is_member = true` without verification | `src/lib/slack/sync.ts` (`ensureBotMembership` + fallback path + state update) | A channel can be marked accessible even when bot is not actually in the channel; repeated sync behavior becomes misleading. |
+| P1 | Lease heartbeat is not renewed during chunk work | `src/lib/slack/sync.ts` (lease claim at start/end only) | Long chunks can exceed lease TTL and allow overlapping workers to process the same run. |
+| P2 | Staff remap does not unclassify old Slack user attribution | `src/app/api/slack/mappings/staff/route.ts` (update-existing mapping path) | Reassignment can leave stale historical staff attribution on the previous Slack user. |
+| P2 | Event filtering is too narrow for analytics semantics | `src/lib/slack/sync.ts` and `src/lib/slack/analytics.ts` | Non-conversation/system edit/delete events may still be treated as partner messages. |
+| P3 | Slack-phase lint is not clean | `src/lib/slack/analytics.ts` (unused vars) | `threadStaffCount` and `threadPartnerCount` are assigned but unused. |
+
+#### Required follow-up before go/no-go
+
+1. Fix forward watermark advancement so it only advances when the forward window is fully consumed.
+2. Replace mutable-sort offset chunking with a stable run snapshot/keyset strategy.
+3. Rework membership verification to only set `bot_is_member` after a successful history read or explicit membership proof.
+4. Add mid-chunk lease heartbeat renewal and abort if lease can no longer be held.
+5. On mapping remap, unclassify previous `external_id` rows before reclassifying the new one.
+6. Expand sync subtype filtering and/or add explicit `sender_type='system'` exclusion in analytics.
+7. Remove/fix unused variables so lint passes on Slack files.
+
+#### Fixes applied (post-review)
+
+All 7 findings addressed in a single pass:
+
+| # | Fix | Detail |
+|---|-----|--------|
+| P1-1 | Forward watermark only advances when fully consumed | Added `forwardFullyConsumed` flag; `latest_ts` only updated when no pages remain (`!cursor`). Page-capped runs resume from same watermark. |
+| P1-2 | Stable channel ordering for offset pagination | Changed `ORDER BY last_synced_at` to `ORDER BY channel_id` (immutable). Offset no longer drifts as channels are synced. |
+| P1-3 | bot_is_member set only after successful sync | Removed `bot_is_member=true` from join attempt; moved to `updateSyncState` success path after history reads complete. |
+| P1-4 | Lease heartbeat renewed between channels | Added `renewLeaseHeartbeat()` called before each channel. Returns false if lease lost → aborts chunk immediately. |
+| P2-1 | Staff remap unclassifies old Slack user first | POST handler now fetches old `external_id`; if it differs from new `slack_user_id`, calls `unclassifyStaffMessages(oldId, staffId)` before reclassifying new. |
+| P2-2 | System events excluded from analytics | Expanded `SKIP_SUBTYPES` with 17 additional subtypes (message_changed/deleted, file_share, me_message, etc.). Analytics query adds `.neq('sender_type', 'system')`. |
+| P3 | Unused vars removed | Removed `threadStaffCount` and `threadPartnerCount` from analytics.ts. |
+
+TypeScript compiles clean (only pre-existing test file error).

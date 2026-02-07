@@ -108,7 +108,7 @@ export async function POST(request: NextRequest) {
     // if present, otherwise insert a new row. This avoids delete-then-insert races.
     const { data: existingRows, error: existingError } = await supabase
       .from('entity_external_ids')
-      .select('id')
+      .select('id, external_id')
       .eq('entity_type', 'staff')
       .eq('entity_id', staff_id)
       .eq('source', 'slack_user')
@@ -165,6 +165,17 @@ export async function POST(request: NextRequest) {
       .update({ slack_id: slack_user_id })
       .eq('id', staff_id)
 
+    // If this was a remap (existing mapping changed to a different Slack user),
+    // unclassify messages from the OLD Slack user before reclassifying the new one.
+    // This prevents stale staff attribution on the previous Slack user's messages.
+    let messagesUnclassifiedOld = 0
+    if (existingRows && existingRows.length > 0) {
+      const oldExternalId = existingRows[0].external_id
+      if (oldExternalId && oldExternalId !== slack_user_id) {
+        messagesUnclassifiedOld = await unclassifyStaffMessages(oldExternalId, staff_id)
+      }
+    }
+
     // Reclassify existing messages from this Slack user as staff (Phase 2.6)
     const reclassified = await reclassifyStaffMessages(slack_user_id, staff_id)
 
@@ -176,6 +187,7 @@ export async function POST(request: NextRequest) {
         staff_name: staff.full_name,
       },
       messages_reclassified: reclassified,
+      messages_unclassified_old: messagesUnclassifiedOld,
     }, 201)
   } catch (error) {
     console.error('POST staff-slack mapping error:', error)
