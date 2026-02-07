@@ -57,10 +57,12 @@
   - `GET /api/google-workspace/sync/status` via `pending_staff_approvals`
 - Creating a staff mapping resolves the corresponding pending approval candidate.
 - Google Workspace “People” counts exclude shared inboxes and accounts mapped to inactive staff records.
+- First-run bootstrap route exists for empty `/staff` datasets:
+  - `POST /api/google-workspace/staff/bootstrap`
 
 ### Next Actions (Claude Handoff)
 
 1. Open `http://localhost:3000` and sign in with an admin account.
 2. Go to `/admin/data-enrichment` -> Google Workspace -> click **Test Connection**.
 3. If Google returns `Not Authorized`, switch `GOOGLE_WORKSPACE_ADMIN_EMAIL` to a confirmed Google Workspace Super Admin and retest after propagation.
-4. Run remaining smoke flow: `sync` -> `sync/status` -> `users` -> `auto-match` -> `enrich-staff`.
+4. Run remaining smoke flow: `sync` -> `sync/status` -> `users` -> `staff/bootstrap` (if staff is empty) -> `auto-match` -> `enrich-staff`.

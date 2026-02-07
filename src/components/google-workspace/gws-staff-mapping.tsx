@@ -17,6 +17,7 @@ import {
   UserX,
   Shield,
   RefreshCw,
+  UserPlus,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -71,6 +72,7 @@ export function GWSStaffMapping() {
   const [isAutoMatching, setIsAutoMatching] = useState(false)
   const [isEnriching, setIsEnriching] = useState(false)
   const [isSyncing, setIsSyncing] = useState(false)
+  const [isBootstrappingStaff, setIsBootstrappingStaff] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [filter, setFilter] = useState<FilterType>('all')
   const [selectedStaff, setSelectedStaff] = useState<Record<string, string>>({})
@@ -428,6 +430,86 @@ export function GWSStaffMapping() {
     }
   }
 
+  // Bootstrap staff records from Google Workspace person accounts
+  async function handleBootstrapStaffFromDirectory() {
+    setIsBootstrappingStaff(true)
+    try {
+      const res = await fetch('/api/google-workspace/staff/bootstrap', { method: 'POST' })
+      if (!res.ok) throw new Error('Staff bootstrap failed')
+      const json = await res.json()
+      const result = json.data
+
+      toast.success(
+        `Created ${result.created_staff || 0} staff, linked ${result.mapped_existing_staff || 0} existing`
+      )
+
+      // Refresh users with mappings
+      const refreshRes = await fetch('/api/google-workspace/users')
+      const mappingsRes = await fetch('/api/google-workspace/mappings/staff')
+      if (refreshRes.ok) {
+        const refreshJson = await refreshRes.json()
+        const mappingsJson = mappingsRes.ok ? await mappingsRes.json() : { data: { mappings: [] } }
+        const mappings = mappingsJson.data?.mappings || []
+        const mappingsByGoogleId = new Map(
+          mappings.map((m: { google_user_id: string; staff_id: string; staff_name: string | null; staff_avatar_url?: string | null }) => [
+            m.google_user_id,
+            m,
+          ])
+        )
+        const users = (refreshJson.data?.users || []).map((u: DirectoryUser) => {
+          const mapping = mappingsByGoogleId.get(u.google_user_id) as {
+            staff_id: string
+            staff_name: string | null
+            staff_avatar_url?: string | null
+          } | undefined
+          return {
+            ...u,
+            staff_id: mapping?.staff_id || null,
+            staff_name: mapping?.staff_name || null,
+            staff_avatar_url: mapping?.staff_avatar_url || null,
+            is_mapped: !!mapping,
+          }
+        })
+        setDirectoryUsers(users)
+      }
+
+      // Refresh staff list
+      const all: Array<{ id: string; full_name: string; email: string; status?: string | null }> = []
+      const pageSize = 100
+      let offset = 0
+      let hasMore = true
+      while (hasMore) {
+        const staffRes = await fetch(`/api/staff?limit=${pageSize}&offset=${offset}`)
+        if (!staffRes.ok) break
+        const staffJson = await staffRes.json()
+        const list = staffJson.data?.staff || staffJson.staff || []
+        all.push(...list)
+        hasMore = Boolean(staffJson.data?.has_more)
+        offset += pageSize
+      }
+      setStaffMembers(
+        all.map((s: { id: string; full_name: string; email: string; status?: string | null }) => ({
+          id: s.id,
+          full_name: s.full_name,
+          email: s.email,
+          status: s.status ?? null,
+        }))
+      )
+
+      // Refresh sync status
+      const statusRes = await fetch('/api/google-workspace/sync/status')
+      if (statusRes.ok) {
+        const statusJson = await statusRes.json()
+        setSyncStatus(normalizeSyncStatus(statusJson.data))
+      }
+    } catch (err) {
+      console.error('Staff bootstrap error:', err)
+      toast.error('Failed to seed staff from Google Workspace')
+    } finally {
+      setIsBootstrappingStaff(false)
+    }
+  }
+
   // Enrich staff from directory
   async function handleEnrichStaff() {
     setIsEnriching(true)
@@ -655,6 +737,19 @@ export function GWSStaffMapping() {
               <>
                 <Sparkles className="h-4 w-4 mr-2" />
                 Auto-match by email
+              </>
+            )}
+          </Button>
+          <Button onClick={handleBootstrapStaffFromDirectory} disabled={isBootstrappingStaff} variant="outline" size="sm">
+            {isBootstrappingStaff ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Seeding staff...
+              </>
+            ) : (
+              <>
+                <UserPlus className="h-4 w-4 mr-2" />
+                Seed Staff
               </>
             )}
           </Button>

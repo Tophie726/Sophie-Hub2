@@ -230,6 +230,20 @@ Notes:
 - Staff records with inactive lifecycle statuses (for example `departed`, `legacy_hidden`) are excluded from auto-match.
 - Unmatched person accounts are persisted to `staff_approval_queue` for admin review.
 
+### 5b. First-Run Bootstrap (Create Staff from Directory)
+
+```bash
+curl -X POST http://localhost:3000/api/google-workspace/staff/bootstrap \
+  -H "Cookie: <your-session-cookie>"
+```
+
+Use this when `/staff` is initially empty.
+
+Behavior:
+- Creates staff rows from Google person accounts (email as anchor).
+- Skips shared inboxes and suspended/deleted users.
+- Creates `google_workspace_user` mappings for created or existing-by-email staff.
+
 ### 6. Enrich Staff
 
 ```bash

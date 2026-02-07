@@ -341,7 +341,7 @@ Implementation should execute from this file only.
 
 ### Next Steps
 1. Follow `SETUP-GUIDE.md` to configure GCP service account + env vars
-2. Run smoke test sequence: test-connection -> sync -> sync/status -> users -> auto-match -> enrich-staff
+2. Run smoke test sequence: test-connection -> sync -> sync/status -> users -> staff/bootstrap (if staff is empty) -> auto-match -> enrich-staff
 3. Verify UI at `/admin/data-enrichment` -> Google Workspace card
 
 ### Post-Implementation Delta (2026-02-07)
@@ -353,3 +353,6 @@ Implementation should execute from this file only.
 - Pending approval counts now exposed in sync status (`pending_staff_approvals`) and surfaced in mapping UI.
 - Mapping create/delete flows now resolve or refresh approval queue state.
 - “People” counts now exclude shared inboxes and mapped records tied to inactive staff statuses.
+- Added first-run bootstrap endpoint:
+  - `POST /api/google-workspace/staff/bootstrap`
+  - creates staff records from Google person emails and immediately maps them.
