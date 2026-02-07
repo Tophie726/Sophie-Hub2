@@ -33,7 +33,7 @@ export async function GET() {
     // Get snapshot stats
     const { data: snapshot, error } = await supabase
       .from('google_workspace_directory_snapshot')
-      .select('google_user_id, is_suspended, is_deleted, last_seen_at, primary_email, account_type_override')
+      .select('google_user_id, is_suspended, is_deleted, last_seen_at, primary_email, account_type_override, full_name, org_unit_path, title')
 
     if (error) {
       if (isSnapshotSchemaError(error)) {
@@ -92,13 +92,21 @@ export async function GET() {
         !r.is_suspended &&
         !r.is_deleted &&
         !inactiveMappedGoogleUsers.has(r.google_user_id) &&
-        resolveGoogleAccountType(r.primary_email, r.account_type_override).type !== 'shared_account'
+        resolveGoogleAccountType(r.primary_email, r.account_type_override, {
+          fullName: r.full_name,
+          orgUnitPath: r.org_unit_path,
+          title: r.title,
+        }).type !== 'shared_account'
     ).length
     const activeShared = rows.filter(
       r =>
         !r.is_suspended &&
         !r.is_deleted &&
-        resolveGoogleAccountType(r.primary_email, r.account_type_override).type === 'shared_account'
+        resolveGoogleAccountType(r.primary_email, r.account_type_override, {
+          fullName: r.full_name,
+          orgUnitPath: r.org_unit_path,
+          title: r.title,
+        }).type === 'shared_account'
     ).length
     const suspended = rows.filter(r => r.is_suspended && !r.is_deleted).length
     const deleted = rows.filter(r => r.is_deleted).length

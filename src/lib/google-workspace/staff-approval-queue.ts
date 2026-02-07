@@ -81,7 +81,12 @@ export async function refreshGoogleWorkspaceStaffApprovalQueue() {
 
       const classification = resolveGoogleAccountType(
         u.primary_email,
-        u.account_type_override
+        u.account_type_override,
+        {
+          fullName: u.full_name,
+          orgUnitPath: u.org_unit_path,
+          title: u.title,
+        }
       )
       if (classification.type !== 'person') return false
 

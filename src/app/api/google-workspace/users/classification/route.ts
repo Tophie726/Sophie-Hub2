@@ -47,7 +47,9 @@ export async function POST(request: Request) {
         updated_at: new Date().toISOString(),
       })
       .eq('google_user_id', parsed.data.google_user_id)
-      .select('google_user_id, primary_email, account_type_override')
+      .select(
+        'google_user_id, primary_email, account_type_override, full_name, org_unit_path, title'
+      )
       .single()
 
     if (error) {
@@ -62,7 +64,11 @@ export async function POST(request: Request) {
       return ApiErrors.database()
     }
 
-    const resolved = resolveGoogleAccountType(data.primary_email, data.account_type_override)
+    const resolved = resolveGoogleAccountType(data.primary_email, data.account_type_override, {
+      fullName: data.full_name,
+      orgUnitPath: data.org_unit_path,
+      title: data.title,
+    })
     invalidateDirectoryUsersCache()
 
     return apiSuccess({

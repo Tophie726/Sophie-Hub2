@@ -108,7 +108,12 @@ export async function POST() {
 
       const classification = resolveGoogleAccountType(
         user.primary_email,
-        user.account_type_override
+        user.account_type_override,
+        {
+          fullName: user.full_name,
+          orgUnitPath: user.org_unit_path,
+          title: user.title,
+        }
       )
       if (classification.type === 'shared_account') {
         skippedShared++

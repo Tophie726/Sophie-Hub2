@@ -68,7 +68,12 @@ export async function GET() {
       const users = cached.map(user => {
         const classification = resolveGoogleAccountType(
           user.primary_email,
-          user.account_type_override
+          user.account_type_override,
+          {
+            fullName: user.full_name,
+            orgUnitPath: user.org_unit_path,
+            title: user.title,
+          }
         )
         return {
           ...user,
@@ -92,7 +97,12 @@ export async function GET() {
     const classifiedUsers = users.map(user => {
       const classification = resolveGoogleAccountType(
         user.primary_email,
-        user.account_type_override
+        user.account_type_override,
+        {
+          fullName: user.full_name,
+          orgUnitPath: user.org_unit_path,
+          title: user.title,
+        }
       )
       return {
         ...user,

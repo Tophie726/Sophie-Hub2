@@ -50,7 +50,11 @@ export async function POST() {
       gwsUsers
         .filter(
           u =>
-            resolveGoogleAccountType(u.primary_email, u.account_type_override).type ===
+            resolveGoogleAccountType(u.primary_email, u.account_type_override, {
+              fullName: u.full_name,
+              orgUnitPath: u.org_unit_path,
+              title: u.title,
+            }).type ===
             'shared_account'
         )
         .map(u => u.google_user_id)

@@ -8,6 +8,12 @@
 export type GoogleAccountType = 'person' | 'shared_account'
 export type GoogleAccountTypeOverride = GoogleAccountType | null
 
+interface GoogleAccountClassificationContext {
+  fullName?: string | null
+  orgUnitPath?: string | null
+  title?: string | null
+}
+
 const SHARED_KEYWORDS = [
   'admin',
   'audit',
@@ -38,17 +44,63 @@ const SHARED_KEYWORDS = [
   'compliance',
   'customer',
   'customerservice',
+  'customersuccess',
   'customer-service',
   'customer_service',
+  'leadgen',
+  'lead-gen',
+  'lead_gen',
+  'leadgeneration',
+  'lead-generation',
+  'lead_generation',
+  'bizdev',
+  'businessdev',
+  'business-development',
+  'business_development',
+  'growth',
+  'partnerships',
+  'procurement',
+  'comms',
   'noreply',
   'no-reply',
   'notifications',
-  'customersuccess',
   'brandmanager',
   'contentmanager',
 ]
 
 const PERSON_PATTERN = /^[a-z]+([._-][a-z]+)+$/i
+const HUMAN_FULL_NAME_PATTERN = /^[a-z]+(?:\s+[a-z'’-]+){1,2}$/i
+const SHARED_NAME_HINTS = [
+  'sophie society',
+  'lead gen',
+  'lead generation',
+  'support',
+  'customer service',
+  'customer success',
+  'audits',
+  'audit',
+  'operations',
+  'finance',
+  'admin',
+]
+const SHARED_ORG_UNIT_HINTS = [
+  'shared',
+  'inbox',
+  'group',
+  'service-account',
+  'service_account',
+  'serviceaccounts',
+  'aliases',
+  'systems',
+]
+const SHARED_TITLE_HINTS = [
+  'shared inbox',
+  'team inbox',
+  'support inbox',
+  'distribution list',
+  'service account',
+  'group mailbox',
+]
 
 export function classifyGoogleAccountEmail(email: string): {
   type: GoogleAccountType
@@ -79,7 +131,8 @@ export function classifyGoogleAccountEmail(email: string): {
 
 export function resolveGoogleAccountType(
   email: string,
-  override: GoogleAccountTypeOverride | undefined
+  override: GoogleAccountTypeOverride | undefined,
+  context?: GoogleAccountClassificationContext
 ): { type: GoogleAccountType; reason: string; overridden: boolean } {
   if (override === 'person' || override === 'shared_account') {
     return {
@@ -90,6 +143,52 @@ export function resolveGoogleAccountType(
   }
 
   const auto = classifyGoogleAccountEmail(email)
+  if (auto.type === 'shared_account') {
+    return {
+      type: auto.type,
+      reason: auto.reason,
+      overridden: false,
+    }
+  }
+
+  const fullName = (context?.fullName || '').trim().toLowerCase()
+  const orgUnitPath = (context?.orgUnitPath || '').trim().toLowerCase()
+  const title = (context?.title || '').trim().toLowerCase()
+
+  if (orgUnitPath && SHARED_ORG_UNIT_HINTS.some(h => orgUnitPath.includes(h))) {
+    return {
+      type: 'shared_account',
+      reason: 'shared_org_unit_hint',
+      overridden: false,
+    }
+  }
+
+  if (title && SHARED_TITLE_HINTS.some(h => title.includes(h))) {
+    return {
+      type: 'shared_account',
+      reason: 'shared_title_hint',
+      overridden: false,
+    }
+  }
+
+  if (fullName) {
+    if (SHARED_NAME_HINTS.some(h => fullName.includes(h))) {
+      return {
+        type: 'shared_account',
+        reason: 'shared_name_hint',
+        overridden: false,
+      }
+    }
+
+    if (HUMAN_FULL_NAME_PATTERN.test(fullName) && PERSON_PATTERN.test(email.split('@')[0]?.toLowerCase() || '')) {
+      return {
+        type: 'person',
+        reason: 'human_name_pattern',
+        overridden: false,
+      }
+    }
+  }
+
   return {
     type: auto.type,
     reason: auto.reason,

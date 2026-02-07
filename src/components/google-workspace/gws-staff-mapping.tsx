@@ -299,6 +299,19 @@ export function GWSStaffMapping() {
   const mappedCount = countablePersonUsers.filter(u => u.is_mapped).length
   const unmappedCount = countablePersonUsers.filter(u => !u.is_mapped).length
 
+  function autoAccountTypeLabel(user: DirectoryUser): string {
+    return user.account_type === 'shared_account' ? 'Auto (Shared)' : 'Auto (Person)'
+  }
+
+  function formatClassificationReason(reason?: string): string {
+    if (!reason) return ''
+    return reason
+      .replace(/manual_override:/g, 'manual override ')
+      .replace(/_/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+  }
+
   // Sync directory
   async function handleSync() {
     setIsSyncing(true)
@@ -930,6 +943,12 @@ export function GWSStaffMapping() {
                         {user.org_unit_path}
                       </span>
                     )}
+                    {user.account_type_reason && (
+                      <span className="text-[10px] text-muted-foreground/70 truncate hidden xl:inline">
+                        {user.account_type_overridden ? 'Manual:' : 'Auto:'}{' '}
+                        {formatClassificationReason(user.account_type_reason)}
+                      </span>
+                    )}
                   </div>
                   {user.is_mapped && user.staff_name && (
                     <p className="text-sm text-muted-foreground ml-6 truncate">
@@ -954,7 +973,7 @@ export function GWSStaffMapping() {
                       <SelectValue placeholder="Type" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="auto">Auto</SelectItem>
+                      <SelectItem value="auto">{autoAccountTypeLabel(user)}</SelectItem>
                       <SelectItem value="person">Person</SelectItem>
                       <SelectItem value="shared_account">Shared</SelectItem>
                     </SelectContent>

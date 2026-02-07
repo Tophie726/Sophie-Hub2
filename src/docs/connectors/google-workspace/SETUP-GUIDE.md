@@ -20,6 +20,7 @@ Run these in order:
 1. `supabase/migrations/20260207_google_workspace_connector.sql`
 2. `supabase/migrations/20260207_staff_profile_enrichment.sql`
 3. `supabase/migrations/20260211_staff_approval_queue.sql`
+4. `supabase/migrations/20260212_google_workspace_snapshot_extended.sql`
 
 Then notify PostgREST to reload schema:
 
@@ -304,3 +305,51 @@ The service account's Client ID needs to be added in Google Workspace Admin Cons
 ### Auto-match returns 0 matches
 - Verify staff email addresses in the `staff` table match Google Workspace primary emails
 - Check case sensitivity (matching is case-insensitive, but verify emails are populated)
+
+### Snapshot table is "missing or out of date"
+- Apply `supabase/migrations/20260212_google_workspace_snapshot_extended.sql`
+- Then run:
+  ```sql
+  select pg_notify('pgrst', 'reload schema');
+  ```
+
+---
+
+## Data Flow Reference
+
+### What we pull from Google Directory
+
+Each sync stores the following in `google_workspace_directory_snapshot`:
+
+- Identity: `google_user_id`, `primary_email`, `full_name`, `given_name`, `family_name`
+- Account state: `is_suspended`, `is_deleted`, `is_admin`, `is_delegated_admin`
+- Org metadata: `org_unit_path`, `department`, `cost_center`, `location`, `manager_email`
+- Profile metadata: `title`, `phone`, `thumbnail_photo_url`
+- Email metadata: `aliases`, `non_editable_aliases`
+- Lifecycle metadata: `creation_time`, `last_login_time`, `last_seen_at`, `first_seen_at`
+- Raw payload: `raw_profile` (no-data-loss capture from Google API)
+
+### What "Seed Staff" writes to staff CRM
+
+`POST /api/google-workspace/staff/bootstrap` writes directly to `staff`:
+
+- `full_name` (Google full name or derived from email local-part)
+- `email` (primary anchor)
+- `status='onboarding'`
+- `role='staff'`
+- `title` and `avatar_url` (if available)
+- `source_data.google_workspace.directory_snapshot` (full provenance snapshot)
+
+It also upserts the link in `entity_external_ids`:
+
+- `source='google_workspace_user'`
+- `external_id=<google_user_id>`
+- `entity_type='staff'`, `entity_id=<staff.id>`
+
+### Auto staff vs shared inbox classification
+
+`Auto` classification uses:
+
+- Email-local-part keyword rules (for shared inbox patterns like `leadgen`, `support`, `audits`, etc.)
+- Context hints from `full_name`, `org_unit_path`, and `title`
+- Optional manual override per row (`Auto`, `Person`, `Shared`)
