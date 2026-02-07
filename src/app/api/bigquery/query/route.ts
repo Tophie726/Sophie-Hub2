@@ -147,6 +147,12 @@ function sanitizeIdentifier(name: string): string {
   return name.replace(/[^a-zA-Z0-9_]/g, '')
 }
 
+function getPartnerFilterCondition(partnerField: string): string {
+  // Normalize comparisons to STRING so mixed identifier types (INT64 client_id vs
+  // string mapping values) don't throw BigQuery signature errors.
+  return `CAST(${partnerField} AS STRING) = @clientId`
+}
+
 // =============================================================================
 // Route handler
 // =============================================================================
@@ -226,8 +232,8 @@ export async function POST(request: NextRequest) {
     const partnerField = PARTNER_FIELD_PER_VIEW[viewName] || 'client_id'
 
     // Build query
-    const params: Record<string, string | number> = { clientId }
-    const conditions: string[] = [`${partnerField} = @clientId`]
+    const params: Record<string, string | number> = { clientId: String(clientId) }
+    const conditions: string[] = [getPartnerFilterCondition(partnerField)]
 
     // Date filtering
     if (date_range) {
@@ -397,7 +403,13 @@ export async function POST(request: NextRequest) {
 
     return apiSuccess(responseData, 200, rateLimitHeaders(rateLimit))
   } catch (error) {
-    console.error('[bigquery-query] Error:', error instanceof Error ? error.message : error)
-    return ApiErrors.internal('BigQuery query failed')
+    const detail = error instanceof Error ? error.message : String(error)
+    console.error('[bigquery-query] Error:', detail)
+
+    if (process.env.NODE_ENV !== 'production') {
+      return apiError('INTERNAL_ERROR', `BigQuery query failed: ${detail}`, 500)
+    }
+
+    return ApiErrors.internal()
   }
 }
