@@ -168,8 +168,8 @@ The Slack connector uses **two source values** to map different entity relations
 ### `source: 'slack_user'` -- Staff mapping
 
 ```typescript
-// Save: staff member -> Slack user
-await supabase.from('entity_external_ids').upsert({
+// Save: staff member -> Slack user (one-to-one per staff member)
+const payload = {
   entity_type: 'staff',
   entity_id: staffId,           // UUID from staff table
   source: 'slack_user',
@@ -179,7 +179,22 @@ await supabase.from('entity_external_ids').upsert({
     slack_email: user.profile.email,
     match_type: 'auto',         // or 'manual'
   },
-}, { onConflict: 'entity_type,entity_id,source' })
+}
+
+// If mapping exists for this staff member, update that row; otherwise insert.
+const { data: existing } = await supabase
+  .from('entity_external_ids')
+  .select('id')
+  .eq('entity_type', 'staff')
+  .eq('entity_id', staffId)
+  .eq('source', 'slack_user')
+  .maybeSingle()
+
+if (existing) {
+  await supabase.from('entity_external_ids').update(payload).eq('id', existing.id)
+} else {
+  await supabase.from('entity_external_ids').insert(payload)
+}
 
 // Query: "Which staff member is Slack user U06K3ABCDEF?"
 const { data } = await supabase
@@ -204,7 +219,7 @@ await supabase.from('entity_external_ids').upsert({
     match_type: 'auto',
     match_confidence: 0.95,
   },
-}, { onConflict: 'entity_type,entity_id,source' })
+}, { onConflict: 'source,external_id' })
 
 // Query: "Which partner owns channel C06MABCDEF?"
 const { data } = await supabase
@@ -387,7 +402,7 @@ All routes live under `src/app/api/slack/`.
 
 | Method | Route | Purpose |
 |--------|-------|---------|
-| GET | `/api/slack/test-connection` | Test bot token, return workspace info |
+| POST | `/api/slack/test-connection` | Test bot token, return workspace info |
 | GET | `/api/slack/users` | List all Slack users (cached) |
 | GET | `/api/slack/channels` | List all channels (cached) |
 | POST | `/api/slack/mappings/staff/auto-match` | Run email-based auto-match for staff |
@@ -420,22 +435,17 @@ All routes follow the standard Sophie Hub API conventions:
 
 ```typescript
 import { requireRole } from '@/lib/auth/api-auth'
+import { ROLES } from '@/lib/auth/roles'
 import { apiSuccess, ApiErrors } from '@/lib/api/response'
-import { getCachedUsers, setCachedUsers } from '@/lib/connectors/slack-cache'
-import { listUsers } from '@/lib/slack/client'
+import { slackConnector } from '@/lib/connectors/slack'
 
 export async function GET() {
-  const auth = await requireRole('admin')
+  const auth = await requireRole(ROLES.ADMIN)
   if (!auth.authenticated) return auth.response
 
-  const cached = getCachedUsers()
-  if (cached) {
-    return apiSuccess({ users: cached, count: cached.length, cached: true })
-  }
-
-  const users = await listUsers()
-  setCachedUsers(users)
-  return apiSuccess({ users, count: users.length, cached: false })
+  const users = await slackConnector.listUsers()
+  // ... enrich with mapping info from entity_external_ids
+  return apiSuccess({ users: enrichedUsers, total: enrichedUsers.length, mapped: mappedCount })
 }
 ```
 
@@ -536,7 +546,7 @@ The bot can see all public channels automatically. For private channels, a works
 After setting the token, call the test endpoint:
 
 ```bash
-curl -H "Cookie: ..." http://localhost:3000/api/slack/test-connection
+curl -X POST -H "Cookie: ..." http://localhost:3000/api/slack/test-connection
 ```
 
 Expected response:

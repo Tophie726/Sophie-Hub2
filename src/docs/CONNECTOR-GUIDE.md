@@ -179,42 +179,48 @@ CREATE TABLE entity_external_ids (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   created_by TEXT,
 
-  -- Each entity can only have one mapping per source
-  CONSTRAINT entity_external_ids_unique_entity_source
-    UNIQUE(entity_type, entity_id, source),
+  -- Allows one-to-many mappings per source (e.g., partner -> many Slack channels)
+  CONSTRAINT entity_external_ids_unique_entity_source_external
+    UNIQUE(entity_type, entity_id, source, external_id),
 
   -- Each external_id is unique within a source
   CONSTRAINT entity_external_ids_unique_source_external
     UNIQUE(source, external_id)
 );
+
+-- One-to-one semantics for selected sources
+CREATE UNIQUE INDEX idx_entity_external_ids_one_to_one_sources
+  ON entity_external_ids(entity_type, entity_id, source)
+  WHERE source IN ('bigquery', 'slack_user');
 ```
 
-**Migration:** `supabase/migrations/20260205_entity_external_ids.sql`
+**Migrations:** `supabase/migrations/20260205_entity_external_ids.sql`, `supabase/migrations/20260207_relax_entity_source_constraint.sql`
 
 **Constraints explained:**
 
-- `UNIQUE(entity_type, entity_id, source)` -- A partner can only have one BigQuery mapping, one Slack channel mapping, etc.
+- `UNIQUE(entity_type, entity_id, source, external_id)` -- Allows one-to-many mappings (for example, one partner mapped to multiple Slack channels).
 - `UNIQUE(source, external_id)` -- A BigQuery client_name can only be mapped to one partner. Prevents duplicate mappings.
+- `idx_entity_external_ids_one_to_one_sources` (partial unique index) -- Keeps one-to-one behavior for `bigquery` and `slack_user`.
 
 **Usage patterns:**
 
 ```typescript
-// Save a mapping (upsert)
+// Save a one-to-many mapping (example: Slack channel -> partner)
 await supabase
   .from('entity_external_ids')
   .upsert({
     entity_type: 'partners',
     entity_id: partnerId,
-    source: 'bigquery',
-    external_id: 'Coat Defense',
-  }, { onConflict: 'entity_type,entity_id,source' })
+    source: 'slack_channel',
+    external_id: 'C06ABCDEF',
+  }, { onConflict: 'source,external_id' })
 
-// Look up: "Which partner is 'Coat Defense' in BigQuery?"
+// Look up: "Which partner owns channel C06ABCDEF?"
 const { data } = await supabase
   .from('entity_external_ids')
   .select('entity_id')
-  .eq('source', 'bigquery')
-  .eq('external_id', 'Coat Defense')
+  .eq('source', 'slack_channel')
+  .eq('external_id', 'C06ABCDEF')
   .single()
 
 // Look up: "What are all external IDs for this partner?"
@@ -450,11 +456,13 @@ src/app/api/
     partner-mappings/route.ts   # GET, POST, DELETE
     partner-data/[id]/route.ts  # GET
   slack/
-    test-connection/route.ts    # GET
+    test-connection/route.ts    # POST
     users/route.ts              # GET
     channels/route.ts           # GET
-    mappings/staff/route.ts     # GET, POST
-    mappings/channels/route.ts  # GET, POST
+    mappings/staff/route.ts     # GET, POST, DELETE
+    mappings/staff/auto-match/route.ts  # POST
+    mappings/channels/route.ts  # GET, POST, DELETE
+    mappings/channels/auto-match/route.ts  # POST
 ```
 
 ---

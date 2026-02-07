@@ -31,6 +31,12 @@ import {
   setCachedUsers,
   getCachedChannels,
   setCachedChannels,
+  isUsersCacheStale,
+  getUsersRefreshInProgress,
+  setUsersRefreshInProgress,
+  isChannelsCacheStale,
+  getChannelsRefreshInProgress,
+  setChannelsRefreshInProgress,
 } from './slack-cache'
 import type { SlackUser, SlackChannel } from '@/lib/slack/types'
 
@@ -145,11 +151,21 @@ export class SlackConnector extends BaseConnector<SlackConnectorConfig> {
   // ===========================================================================
 
   /**
-   * List all workspace users (cached)
+   * List all workspace users (cached, stale-while-revalidate)
    */
   async listUsers(): Promise<SlackUser[]> {
     const cached = getCachedUsers()
-    if (cached) return cached
+    if (cached) {
+      // If stale, trigger background refresh
+      if (isUsersCacheStale() && !getUsersRefreshInProgress()) {
+        setUsersRefreshInProgress(true)
+        slackClient.listUsers()
+          .then(users => setCachedUsers(users))
+          .catch(err => console.error('Background users refresh failed:', err))
+          .finally(() => setUsersRefreshInProgress(false))
+      }
+      return cached
+    }
 
     const users = await slackClient.listUsers()
     setCachedUsers(users)
@@ -157,11 +173,21 @@ export class SlackConnector extends BaseConnector<SlackConnectorConfig> {
   }
 
   /**
-   * List all workspace channels (cached)
+   * List all workspace channels (cached, stale-while-revalidate)
    */
   async listChannels(): Promise<SlackChannel[]> {
     const cached = getCachedChannels()
-    if (cached) return cached
+    if (cached) {
+      // If stale, trigger background refresh
+      if (isChannelsCacheStale() && !getChannelsRefreshInProgress()) {
+        setChannelsRefreshInProgress(true)
+        slackClient.listChannels()
+          .then(channels => setCachedChannels(channels))
+          .catch(err => console.error('Background channels refresh failed:', err))
+          .finally(() => setChannelsRefreshInProgress(false))
+      }
+      return cached
+    }
 
     const channels = await slackClient.listChannels()
     setCachedChannels(channels)

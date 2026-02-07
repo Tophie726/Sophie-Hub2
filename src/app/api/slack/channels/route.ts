@@ -66,11 +66,19 @@ export async function GET() {
       }
     })
 
-    return apiSuccess({
+    const response = apiSuccess({
       channels: enrichedChannels,
       total: enrichedChannels.length,
       mapped: enrichedChannels.filter(c => c.is_mapped).length,
     })
+
+    // Browser-side caching: fresh for 2 min, stale-while-revalidate for 5 min
+    response.headers.set(
+      'Cache-Control',
+      'private, max-age=120, stale-while-revalidate=300'
+    )
+
+    return response
   } catch (error) {
     console.error('Failed to fetch Slack channels:', error)
     return ApiErrors.internal()

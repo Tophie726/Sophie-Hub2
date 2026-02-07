@@ -77,7 +77,6 @@ export async function POST(request: NextRequest) {
       .eq('source', 'slack_channel')
 
     const alreadyMappedChannels = new Set((existingMappings || []).map(m => m.external_id))
-    const alreadyMappedPartners = new Set((existingMappings || []).map(m => m.entity_id))
 
     // 5. Match channels to partners
     const matches: Array<{
@@ -116,7 +115,7 @@ export async function POST(request: NextRequest) {
 
       // Try exact match first
       const exactMatch = partnerByNormalized.get(normalizedChannel)
-      if (exactMatch && !alreadyMappedPartners.has(exactMatch.id)) {
+      if (exactMatch) {
         matches.push({
           channel_id: channel.id,
           channel_name: channel.name,
@@ -124,15 +123,12 @@ export async function POST(request: NextRequest) {
           partner_name: exactMatch.brand_name,
           confidence: 1.0,
         })
-        alreadyMappedPartners.add(exactMatch.id)
         continue
       }
 
       // Try partial/contains match
       let bestMatch: { id: string; brand_name: string; score: number } | null = null
       for (const [normalizedPartner, partner] of Array.from(partnerByNormalized.entries())) {
-        if (alreadyMappedPartners.has(partner.id)) continue
-
         // Check if one contains the other
         if (normalizedChannel.includes(normalizedPartner) || normalizedPartner.includes(normalizedChannel)) {
           const score = Math.min(normalizedChannel.length, normalizedPartner.length) /
@@ -151,7 +147,6 @@ export async function POST(request: NextRequest) {
           partner_name: bestMatch.brand_name,
           confidence: bestMatch.score,
         })
-        alreadyMappedPartners.add(bestMatch.id)
       } else {
         unmatchedChannels.push(channel.name)
       }
@@ -174,7 +169,7 @@ export async function POST(request: NextRequest) {
         const batch = records.slice(i, i + BATCH_SIZE)
         const { error } = await supabase
           .from('entity_external_ids')
-          .upsert(batch, { onConflict: 'entity_type,entity_id,source' })
+          .upsert(batch, { onConflict: 'source,external_id' })
 
         if (error) {
           console.error(`Channel mapping batch ${i / BATCH_SIZE + 1} failed:`, error)

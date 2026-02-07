@@ -103,10 +103,6 @@ export function SlackChannelMapping() {
     fetchPartners()
   }, [])
 
-  const mappedPartnerIds = useMemo(() => {
-    return new Set(channels.filter(c => c.is_mapped).map(c => c.partner_id!))
-  }, [channels])
-
   const filteredChannels = useMemo(() => {
     let filtered = channels
 
@@ -395,9 +391,7 @@ export function SlackChannelMapping() {
                           <SelectValue placeholder="Select partner..." />
                         </SelectTrigger>
                         <SelectContent className="max-h-[300px]">
-                          {partners
-                            .filter(p => !mappedPartnerIds.has(p.id))
-                            .map(p => (
+                          {partners.map(p => (
                               <SelectItem key={p.id} value={p.id}>
                                 {p.brand_name}
                               </SelectItem>

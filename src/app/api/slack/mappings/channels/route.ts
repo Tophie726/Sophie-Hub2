@@ -103,7 +103,9 @@ export async function POST(request: NextRequest) {
       return ApiErrors.notFound('Partner')
     }
 
-    // Upsert the mapping
+    // Upsert the mapping — conflict on (source, external_id) prevents the same
+    // channel being double-mapped to two different partners, while allowing a
+    // partner to have multiple channels (e.g., "client-acme-general" + "client-acme-finance").
     const { data: mapping, error } = await supabase
       .from('entity_external_ids')
       .upsert({
@@ -114,20 +116,17 @@ export async function POST(request: NextRequest) {
         metadata: channel_name ? { channel_name } : {},
         updated_at: new Date().toISOString(),
       }, {
-        onConflict: 'entity_type,entity_id,source',
+        onConflict: 'source,external_id',
       })
       .select()
       .single()
 
     if (error) {
-      if (error.code === '23505') {
-        return apiError('CONFLICT', 'This channel is already mapped to another partner', 409)
-      }
       console.error('Error saving channel-partner mapping:', error)
       return ApiErrors.database()
     }
 
-    // Also create/update sync state entry for this channel
+    // Create/update sync state entry for this channel
     await supabase
       .from('slack_sync_state')
       .upsert({
@@ -171,6 +170,14 @@ export async function DELETE(request: NextRequest) {
 
     const supabase = getAdminClient()
 
+    // Fetch the mapping first so we know which channel to clean up in sync state
+    const { data: existing } = await supabase
+      .from('entity_external_ids')
+      .select('external_id')
+      .eq('id', mappingId)
+      .eq('source', 'slack_channel')
+      .single()
+
     const { error } = await supabase
       .from('entity_external_ids')
       .delete()
@@ -180,6 +187,14 @@ export async function DELETE(request: NextRequest) {
     if (error) {
       console.error('Error deleting channel-partner mapping:', error)
       return ApiErrors.database()
+    }
+
+    // Nullify the partner_id in sync state for the unmapped channel
+    if (existing?.external_id) {
+      await supabase
+        .from('slack_sync_state')
+        .update({ partner_id: null })
+        .eq('channel_id', existing.external_id)
     }
 
     invalidateChannelsCache()

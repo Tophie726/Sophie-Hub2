@@ -27,21 +27,24 @@ const MIN_DELAY_MS = 1200
 const PAGE_SIZE = 200
 
 // =============================================================================
-// Rate Limiting
+// Rate Limiting (concurrency-safe sequential queue)
 // =============================================================================
 
-let lastCallTime = 0
+/** Max retries on 429 or transient errors */
+const MAX_RETRIES = 3
 
 /**
- * Wait if needed to respect rate limits
+ * Promise-chain queue ensures only one API call is in-flight at a time.
+ * Concurrent callers wait in line rather than racing on a shared timestamp.
  */
-async function rateLimit(): Promise<void> {
-  const now = Date.now()
-  const elapsed = now - lastCallTime
-  if (elapsed < MIN_DELAY_MS) {
-    await new Promise(resolve => setTimeout(resolve, MIN_DELAY_MS - elapsed))
-  }
-  lastCallTime = Date.now()
+let queue: Promise<void> = Promise.resolve()
+
+function rateLimit(): Promise<void> {
+  const waiter = queue.then(
+    () => new Promise<void>(resolve => setTimeout(resolve, MIN_DELAY_MS))
+  )
+  queue = waiter
+  return waiter
 }
 
 // =============================================================================
@@ -70,74 +73,90 @@ interface SlackApiResponse {
 }
 
 /**
- * Make a rate-limited call to the Slack API
+ * Execute a fetch with 429 retry and exponential backoff.
+ * Waits in the rate-limit queue before each attempt.
+ */
+async function fetchWithRetry(
+  buildRequest: () => { url: string; init: RequestInit }
+): Promise<SlackApiResponse> {
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    await rateLimit()
+
+    const { url, init } = buildRequest()
+    const response = await fetch(url, init)
+
+    // Handle 429 rate limit with Retry-After
+    if (response.status === 429 && attempt < MAX_RETRIES) {
+      const retryAfter = parseInt(response.headers.get('Retry-After') || '', 10)
+      const backoffMs = retryAfter && !isNaN(retryAfter)
+        ? retryAfter * 1000
+        : MIN_DELAY_MS * Math.pow(2, attempt + 1) // exponential backoff
+      console.warn(`Slack 429: retrying in ${backoffMs}ms (attempt ${attempt + 1}/${MAX_RETRIES})`)
+      await new Promise(resolve => setTimeout(resolve, backoffMs))
+      continue
+    }
+
+    if (!response.ok) {
+      throw new Error(`Slack API HTTP error: ${response.status} ${response.statusText}`)
+    }
+
+    const data = await response.json() as SlackApiResponse
+
+    if (!data.ok) {
+      throw new Error(`Slack API error: ${data.error || 'Unknown error'}`)
+    }
+
+    return data
+  }
+
+  throw new Error('Slack API: max retries exceeded on 429')
+}
+
+/**
+ * Make a rate-limited GET call to the Slack API (with 429 retry)
  */
 async function slackApi(
   method: string,
   params: Record<string, string | number | boolean> = {}
 ): Promise<SlackApiResponse> {
-  await rateLimit()
-
   const token = getBotToken()
-  const url = new URL(`${SLACK_API_BASE}/${method}`)
-
-  // Add params as query string for GET-style methods
-  for (const [key, value] of Object.entries(params)) {
-    url.searchParams.set(key, String(value))
-  }
-
-  const response = await fetch(url.toString(), {
-    method: 'GET',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
+  return fetchWithRetry(() => {
+    const url = new URL(`${SLACK_API_BASE}/${method}`)
+    for (const [key, value] of Object.entries(params)) {
+      url.searchParams.set(key, String(value))
+    }
+    return {
+      url: url.toString(),
+      init: {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+      },
+    }
   })
-
-  if (!response.ok) {
-    throw new Error(`Slack API HTTP error: ${response.status} ${response.statusText}`)
-  }
-
-  const data = await response.json() as SlackApiResponse
-
-  if (!data.ok) {
-    throw new Error(`Slack API error: ${data.error || 'Unknown error'}`)
-  }
-
-  return data
 }
 
 /**
- * Make a POST call to the Slack API (for methods that require POST)
+ * Make a rate-limited POST call to the Slack API (with 429 retry)
  */
 async function slackApiPost(
   method: string,
   body: Record<string, unknown> = {}
 ): Promise<SlackApiResponse> {
-  await rateLimit()
-
   const token = getBotToken()
-
-  const response = await fetch(`${SLACK_API_BASE}/${method}`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
+  return fetchWithRetry(() => ({
+    url: `${SLACK_API_BASE}/${method}`,
+    init: {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
     },
-    body: JSON.stringify(body),
-  })
-
-  if (!response.ok) {
-    throw new Error(`Slack API HTTP error: ${response.status} ${response.statusText}`)
-  }
-
-  const data = await response.json() as SlackApiResponse
-
-  if (!data.ok) {
-    throw new Error(`Slack API error: ${data.error || 'Unknown error'}`)
-  }
-
-  return data
+  }))
 }
 
 // =============================================================================

@@ -103,21 +103,52 @@ export async function POST(request: NextRequest) {
       return ApiErrors.notFound('Staff member')
     }
 
-    // Upsert the mapping
-    const { data: mapping, error } = await supabase
+    // Staff ↔ Slack is one-to-one per staff member. Update existing mapping row
+    // if present, otherwise insert a new row. This avoids delete-then-insert races.
+    const { data: existingRows, error: existingError } = await supabase
       .from('entity_external_ids')
-      .upsert({
-        entity_type: 'staff',
-        entity_id: staff_id,
-        source: 'slack_user',
-        external_id: slack_user_id,
-        metadata: slack_user_name ? { slack_name: slack_user_name } : {},
-        updated_at: new Date().toISOString(),
-      }, {
-        onConflict: 'entity_type,entity_id,source',
-      })
-      .select()
-      .single()
+      .select('id')
+      .eq('entity_type', 'staff')
+      .eq('entity_id', staff_id)
+      .eq('source', 'slack_user')
+      .order('updated_at', { ascending: false })
+      .limit(1)
+
+    if (existingError) {
+      console.error('Error fetching existing staff-slack mapping:', existingError)
+      return ApiErrors.database()
+    }
+
+    const payload = {
+      entity_type: 'staff' as const,
+      entity_id: staff_id,
+      source: 'slack_user' as const,
+      external_id: slack_user_id,
+      metadata: slack_user_name ? { slack_name: slack_user_name } : {},
+      updated_at: new Date().toISOString(),
+    }
+
+    let mapping: Record<string, unknown> | null = null
+    let error: { code?: string; message: string } | null = null
+
+    if (existingRows && existingRows.length > 0) {
+      const { data: updated, error: updateError } = await supabase
+        .from('entity_external_ids')
+        .update(payload)
+        .eq('id', existingRows[0].id)
+        .select()
+        .single()
+      mapping = updated as Record<string, unknown>
+      error = updateError ? { code: updateError.code, message: updateError.message } : null
+    } else {
+      const { data: inserted, error: insertError } = await supabase
+        .from('entity_external_ids')
+        .insert(payload)
+        .select()
+        .single()
+      mapping = inserted as Record<string, unknown>
+      error = insertError ? { code: insertError.code, message: insertError.message } : null
+    }
 
     if (error) {
       if (error.code === '23505') {

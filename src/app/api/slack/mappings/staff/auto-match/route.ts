@@ -99,7 +99,7 @@ export async function POST() {
         const batch = records.slice(i, i + BATCH_SIZE)
         const { error } = await supabase
           .from('entity_external_ids')
-          .upsert(batch, { onConflict: 'entity_type,entity_id,source' })
+          .upsert(batch, { onConflict: 'source,external_id' })
 
         if (error) {
           console.error(`Batch ${i / BATCH_SIZE + 1} failed:`, error)
@@ -115,10 +115,9 @@ export async function POST() {
       }
     }
 
-    // Build unmatched Slack users list
-    const matchedSlackIds = new Set(matches.map(m => m.slack_user_id))
+    // Build unmatched Slack users list (not in any mapping, old or new)
     const unmatchedSlackUsers = slackUsers
-      .filter(u => !alreadyMappedSlackUsers.has(u.id) || matchedSlackIds.has(u.id) ? false : true)
+      .filter(u => !alreadyMappedSlackUsers.has(u.id))
       .filter(u => u.profile.email) // Only show users with emails
       .map(u => u.real_name || u.name)
       .slice(0, 20) // Cap for readability
