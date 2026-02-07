@@ -14,6 +14,9 @@
 /** The five widget types supported by the dashboard system */
 export type WidgetType = 'metric' | 'chart' | 'table' | 'text' | 'ai_text'
 
+/** Widget data source mode in the template builder */
+export type WidgetDataMode = 'snapshot' | 'live'
+
 /** Aggregation functions available for BigQuery widgets */
 export type AggregationType = 'sum' | 'avg' | 'count' | 'min' | 'max'
 

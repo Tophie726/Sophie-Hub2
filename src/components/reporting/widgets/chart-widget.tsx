@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
   ResponsiveContainer,
   LineChart,
@@ -73,14 +73,23 @@ function CustomTooltip({
   )
 }
 
-export function ChartWidget({ config, dateRange, partnerId, height }: ChartWidgetProps) {
+export function ChartWidget({
+  config,
+  dateRange,
+  partnerId,
+  height,
+  dataMode = 'live',
+  refreshTick = 0,
+  forceRefreshToken = 0,
+}: ChartWidgetProps) {
   const [data, setData] = useState<ChartQueryResult | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const lastForceRefreshRef = useRef(forceRefreshToken)
 
   const chartHeight = height || DEFAULT_HEIGHT
 
-  const fetchChart = useCallback(async () => {
+  const fetchChart = useCallback(async (forceRefresh = false) => {
     setIsLoading(true)
     setError(null)
 
@@ -99,6 +108,8 @@ export function ChartWidget({ config, dateRange, partnerId, height }: ChartWidge
               sort_by: config.x_axis,
               sort_direction: 'asc',
               limit: 365,
+              data_mode: dataMode,
+              force_refresh: forceRefresh,
             })
             const r = result as Record<string, unknown>
             return (r?.data || result) as ChartQueryResult
@@ -142,6 +153,8 @@ export function ChartWidget({ config, dateRange, partnerId, height }: ChartWidge
         sort_by: config.x_axis,
         sort_direction: 'asc',
         limit: 365,
+        data_mode: dataMode,
+        force_refresh: forceRefresh,
       })
       const r = result as Record<string, unknown>
       setData((r?.data || result) as ChartQueryResult)
@@ -150,11 +163,18 @@ export function ChartWidget({ config, dateRange, partnerId, height }: ChartWidge
     } finally {
       setIsLoading(false)
     }
-  }, [partnerId, config, dateRange])
+  }, [partnerId, config, dateRange, dataMode])
 
   useEffect(() => {
     fetchChart()
-  }, [fetchChart])
+  }, [fetchChart, refreshTick])
+
+  useEffect(() => {
+    if (forceRefreshToken !== lastForceRefreshRef.current) {
+      lastForceRefreshRef.current = forceRefreshToken
+      fetchChart(true)
+    }
+  }, [forceRefreshToken, fetchChart])
 
   // Transform API response to recharts format
   const chartData = useMemo(() => {
@@ -190,7 +210,7 @@ export function ChartWidget({ config, dateRange, partnerId, height }: ChartWidge
       <div className="flex flex-col items-center justify-center p-4 md:p-6 h-full">
         <p className="text-sm text-muted-foreground">{error}</p>
         <button
-          onClick={fetchChart}
+          onClick={() => fetchChart()}
           className="mt-2 text-xs text-primary hover:underline"
         >
           Retry

@@ -20,6 +20,8 @@ export const CACHE = {
   RATE_LIMIT_CLEANUP: 10 * 60 * 1000,
   /** Usage dashboard cache (1 hour) - aggregated stats change slowly */
   USAGE_TTL: 60 * 60 * 1000,
+  /** Slack users/channels cache (5 min) */
+  SLACK_TTL: 5 * 60 * 1000,
 } as const
 
 // =============================================================================
@@ -47,6 +49,19 @@ export const BIGQUERY = {
 
 /** Ordered list of all BigQuery unified views */
 export const BIGQUERY_UNIFIED_VIEWS = Object.values(BIGQUERY.VIEWS)
+
+// =============================================================================
+// Slack
+// =============================================================================
+
+export const SLACK = {
+  /** Minimum delay between Slack API calls (ms) */
+  RATE_LIMIT_DELAY: 1200,
+  /** Messages per page for conversations.history */
+  PAGE_SIZE: 200,
+  /** Channel prefixes to skip during auto-match (internal channels) */
+  INTERNAL_PREFIXES: ['team-', 'ops-', 'admin-', 'int-', 'internal-', 'eng-', 'hr-', 'general'],
+} as const
 
 // =============================================================================
 // Sync Engine

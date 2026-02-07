@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { ArrowUp, ArrowDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ShimmerGrid } from '@/components/ui/shimmer-grid'
@@ -9,14 +9,22 @@ import { fetchBigQuery } from '@/lib/bigquery/query-cache'
 import type { TableWidgetProps } from '@/lib/reporting/types'
 import type { TableQueryResult, SortDirection } from '@/types/modules'
 
-export function TableWidget({ config, dateRange, partnerId }: TableWidgetProps) {
+export function TableWidget({
+  config,
+  dateRange,
+  partnerId,
+  dataMode = 'live',
+  refreshTick = 0,
+  forceRefreshToken = 0,
+}: TableWidgetProps) {
   const [data, setData] = useState<TableQueryResult | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [sortColumn, setSortColumn] = useState<number | null>(null)
   const [sortDir, setSortDir] = useState<SortDirection>('asc')
+  const lastForceRefreshRef = useRef(forceRefreshToken)
 
-  const fetchTable = useCallback(async () => {
+  const fetchTable = useCallback(async (forceRefresh = false) => {
     setIsLoading(true)
     setError(null)
 
@@ -30,6 +38,8 @@ export function TableWidget({ config, dateRange, partnerId }: TableWidgetProps) 
         sort_direction: config.sort_direction,
         limit: config.limit,
         date_range: dateRange,
+        data_mode: dataMode,
+        force_refresh: forceRefresh,
       })
       const r = result as Record<string, unknown>
       setData((r?.data || result) as TableQueryResult)
@@ -38,11 +48,18 @@ export function TableWidget({ config, dateRange, partnerId }: TableWidgetProps) 
     } finally {
       setIsLoading(false)
     }
-  }, [partnerId, config, dateRange])
+  }, [partnerId, config, dateRange, dataMode])
 
   useEffect(() => {
     fetchTable()
-  }, [fetchTable])
+  }, [fetchTable, refreshTick])
+
+  useEffect(() => {
+    if (forceRefreshToken !== lastForceRefreshRef.current) {
+      lastForceRefreshRef.current = forceRefreshToken
+      fetchTable(true)
+    }
+  }, [forceRefreshToken, fetchTable])
 
   // Sort rows client-side when user clicks headers
   const sortedRows = useMemo(() => {
@@ -94,7 +111,7 @@ export function TableWidget({ config, dateRange, partnerId }: TableWidgetProps) 
       <div className="flex flex-col items-center justify-center p-4 md:p-6 h-full">
         <p className="text-sm text-muted-foreground">{error}</p>
         <button
-          onClick={fetchTable}
+          onClick={() => fetchTable()}
           className="mt-2 text-xs text-primary hover:underline"
         >
           Retry

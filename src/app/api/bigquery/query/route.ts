@@ -85,6 +85,8 @@ const QuerySchema = z.object({
   sort_by: z.string().optional(),
   sort_direction: z.enum(VALID_SORT_DIRECTIONS).optional().default('asc'),
   limit: z.number().int().min(1).max(1000).optional().default(100),
+  data_mode: z.enum(['snapshot', 'live']).optional(),
+  force_refresh: z.boolean().optional().default(false),
 })
 
 // =============================================================================
@@ -161,12 +163,6 @@ export async function POST(request: NextRequest) {
   const auth = await requireAuth()
   if (!auth.authenticated) return auth.response
 
-  // Rate limit: BigQuery is expensive
-  const rateLimit = checkRateLimit(auth.user.id, 'bigquery:query', RATE_LIMITS.PARTNERS_LIST)
-  if (!rateLimit.allowed) {
-    return ApiErrors.rateLimited('Too many BigQuery requests. Please wait before querying again.')
-  }
-
   try {
     const body = await request.json()
     const validation = QuerySchema.safeParse(body)
@@ -174,7 +170,41 @@ export async function POST(request: NextRequest) {
       return apiValidationError(validation.error)
     }
 
-    const { partner_id, view, metrics, aggregation, mode, date_range, group_by, sort_by, sort_direction, limit } = validation.data
+    const {
+      partner_id,
+      view,
+      metrics,
+      aggregation,
+      mode,
+      date_range,
+      group_by,
+      sort_by,
+      sort_direction,
+      limit,
+      force_refresh,
+    } = validation.data
+
+    // Rate limits:
+    // - General dashboard querying allows high parallelism.
+    // - Explicit force refresh bypasses cache, so add a stricter per-query cooldown.
+    const rateLimitAction = force_refresh
+      ? `bigquery:live-refresh:${partner_id}:${view}:${mode}:${group_by || '-'}:${metrics.join(',')}`
+      : 'bigquery:query'
+    const rateLimitConfig = force_refresh ? RATE_LIMITS.LIVE_REFRESH : RATE_LIMITS.PARTNERS_LIST
+    const rateLimit = checkRateLimit(auth.user.id, rateLimitAction, rateLimitConfig)
+    if (!rateLimit.allowed) {
+      const response = ApiErrors.rateLimited(
+        force_refresh
+          ? `Live refresh is cooling down. Try again in ${Math.ceil(rateLimit.resetIn / 1000)}s.`
+          : 'Too many BigQuery requests. Please wait before querying again.'
+      )
+      const headers = rateLimitHeaders(rateLimit)
+      response.headers.set('X-RateLimit-Limit', headers['X-RateLimit-Limit'])
+      response.headers.set('X-RateLimit-Remaining', headers['X-RateLimit-Remaining'])
+      response.headers.set('X-RateLimit-Reset', headers['X-RateLimit-Reset'])
+      response.headers.set('Retry-After', Math.max(1, Math.ceil(rateLimit.resetIn / 1000)).toString())
+      return response
+    }
 
     // Auth: check partner access
     const canAccess = await canAccessPartner(auth.user.id, auth.user.role, partner_id)
@@ -224,7 +254,7 @@ export async function POST(request: NextRequest) {
     // Check server-side cache before building/executing query
     const cacheKey = JSON.stringify({ clientId, view, metrics, aggregation, mode, date_range, group_by, sort_by, sort_direction, limit })
     const cached = serverCache.get(cacheKey)
-    if (cached && Date.now() - cached.timestamp < SERVER_CACHE_TTL) {
+    if (!force_refresh && cached && Date.now() - cached.timestamp < SERVER_CACHE_TTL) {
       return apiSuccess(cached.data as Record<string, unknown>, 200, rateLimitHeaders(rateLimit))
     }
 

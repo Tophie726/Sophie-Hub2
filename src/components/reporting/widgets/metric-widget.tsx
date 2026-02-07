@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { ArrowUpRight, ArrowDownRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ShimmerBar } from '@/components/ui/shimmer-grid'
@@ -9,12 +9,20 @@ import { fetchBigQuery } from '@/lib/bigquery/query-cache'
 import type { MetricWidgetProps, TrendDirection } from '@/lib/reporting/types'
 import type { MetricQueryResult } from '@/types/modules'
 
-export function MetricWidget({ config, dateRange, partnerId }: MetricWidgetProps) {
+export function MetricWidget({
+  config,
+  dateRange,
+  partnerId,
+  dataMode = 'live',
+  refreshTick = 0,
+  forceRefreshToken = 0,
+}: MetricWidgetProps) {
   const [data, setData] = useState<MetricQueryResult | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const lastForceRefreshRef = useRef(forceRefreshToken)
 
-  const fetchMetric = useCallback(async () => {
+  const fetchMetric = useCallback(async (forceRefresh = false) => {
     setIsLoading(true)
     setError(null)
 
@@ -35,6 +43,8 @@ export function MetricWidget({ config, dateRange, partnerId }: MetricWidgetProps
               metrics: [numerator, denominator],
               aggregation: config.aggregation,
               date_range: dateRange,
+              data_mode: dataMode,
+              force_refresh: forceRefresh,
             })
             const r = result as Record<string, unknown>
             return (r?.data || result) as Record<string, unknown>
@@ -79,6 +89,8 @@ export function MetricWidget({ config, dateRange, partnerId }: MetricWidgetProps
               metrics: [config.metric],
               aggregation: config.aggregation,
               date_range: dateRange,
+              data_mode: dataMode,
+              force_refresh: forceRefresh,
             })
             const r = result as Record<string, unknown>
             return (r?.data || result) as Record<string, unknown>
@@ -105,6 +117,8 @@ export function MetricWidget({ config, dateRange, partnerId }: MetricWidgetProps
         metrics: [config.metric],
         aggregation: config.aggregation,
         date_range: dateRange,
+        data_mode: dataMode,
+        force_refresh: forceRefresh,
       })
       const r = result as Record<string, unknown>
       setData((r?.data || result) as MetricQueryResult)
@@ -113,11 +127,18 @@ export function MetricWidget({ config, dateRange, partnerId }: MetricWidgetProps
     } finally {
       setIsLoading(false)
     }
-  }, [partnerId, config, dateRange])
+  }, [partnerId, config, dateRange, dataMode])
 
   useEffect(() => {
     fetchMetric()
-  }, [fetchMetric])
+  }, [fetchMetric, refreshTick])
+
+  useEffect(() => {
+    if (forceRefreshToken !== lastForceRefreshRef.current) {
+      lastForceRefreshRef.current = forceRefreshToken
+      fetchMetric(true)
+    }
+  }, [forceRefreshToken, fetchMetric])
 
   // Determine trend direction
   const trend: TrendDirection = data?.comparison
@@ -150,7 +171,7 @@ export function MetricWidget({ config, dateRange, partnerId }: MetricWidgetProps
       <div className="flex flex-col items-center justify-center p-4 md:p-6 h-full">
         <p className="text-sm text-muted-foreground">{error}</p>
         <button
-          onClick={fetchMetric}
+          onClick={() => fetchMetric()}
           className="mt-2 text-xs text-primary hover:underline"
         >
           Retry

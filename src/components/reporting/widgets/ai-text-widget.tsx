@@ -72,19 +72,45 @@ function renderMarkdown(text: string): React.ReactNode[] {
   return elements
 }
 
-export function AiTextWidget({ config, dateRange, partnerId, title }: AiTextWidgetProps) {
+export function AiTextWidget({
+  config,
+  dateRange,
+  partnerId,
+  title,
+  dataMode = 'live',
+  refreshTick = 0,
+  forceRefreshToken = 0,
+}: AiTextWidgetProps) {
   const [text, setText] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
+  const lastForceRefreshRef = useRef(forceRefreshToken)
 
-  const fetchSummary = useCallback(async () => {
+  const buildSnapshotSummary = useCallback((): string => {
+    const focus = config.metrics.slice(0, 3).map((m) => m.replace(/_/g, ' ')).join(', ')
+    return [
+      `Snapshot mode: sample insight for ${focus || 'selected metrics'}.`,
+      '',
+      '- CPC trend appears stable with moderate day-to-day variance.',
+      '- Conversion efficiency improved in the second half of the selected range.',
+      '- Suggested action: validate the top 3 campaigns before scaling budget.',
+    ].join('\n')
+  }, [config.metrics])
+
+  const fetchSummary = useCallback(async (forceRefresh = false) => {
     setIsLoading(true)
     setError(null)
 
+    if (dataMode === 'snapshot') {
+      setText(buildSnapshotSummary())
+      setIsLoading(false)
+      return
+    }
+
     const cacheKey = buildCacheKey(config, partnerId, dateRange)
     const cached = cache.get(cacheKey)
-    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    if (!forceRefresh && cached && Date.now() - cached.timestamp < CACHE_TTL) {
       setText(cached.text)
       setIsLoading(false)
       return
@@ -126,12 +152,19 @@ export function AiTextWidget({ config, dateRange, partnerId, title }: AiTextWidg
     } finally {
       setIsLoading(false)
     }
-  }, [config, dateRange, partnerId])
+  }, [buildSnapshotSummary, config, dataMode, dateRange, partnerId])
 
   useEffect(() => {
     fetchSummary()
     return () => { abortRef.current?.abort() }
-  }, [fetchSummary])
+  }, [fetchSummary, refreshTick])
+
+  useEffect(() => {
+    if (forceRefreshToken !== lastForceRefreshRef.current) {
+      lastForceRefreshRef.current = forceRefreshToken
+      fetchSummary(true)
+    }
+  }, [forceRefreshToken, fetchSummary])
 
   if (isLoading) {
     return (
@@ -154,7 +187,7 @@ export function AiTextWidget({ config, dateRange, partnerId, title }: AiTextWidg
       <div className="flex flex-col items-center justify-center p-4 md:p-6 h-full">
         <p className="text-sm text-red-500/80">{error}</p>
         <button
-          onClick={fetchSummary}
+          onClick={() => fetchSummary()}
           className="mt-2 inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
         >
           <RefreshCw className="h-3 w-3" />

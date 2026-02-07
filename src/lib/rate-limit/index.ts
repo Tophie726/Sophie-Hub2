@@ -69,6 +69,12 @@ export const RATE_LIMITS = {
     windowMs: 60 * 1000, // 1 minute
   },
 
+  /** Manual live refresh: 1 request per minute */
+  LIVE_REFRESH: {
+    maxRequests: 1,
+    windowMs: 60 * 1000, // 1 minute
+  },
+
   /** Strict: 5 requests per minute (for expensive operations) */
   STRICT: {
     maxRequests: 5,

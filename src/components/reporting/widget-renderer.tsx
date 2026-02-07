@@ -1,6 +1,15 @@
 'use client'
 
-import type { DashboardWidget, DateRange, MetricWidgetConfig, ChartWidgetConfig, TableWidgetConfig, TextWidgetConfig, AiTextWidgetConfig } from '@/types/modules'
+import type {
+  DashboardWidget,
+  DateRange,
+  MetricWidgetConfig,
+  ChartWidgetConfig,
+  TableWidgetConfig,
+  TextWidgetConfig,
+  AiTextWidgetConfig,
+  WidgetDataMode,
+} from '@/types/modules'
 import { MetricWidget } from '@/components/reporting/widgets/metric-widget'
 import { ChartWidget } from '@/components/reporting/widgets/chart-widget'
 import { TableWidget } from '@/components/reporting/widgets/table-widget'
@@ -11,13 +20,16 @@ interface WidgetRendererProps {
   widget: DashboardWidget
   dateRange: DateRange
   partnerId?: string
+  dataMode: WidgetDataMode
+  refreshTick: number
+  forceRefreshToken: number
 }
 
 /**
  * Routes a widget to the correct renderer component based on widget_type.
  */
-export function WidgetRenderer({ widget, dateRange, partnerId }: WidgetRendererProps) {
-  if (!partnerId) {
+export function WidgetRenderer({ widget, dateRange, partnerId, dataMode, refreshTick, forceRefreshToken }: WidgetRendererProps) {
+  if (dataMode === 'live' && !partnerId) {
     return (
       <div className="flex flex-col items-center justify-center p-4 md:p-6 h-full text-center">
         <p className="text-sm text-muted-foreground">Select a partner to view data</p>
@@ -25,13 +37,18 @@ export function WidgetRenderer({ widget, dateRange, partnerId }: WidgetRendererP
     )
   }
 
+  const resolvedPartnerId = partnerId || 'snapshot-partner'
+
   switch (widget.widget_type) {
     case 'metric':
       return (
         <MetricWidget
           config={widget.config as MetricWidgetConfig}
           dateRange={dateRange}
-          partnerId={partnerId}
+          partnerId={resolvedPartnerId}
+          dataMode={dataMode}
+          refreshTick={refreshTick}
+          forceRefreshToken={forceRefreshToken}
         />
       )
     case 'chart':
@@ -39,7 +56,10 @@ export function WidgetRenderer({ widget, dateRange, partnerId }: WidgetRendererP
         <ChartWidget
           config={widget.config as ChartWidgetConfig}
           dateRange={dateRange}
-          partnerId={partnerId}
+          partnerId={resolvedPartnerId}
+          dataMode={dataMode}
+          refreshTick={refreshTick}
+          forceRefreshToken={forceRefreshToken}
         />
       )
     case 'table':
@@ -47,7 +67,10 @@ export function WidgetRenderer({ widget, dateRange, partnerId }: WidgetRendererP
         <TableWidget
           config={widget.config as TableWidgetConfig}
           dateRange={dateRange}
-          partnerId={partnerId}
+          partnerId={resolvedPartnerId}
+          dataMode={dataMode}
+          refreshTick={refreshTick}
+          forceRefreshToken={forceRefreshToken}
         />
       )
     case 'text':
@@ -55,7 +78,10 @@ export function WidgetRenderer({ widget, dateRange, partnerId }: WidgetRendererP
         <TextWidget
           config={widget.config as TextWidgetConfig}
           dateRange={dateRange}
-          partnerId={partnerId}
+          partnerId={resolvedPartnerId}
+          dataMode={dataMode}
+          refreshTick={refreshTick}
+          forceRefreshToken={forceRefreshToken}
         />
       )
     case 'ai_text':
@@ -63,7 +89,10 @@ export function WidgetRenderer({ widget, dateRange, partnerId }: WidgetRendererP
         <AiTextWidget
           config={widget.config as AiTextWidgetConfig}
           dateRange={dateRange}
-          partnerId={partnerId}
+          partnerId={resolvedPartnerId}
+          dataMode={dataMode}
+          refreshTick={refreshTick}
+          forceRefreshToken={forceRefreshToken}
         />
       )
     default:

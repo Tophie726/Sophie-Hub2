@@ -2,7 +2,19 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { Save, Loader2, ArrowLeft, Building2, ChevronDown, Pencil, Check, Monitor, Tablet, Smartphone } from 'lucide-react'
+import {
+  Save,
+  Loader2,
+  ArrowLeft,
+  Building2,
+  ChevronDown,
+  Pencil,
+  Check,
+  Monitor,
+  Tablet,
+  Smartphone,
+  RefreshCw,
+} from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import {
@@ -12,7 +24,7 @@ import {
 } from '@/components/ui/popover'
 import { DateCohortPicker } from '@/components/reporting/date-cohort-picker'
 import { easeOut, duration } from '@/lib/animations'
-import type { DateRange } from '@/types/modules'
+import type { DateRange, WidgetDataMode } from '@/types/modules'
 
 interface PartnerOption {
   id: string
@@ -35,6 +47,10 @@ interface DashboardHeaderProps {
   onToggleEditMode: () => void
   previewMode?: 'desktop' | 'tablet' | 'mobile'
   onPreviewModeChange?: (mode: 'desktop' | 'tablet' | 'mobile') => void
+  dataMode: WidgetDataMode
+  onDataModeChange: (mode: WidgetDataMode) => void
+  onLiveRefresh: () => void
+  liveRefreshCooldownSec: number
 }
 
 export function DashboardHeader({
@@ -52,6 +68,10 @@ export function DashboardHeader({
   onToggleEditMode,
   previewMode = 'desktop',
   onPreviewModeChange,
+  dataMode,
+  onDataModeChange,
+  onLiveRefresh,
+  liveRefreshCooldownSec,
 }: DashboardHeaderProps) {
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [editValue, setEditValue] = useState(title)
@@ -225,6 +245,52 @@ export function DashboardHeader({
           )}
 
           <DateCohortPicker dateRange={dateRange} onChange={onDateRangeChange} />
+
+          {/* Data source mode toggle */}
+          <div
+            className="hidden sm:flex items-center p-0.5 rounded-lg"
+            style={{ boxShadow: '0 0 0 1px rgba(0,0,0,0.08)' }}
+          >
+            <button
+              onClick={() => onDataModeChange('snapshot')}
+              className={`px-2.5 py-1.5 text-xs rounded-md transition-colors ${
+                dataMode === 'snapshot'
+                  ? 'text-foreground bg-muted font-medium'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+              title="Use snapshot test data"
+            >
+              Snapshot
+            </button>
+            <button
+              onClick={() => onDataModeChange('live')}
+              className={`px-2.5 py-1.5 text-xs rounded-md transition-colors ${
+                dataMode === 'live'
+                  ? 'text-foreground bg-muted font-medium'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+              title="Use live BigQuery-backed data"
+            >
+              Live
+            </button>
+          </div>
+
+          {/* Live refresh with cooldown */}
+          {dataMode === 'live' && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9 px-3 active:scale-[0.97]"
+              onClick={onLiveRefresh}
+              disabled={liveRefreshCooldownSec > 0}
+              title={liveRefreshCooldownSec > 0 ? `Available in ${liveRefreshCooldownSec}s` : 'Refresh live data now'}
+            >
+              <RefreshCw className="h-4 w-4 sm:mr-1.5" />
+              <span className="hidden sm:inline">
+                {liveRefreshCooldownSec > 0 ? `${liveRefreshCooldownSec}s` : 'Refresh'}
+              </span>
+            </Button>
+          )}
 
           {/* Edit Layout toggle */}
           <Button

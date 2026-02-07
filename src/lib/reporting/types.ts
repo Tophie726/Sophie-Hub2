@@ -12,6 +12,7 @@ import type {
   TableWidgetConfig,
   TextWidgetConfig,
   AiTextWidgetConfig,
+  WidgetDataMode,
 } from '@/types/modules'
 
 // =============================================================================
@@ -23,6 +24,9 @@ export interface BaseWidgetProps {
   dateRange: DateRange
   partnerId: string
   title?: string
+  dataMode?: WidgetDataMode
+  refreshTick?: number
+  forceRefreshToken?: number
 }
 
 export interface MetricWidgetProps extends BaseWidgetProps {

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -15,6 +15,7 @@ import {
   findFirstAvailable,
   getMaxRow,
 } from '@/hooks/use-grid-occupancy'
+import { clearQueryCache } from '@/lib/bigquery/query-cache'
 import type {
   DashboardWithChildren,
   SectionWithWidgets,
@@ -22,12 +23,16 @@ import type {
   DateRange,
   WidgetConfig,
   WidgetType,
+  WidgetDataMode,
 } from '@/types/modules'
 
 interface DashboardBuilderProps {
   dashboard: DashboardWithChildren
   moduleSlug: string
 }
+
+const LIVE_POLL_INTERVAL_MS = 2 * 60 * 1000 // 2 minutes
+const LIVE_REFRESH_COOLDOWN_MS = 60 * 1000 // 60 seconds
 
 function migrateDashboard(d: DashboardWithChildren): { dashboard: DashboardWithChildren; didMigrate: boolean } {
   let didMigrate = false
@@ -56,10 +61,35 @@ export function DashboardBuilder({ dashboard: initial, moduleSlug }: DashboardBu
   const [dateRange, setDateRange] = useState<DateRange>({
     preset: (initial.date_range_default as DateRange['preset']) || '30d',
   })
+  const [dataMode, setDataMode] = useState<WidgetDataMode>(initial.is_template ? 'snapshot' : 'live')
+  const [refreshTick, setRefreshTick] = useState(0)
+  const [forceRefreshToken, setForceRefreshToken] = useState(0)
+  const [nowTs, setNowTs] = useState(Date.now())
+  const [nextLiveRefreshAt, setNextLiveRefreshAt] = useState(0)
 
   // Partner selection (for templates or override)
   const [selectedPartnerId, setSelectedPartnerId] = useState<string | null>(initial.partner_id || null)
   const [, setSelectedPartnerName] = useState<string | null>(null)
+
+  // Keep a clock for cooldown UI
+  useEffect(() => {
+    const id = window.setInterval(() => setNowTs(Date.now()), 1000)
+    return () => window.clearInterval(id)
+  }, [])
+
+  // Poll live data (snapshot mode never polls)
+  useEffect(() => {
+    if (dataMode !== 'live') return
+    const id = window.setInterval(() => {
+      setRefreshTick((prev) => prev + 1)
+    }, LIVE_POLL_INTERVAL_MS)
+    return () => window.clearInterval(id)
+  }, [dataMode])
+
+  const liveRefreshCooldownSec = Math.max(
+    0,
+    Math.ceil((nextLiveRefreshAt - nowTs) / 1000)
+  )
 
   // Widget config dialog state
   const [configDialogOpen, setConfigDialogOpen] = useState(false)
@@ -85,6 +115,28 @@ export function DashboardBuilder({ dashboard: initial, moduleSlug }: DashboardBu
   // Date range
   function handleDateRangeChange(range: DateRange) {
     setDateRange(range)
+  }
+
+  function handleDataModeChange(mode: WidgetDataMode) {
+    setDataMode(mode)
+    if (mode === 'snapshot') {
+      clearQueryCache()
+    } else {
+      setRefreshTick((prev) => prev + 1)
+    }
+  }
+
+  function handleLiveRefresh() {
+    if (dataMode !== 'live') return
+    if (liveRefreshCooldownSec > 0) {
+      toast.message(`Live refresh available in ${liveRefreshCooldownSec}s`)
+      return
+    }
+
+    clearQueryCache()
+    setForceRefreshToken((prev) => prev + 1)
+    setNextLiveRefreshAt(Date.now() + LIVE_REFRESH_COOLDOWN_MS)
+    toast.success('Refreshing live data...')
   }
 
   // Edit mode toggle — clicking "Done" triggers save if there are changes
@@ -378,6 +430,9 @@ export function DashboardBuilder({ dashboard: initial, moduleSlug }: DashboardBu
                 section={section}
                 dateRange={dateRange}
                 partnerId={selectedPartnerId || undefined}
+                dataMode={dataMode}
+                refreshTick={refreshTick}
+                forceRefreshToken={forceRefreshToken}
                 isEditMode={isEditMode}
                 previewMode={previewMode}
                 onAddWidget={handleAddWidget}
@@ -423,6 +478,10 @@ export function DashboardBuilder({ dashboard: initial, moduleSlug }: DashboardBu
         onToggleEditMode={handleToggleEditMode}
         previewMode={previewMode}
         onPreviewModeChange={setPreviewMode}
+        dataMode={dataMode}
+        onDataModeChange={handleDataModeChange}
+        onLiveRefresh={handleLiveRefresh}
+        liveRefreshCooldownSec={liveRefreshCooldownSec}
       />
 
       <div className="p-4 md:p-8">

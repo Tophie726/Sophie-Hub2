@@ -26,12 +26,15 @@ import {
   GRID_COLS,
 } from '@/hooks/use-grid-occupancy'
 import { easeInOut, duration } from '@/lib/animations'
-import type { SectionWithWidgets, DashboardWidget, DateRange } from '@/types/modules'
+import type { SectionWithWidgets, DashboardWidget, DateRange, WidgetDataMode } from '@/types/modules'
 
 interface SectionContainerProps {
   section: SectionWithWidgets
   dateRange: DateRange
   partnerId?: string
+  dataMode: WidgetDataMode
+  refreshTick: number
+  forceRefreshToken: number
   isEditMode: boolean
   previewMode?: 'desktop' | 'tablet' | 'mobile'
   onAddWidget: (sectionId: string) => void
@@ -46,6 +49,9 @@ export function SectionContainer({
   section,
   dateRange,
   partnerId,
+  dataMode,
+  refreshTick,
+  forceRefreshToken,
   isEditMode,
   previewMode = 'desktop',
   onAddWidget,
@@ -312,6 +318,9 @@ export function SectionContainer({
                         widget={widget}
                         dateRange={dateRange}
                         partnerId={partnerId}
+                        dataMode={dataMode}
+                        refreshTick={refreshTick}
+                        forceRefreshToken={forceRefreshToken}
                       />
                     </WidgetWrapper>
                   ))}
@@ -336,6 +345,9 @@ export function SectionContainer({
                             widget={activeWidget}
                             dateRange={dateRange}
                             partnerId={partnerId}
+                            dataMode={dataMode}
+                            refreshTick={refreshTick}
+                            forceRefreshToken={forceRefreshToken}
                           />
                         </div>
                       ) : null}

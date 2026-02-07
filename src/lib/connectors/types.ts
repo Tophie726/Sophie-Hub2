@@ -18,6 +18,7 @@ export type ConnectorTypeId =
   | 'google_sheet'
   | 'google_form'
   | 'bigquery'
+  | 'slack'
   | 'api'
   | 'csv'
   // Future connectors:
@@ -92,6 +93,16 @@ export interface BigQueryConnectorConfig {
 }
 
 /**
+ * Configuration for Slack connector
+ * Used for staff mapping, channel-to-partner mapping, and response time analytics
+ */
+export interface SlackConnectorConfig {
+  type: 'slack'
+  /** Slack Bot User OAuth Token (xoxb-...) */
+  bot_token?: string
+}
+
+/**
  * Discriminated union of all connector configurations
  * Use this when storing/retrieving connector config from the database
  */
@@ -99,6 +110,7 @@ export type ConnectorConfig =
   | GoogleSheetConnectorConfig
   | GoogleFormConnectorConfig
   | BigQueryConnectorConfig
+  | SlackConnectorConfig
   | ApiConnectorConfig
   | CsvConnectorConfig
 
@@ -302,6 +314,15 @@ export function isBigQueryConfig(
   config: ConnectorConfig
 ): config is BigQueryConnectorConfig {
   return config.type === 'bigquery'
+}
+
+/**
+ * Type guard to check if a config is for Slack
+ */
+export function isSlackConfig(
+  config: ConnectorConfig
+): config is SlackConnectorConfig {
+  return config.type === 'slack'
 }
 
 // =============================================================================

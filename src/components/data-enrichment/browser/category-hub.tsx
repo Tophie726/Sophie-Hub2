@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { FileSpreadsheet, FileText, FileQuestion, Database, Loader2 } from 'lucide-react'
+import { FileSpreadsheet, FileText, FileQuestion, Database, MessageSquare, Loader2 } from 'lucide-react'
 import { CategoryCard } from './category-card'
 
 interface DataSourceStats {
@@ -12,7 +12,7 @@ interface DataSourceStats {
 }
 
 interface CategoryHubProps {
-  onSelectCategory: (category: 'sheets' | 'forms' | 'docs' | 'bigquery') => void
+  onSelectCategory: (category: 'sheets' | 'forms' | 'docs' | 'bigquery' | 'slack') => void
 }
 
 const easeOut: [number, number, number, number] = [0.22, 1, 0.36, 1]
@@ -90,6 +90,15 @@ export function CategoryHub({ onSelectCategory }: CategoryHubProps) {
           iconColor="text-blue-600"
           bgColor="bg-blue-500/10"
           onClick={() => onSelectCategory('bigquery')}
+        />
+
+        <CategoryCard
+          title="Slack"
+          description="Map staff and channels, track response times"
+          icon={MessageSquare}
+          iconColor="text-purple-600"
+          bgColor="bg-purple-500/10"
+          onClick={() => onSelectCategory('slack')}
         />
 
         <CategoryCard
