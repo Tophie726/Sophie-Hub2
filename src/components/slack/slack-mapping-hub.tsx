@@ -2,13 +2,17 @@
 
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Users, Hash, ArrowLeft } from 'lucide-react'
+import { Users, Hash, ArrowLeft, RefreshCw, BarChart3 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { SlackConnectionCard } from './slack-connection-card'
 import { SlackStaffMapping } from './slack-staff-mapping'
 import { SlackChannelMapping } from './slack-channel-mapping'
+import { SlackSyncStatus } from './slack-sync-status'
+import { SlackAnalyticsSummary } from './slack-analytics-summary'
+import { SlackResponseChart } from './slack-response-chart'
+import { SlackChannelHeatmap } from './slack-channel-heatmap'
 
-type Tab = 'staff' | 'channels'
+type Tab = 'staff' | 'channels' | 'sync' | 'analytics'
 
 interface SlackMappingHubProps {
   onBack?: () => void
@@ -17,6 +21,8 @@ interface SlackMappingHubProps {
 const tabs: { id: Tab; label: string; icon: typeof Users }[] = [
   { id: 'staff', label: 'Staff', icon: Users },
   { id: 'channels', label: 'Channels', icon: Hash },
+  { id: 'sync', label: 'Sync', icon: RefreshCw },
+  { id: 'analytics', label: 'Analytics', icon: BarChart3 },
 ]
 
 export function SlackMappingHub({ onBack }: SlackMappingHubProps) {
@@ -48,7 +54,7 @@ export function SlackMappingHub({ onBack }: SlackMappingHubProps) {
       {(isConnected || true) && ( // Always show tabs (connection check is in API routes)
         <>
           {/* Tabs */}
-          <div className="flex items-center gap-1 p-1 bg-muted/50 rounded-lg w-fit">
+          <div className="flex items-center gap-1 p-1 bg-muted/50 rounded-lg w-fit overflow-x-auto scrollbar-hide">
             {tabs.map((tab) => {
               const Icon = tab.icon
               const isActive = activeTab === tab.id
@@ -56,7 +62,7 @@ export function SlackMappingHub({ onBack }: SlackMappingHubProps) {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className="relative flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors"
+                  className="relative flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors shrink-0"
                 >
                   {isActive && (
                     <motion.div
@@ -78,6 +84,14 @@ export function SlackMappingHub({ onBack }: SlackMappingHubProps) {
           <div>
             {activeTab === 'staff' && <SlackStaffMapping />}
             {activeTab === 'channels' && <SlackChannelMapping />}
+            {activeTab === 'sync' && <SlackSyncStatus />}
+            {activeTab === 'analytics' && (
+              <div className="space-y-6">
+                <SlackAnalyticsSummary />
+                <SlackResponseChart />
+                <SlackChannelHeatmap />
+              </div>
+            )}
           </div>
         </>
       )}

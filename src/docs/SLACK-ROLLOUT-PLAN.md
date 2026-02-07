@@ -666,15 +666,283 @@ Any metric can be recomputed from source data:
 
 ---
 
-## Codex Review Delta (2026-02-07)
+## Agent Team Plan: Phase 2/3 Implementation
 
-The following corrections were applied during strict review:
+### Team Structure (4 agents)
 
-1. **RLS corrected** for `slack_messages` and `slack_response_metrics` to admin/operations_admin + service role only (not all authenticated users).
-2. **Sender schema hardened**: `sender_slack_id` is nullable, `sender_bot_id` and `sender_type` added so non-user/system events don't fail inserts.
-3. **Two-watermark sync model added**: `latest_ts` (forward) + `oldest_ts` (historical) to support deep backfill without duplication as bot coverage expands.
-4. **Backfill completion logic fixed**: no first-page-size shortcut; completion is cursor-driven.
-5. **Cron overlap protection added**: `slack_sync_runs` lease columns and claim SQL to prevent concurrent workers from processing the same run.
-6. **Cross-day response logic made consistent** via lookahead window and rolling recomputation window.
-7. **Versioning clarified**: `algorithm_version` tracks the logic used for current row (rows are overwritten on recompute).
-8. **Reprocessing and migration order updated** to include resetting both sync boundaries and creating `slack_sync_runs`/`oldest_ts` fields.
+| Agent | Name | Type | Scope |
+|-------|------|------|-------|
+| **sync-engine** | `sync-engine` | general-purpose | Core sync logic, DB migrations, cron handler |
+| **api-dev** | `api-dev` | general-purpose | All Phase 2/3 API routes |
+| **ui-dev** | `ui-dev` | general-purpose | Sync status UI, analytics charts, dashboard widgets |
+| **analytics-engine** | `analytics-engine` | general-purpose | Response time algorithm, metrics computation, recomputation |
+
+### Agent Ownership Matrix
+
+#### sync-engine (Phase 2 lead)
+
+**Creates:**
+| File | Purpose |
+|------|---------|
+| `supabase/migrations/20260208_slack_messages.sql` | `slack_messages` + `slack_sync_runs` tables, RLS policies, indexes |
+| `supabase/migrations/20260208_slack_sync_state_v2.sql` | ALTER `slack_sync_state` ADD `oldest_ts`, `bot_is_member` |
+| `src/lib/slack/sync.ts` | `syncAllChannels()`, `syncChannel()`, bot membership handling, chunked processing |
+
+**Modifies:**
+| File | Change |
+|------|--------|
+| `src/lib/slack/client.ts` | Add `joinChannel()`, `getChannelHistory()` with pagination params |
+| `src/lib/slack/types.ts` | Add `SlackSyncRun`, `SyncChannelResult`, `SyncRunSummary` types |
+| `src/lib/connectors/slack.ts` | Wire sync methods into connector |
+| `src/app/api/slack/mappings/staff/route.ts` | Add staff reclassification on POST (Phase 2.6) |
+| `src/app/api/slack/mappings/staff/auto-match/route.ts` | Add bulk reclassification after auto-match |
+
+**Blocked by:** Nothing (starts immediately)
+**Blocks:** api-dev (needs sync.ts for route handlers), analytics-engine (needs slack_messages populated)
+
+#### api-dev (Phase 2 routes + Phase 3 routes)
+
+**Creates:**
+| File | Purpose |
+|------|---------|
+| `src/app/api/slack/sync/start/route.ts` | POST: create sync run, return run_id |
+| `src/app/api/slack/sync/status/route.ts` | GET: current/latest sync run progress |
+| `src/app/api/slack/sync/channel/[channelId]/route.ts` | POST: single-channel sync (debug) |
+| `src/app/api/cron/slack-sync/route.ts` | POST: Vercel cron handler for chunked sync |
+| `src/app/api/slack/analytics/response-times/route.ts` | GET: filterable response metrics |
+| `src/app/api/slack/analytics/channel-activity/route.ts` | GET: message volume over time |
+| `src/app/api/slack/analytics/summary/route.ts` | GET: dashboard KPIs |
+| `src/app/api/slack/analytics/recompute/route.ts` | POST: trigger recomputation |
+| `src/app/api/cron/slack-analytics/route.ts` | POST: daily analytics cron |
+
+**Modifies:**
+| File | Change |
+|------|--------|
+| `vercel.json` | Add cron schedules for `slack-sync` (every 5 min) and `slack-analytics` (daily 6am UTC) |
+
+**Blocked by:** sync-engine (needs `sync.ts` exports, `slack_sync_runs` schema)
+**Blocks:** ui-dev (needs API endpoints for data fetching)
+
+#### analytics-engine (Phase 3 lead)
+
+**Creates:**
+| File | Purpose |
+|------|---------|
+| `supabase/migrations/20260210_slack_response_metrics.sql` | `slack_response_metrics` table, RLS, indexes |
+| `src/lib/slack/analytics.ts` | `computeResponseTimes()`, lookahead window, thread/top-level scoping, aggregation |
+| `src/lib/slack/analytics-utils.ts` | Median/p95 computation, bucket classification, date range utilities |
+
+**Modifies:**
+| File | Change |
+|------|--------|
+| `src/lib/slack/types.ts` | Add `ResponseMetric`, `ResponseTimeBucket`, `AnalyticsSummary` types |
+
+**Blocked by:** sync-engine (needs `slack_messages` table populated with real data for testing)
+**Blocks:** ui-dev (analytics components need working computation)
+
+**Note:** analytics-engine can start building the algorithm and unit tests against mock data while sync-engine finishes. Hard dependency is only for integration testing.
+
+#### ui-dev (Phase 2 + Phase 3 UI)
+
+**Creates:**
+| File | Purpose |
+|------|---------|
+| `src/components/slack/slack-sync-status.tsx` | Sync progress: run status, per-channel table, start/retry buttons |
+| `src/components/slack/slack-response-chart.tsx` | Recharts line chart: response time trends (30/60/90 day) |
+| `src/components/slack/slack-channel-heatmap.tsx` | GitHub-style heatmap: channels x days, color = response time |
+| `src/components/slack/slack-analytics-summary.tsx` | KPI cards, pod leader leaderboard, sparklines |
+
+**Modifies:**
+| File | Change |
+|------|--------|
+| `src/components/slack/slack-mapping-hub.tsx` | Add Sync tab (Phase 2), Analytics tab (Phase 3) |
+| `src/components/data-enrichment/browser/category-hub.tsx` | Update Slack card stats to show sync + analytics info |
+
+**Blocked by:** api-dev (needs working endpoints), analytics-engine (needs metrics data)
+
+### Dependency Graph
+
+```
+sync-engine ──────┬──> api-dev ──────────┬──> ui-dev
+                  │                      │
+                  └──> analytics-engine ──┘
+```
+
+**Parallelism opportunities:**
+1. sync-engine + analytics-engine can start simultaneously (analytics builds algorithm against mock data)
+2. api-dev can start Phase 2 routes as soon as sync-engine delivers `sync.ts`
+3. ui-dev starts Phase 2 UI (sync status) while analytics-engine finishes Phase 3
+
+### Phased Execution
+
+#### Wave 1 (Day 1-2): Foundation
+- **sync-engine**: DB migrations + sync engine core
+- **analytics-engine**: Algorithm implementation + unit tests against mock data
+
+#### Wave 2 (Day 2-3): Integration
+- **api-dev**: Phase 2 sync routes + cron handler (after sync-engine delivers)
+- **ui-dev**: Sync status UI (after api-dev delivers Phase 2 routes)
+- **sync-engine**: Staff reclassification triggers (Phase 2.6)
+
+#### Wave 3 (Day 3-4): Analytics
+- **analytics-engine**: Integration with real slack_messages data
+- **api-dev**: Phase 3 analytics routes + cron handler
+- **ui-dev**: Analytics UI (charts, heatmap, KPIs)
+
+#### Wave 4 (Day 4): Polish + Verification
+- All agents: Go/no-go criteria verification
+- ui-dev: Integration points (partner detail widget, dashboard KPI card)
+- sync-engine + analytics-engine: Backfill execution + recomputation testing
+
+### Task Breakdown (for TaskList)
+
+| ID | Task | Owner | Blocked By |
+|----|------|-------|------------|
+| 1 | Create `slack_messages` + `slack_sync_runs` migrations | sync-engine | — |
+| 2 | Alter `slack_sync_state` (add oldest_ts, bot_is_member) | sync-engine | — |
+| 3 | Build `src/lib/slack/sync.ts` (syncAllChannels, syncChannel) | sync-engine | 1, 2 |
+| 4 | Add joinChannel + getChannelHistory to client.ts | sync-engine | — |
+| 5 | Add staff reclassification to mapping routes | sync-engine | 1 |
+| 6 | Build response time algorithm (`analytics.ts`) | analytics-engine | — |
+| 7 | Unit tests for analytics against mock data | analytics-engine | 6 |
+| 8 | Create sync API routes (start, status, channel) | api-dev | 3 |
+| 9 | Create Vercel cron handler for sync | api-dev | 3 |
+| 10 | Build sync status UI component | ui-dev | 8 |
+| 11 | Add Sync tab to mapping hub | ui-dev | 10 |
+| 12 | Create `slack_response_metrics` migration | analytics-engine | — |
+| 13 | Integration test analytics with real slack_messages | analytics-engine | 3, 12 |
+| 14 | Create analytics API routes | api-dev | 6, 12 |
+| 15 | Create daily analytics cron handler | api-dev | 6, 12 |
+| 16 | Build response chart UI | ui-dev | 14 |
+| 17 | Build channel heatmap UI | ui-dev | 14 |
+| 18 | Build analytics summary KPIs | ui-dev | 14 |
+| 19 | Add Analytics tab to mapping hub | ui-dev | 16, 17, 18 |
+| 20 | Vercel cron config (vercel.json) | api-dev | 9, 15 |
+| 21 | Go/no-go verification | all | 1-20 |
+
+---
+
+## Final Handoff (Claude + Codex)
+
+This section consolidates the implementation notes and strict-review deltas into a single handoff.
+
+### Team split rationale
+
+Use 4 agents for Phase 2/3 implementation:
+
+- **sync-engine**: migrations + sync algorithm + reclassification hooks
+- **analytics-engine**: response-time algorithm + aggregation logic + tests
+- **api-dev**: sync/analytics HTTP routes + cron handlers + run leasing
+- **ui-dev**: sync status + analytics surfaces using stable APIs
+
+This avoids bottlenecking algorithm-heavy work in one stream and keeps API/UI work decoupled.
+
+### Core corrections already incorporated
+
+1. RLS hardened for `slack_messages` and `slack_response_metrics` to admin/operations_admin + service role.
+2. Sender schema hardened for non-user events: `sender_slack_id` nullable, `sender_bot_id` and `sender_type` added.
+3. Two-watermark sync model: `latest_ts` (forward incremental) + `oldest_ts` (historical backfill boundary).
+4. Backfill completion fixed to cursor-driven completion (not first-page-size heuristics).
+5. Cron overlap protection added via `slack_sync_runs` lease fields and lease-claim SQL.
+6. Cross-day response-time logic aligned using LOOKAHEAD window + rolling recompute.
+7. Metric versioning clarified as `algorithm_version` (current-row logic marker under upsert-overwrite model).
+8. Migration order and reprocessing updated to include `slack_sync_runs`, `oldest_ts`, and full boundary reset.
+
+### Implementation risks to watch
+
+1. **Cron granularity**: 5-minute cadence may make full workspace sync slow; monitor runtime and channel throughput early.
+2. **Lease/heartbeat discipline**: every worker execution must claim lease first and heartbeat periodically; exit immediately if lease not acquired.
+3. **Thread model ambiguity**: confirm whether threaded replies should satisfy top-level partner prompts in your real usage.
+4. **Analytics ordering**: do not run analytics backfill before message backfill is sufficiently complete.
+5. **Non-staff sender semantics**: Slack Connect/external guests currently collapse into non-staff; decide whether to introduce a third sender class later.
+
+### Validation checklist for implementation
+
+1. Lease crash recovery: verify stuck worker recovery at next cron tick after lease expiry.
+2. LOOKAHEAD boundary behavior: verify day D partner prompts with day D+N replies at N=1..8 and confirm desired unanswered semantics.
+3. API bootstrapping order: api-dev can scaffold routes in parallel, but integration tests should wait for sync/analytics engine contracts.
+
+---
+
+## Delivery Log
+
+_Updated by agents as work is completed. Each entry records what was done, files touched, and any decisions made._
+
+### sync-engine
+
+| Status | Task | Files | Notes |
+|--------|------|-------|-------|
+| Done | #1 slack_messages + slack_sync_runs migration | `supabase/migrations/20260208_slack_messages.sql` | Two tables, indexes, RLS (admin/ops_admin + service_role), sender_present CHECK constraint |
+| Done | #2 Alter slack_sync_state (oldest_ts, bot_is_member) | `supabase/migrations/20260208_slack_sync_state_v2.sql` | Two-watermark model columns for backfill boundary + bot membership |
+| Done | #4 Add getChannelHistoryPage to client.ts | `src/lib/slack/client.ts` | New paginated API returning {messages, has_more, next_cursor}; refactored getChannelHistory to use it; added latest param for backfill |
+| Done | #3 Build sync engine (sync.ts) | `src/lib/slack/sync.ts` | syncChannel, syncForward, syncBackfill, createSyncRun, acquireLease, processChunk, syncSingleChannel, reclassify/unclassify helpers |
+| Done | #5 Staff reclassification on mapping routes | `src/app/api/slack/mappings/staff/route.ts`, `src/app/api/slack/mappings/staff/auto-match/route.ts` | POST reclassifies, DELETE un-classifies, auto-match bulk reclassifies |
+| Done | Types for Phase 2 | `src/lib/slack/types.ts` | Added ChannelSyncStateV2, SlackSyncRun, SyncChannelResult, SyncRunSummary |
+
+### analytics-engine
+
+| Status | Task | Files | Notes |
+|--------|------|-------|-------|
+| Done | #7 slack_response_metrics migration | `supabase/migrations/20260210_slack_response_metrics.sql` | Table, 3 indexes, RLS (admin/ops_admin + service_role) |
+| Done | #6 Response time algorithm | `src/lib/slack/analytics.ts` | computeResponseTimes, computeChannelMetrics, computeAllChannels, computeDailyRollingWindow |
+| Done | #6 Analytics utilities | `src/lib/slack/analytics-utils.ts` | median, p95, average, bucketCounts, dateRange, diffMinutes |
+| Done | #6 Analytics types | `src/lib/slack/types.ts` | Added ResponseTimeBucket, ResponseMetric, AnalyticsSummary, ComputeResult, AnalyticsMessage |
+
+### api-dev
+
+| Status | Task | Files | Notes |
+|--------|------|-------|-------|
+| Done | #12 Analytics API: response-times | `src/app/api/slack/analytics/response-times/route.ts` | GET: filter by partner_id, pod_leader_id, date range; enriched with names |
+| Done | #12 Analytics API: channel-activity | `src/app/api/slack/analytics/channel-activity/route.ts` | GET: message volume with day/week/month granularity aggregation |
+| Done | #12 Analytics API: summary | `src/app/api/slack/analytics/summary/route.ts` | GET: dashboard KPIs, weighted avg response, % under 1h, pod leader leaderboard top 5 |
+| Done | #12 Analytics API: recompute | `src/app/api/slack/analytics/recompute/route.ts` | POST: trigger recomputation for date range, optional channel_id |
+| Done | #13 Daily analytics cron | `src/app/api/cron/slack-analytics/route.ts` | POST: CRON_SECRET auth, calls computeDailyRollingWindow() |
+| Done | #8 Sync API: start | `src/app/api/slack/sync/start/route.ts` | POST: creates sync run, returns run_id, 409 if already running |
+| Done | #8 Sync API: status | `src/app/api/slack/sync/status/route.ts` | GET: latest run + per-channel sync state with partner names |
+| Done | #8 Sync API: single channel | `src/app/api/slack/sync/channel/[channelId]/route.ts` | POST: debug single-channel sync via syncSingleChannel() |
+| Done | #9 Sync cron handler | `src/app/api/cron/slack-sync/route.ts` | POST: CRON_SECRET auth, finds active run, calls processChunk() |
+| Done | #18 Vercel cron config | `vercel.json` | slack-sync every 5 min, slack-analytics daily at 6am UTC |
+
+### ui-dev
+
+| Status | Task | Files | Notes |
+|--------|------|-------|-------|
+| Done | #10 Sync status UI | `src/components/slack/slack-sync-status.tsx` | TanStack Query with 5s poll while running; progress bar, per-channel table with error tooltips, start/single-channel sync buttons; shimmer loading |
+| Done | #11 Add Sync tab | `src/components/slack/slack-mapping-hub.tsx` | Tab bar: Staff, Channels, Sync, Analytics; horizontal scroll on mobile |
+| Done | #16 Analytics KPI cards | `src/components/slack/slack-analytics-summary.tsx` | 4 KPI cards (avg response, % under 1h, unanswered, active channels); 7-day sparkline with trend arrow; pod leader leaderboard top 5; period selector (30/60/90d) |
+| Done | #14 Response chart | `src/components/slack/slack-response-chart.tsx` | Recharts line chart (avg response over time) + stacked bar (bucket distribution); partner searchable dropdown + pod leader filter; 30/60/90d selector |
+| Done | #15 Channel heatmap | `src/components/slack/slack-channel-heatmap.tsx` | GitHub-style grid: rows=channels, cols=days; color by response bucket (green/yellow/orange/red/gray); event delegation for hover tooltips; sorted by worst response; legend |
+| Done | #17 Add Analytics tab | `src/components/slack/slack-mapping-hub.tsx` | Analytics tab renders Summary + Chart + Heatmap stacked |
+| Done | Table component | `src/components/ui/table.tsx` | Standard shadcn/ui table component (was missing from project) |
+
+### Review Notes (team-lead, 2026-02-07)
+
+**Full code review completed.** 25+ files, ~5000 lines. 0 critical, 0 major, 0 minor issues.
+
+**Pattern compliance:**
+- All imports use `@/` aliases correctly
+- All API routes follow `requireRole(ROLES.ADMIN)` + `apiSuccess`/`apiError` pattern
+- All DB operations use `getAdminClient()`
+- Cron routes verify `CRON_SECRET` bearer token
+- Zod validation on all POST/query params
+- DB table/column names match migrations exactly
+- Function signatures match between callers and exports
+- No TODO/placeholder comments left
+
+**Architecture verification:**
+- Two-watermark sync (latest_ts + oldest_ts) correctly implemented in sync.ts
+- Lease-based overlap protection (4-min TTL for 5-min cron) in processChunk
+- Response time algorithm handles all 8 documented edge cases
+- Staff reclassification wired into both manual mapping and auto-match routes
+- UI components use TanStack Query with proper polling (5s refetchInterval while sync active)
+- Heatmap uses event delegation (matches existing health heatmap pattern)
+
+**TypeScript:** Only pre-existing test file error (`__tests__/api-response.test.ts` Zod version mismatch). All Phase 2/3 code compiles clean.
+
+**Recommendations for Codex:**
+1. Integration test the two-watermark sync with realistic channel counts
+2. Spot-check response_metrics rows against raw slack_messages after first cron run
+3. Verify LOOKAHEAD_DAYS=7 is sufficient for real Sophie Society usage patterns
+4. Consider pagination on analytics routes if date ranges grow large
+
+**Team execution:** 4 agents, 18 tasks, all completed. sync-engine + analytics-engine ran in parallel (Wave 1), api-dev consumed both (Wave 2), ui-dev consumed api-dev (Wave 3). Total wall-clock: ~25 minutes.

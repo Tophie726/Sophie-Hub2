@@ -12,6 +12,7 @@ import { ROLES } from '@/lib/auth/roles'
 import { apiSuccess, apiError, apiValidationError, ApiErrors } from '@/lib/api/response'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { invalidateUsersCache } from '@/lib/connectors/slack-cache'
+import { reclassifyStaffMessages, unclassifyStaffMessages } from '@/lib/slack/sync'
 
 const CreateMappingSchema = z.object({
   staff_id: z.string().uuid('staff_id must be a valid UUID'),
@@ -164,6 +165,9 @@ export async function POST(request: NextRequest) {
       .update({ slack_id: slack_user_id })
       .eq('id', staff_id)
 
+    // Reclassify existing messages from this Slack user as staff (Phase 2.6)
+    const reclassified = await reclassifyStaffMessages(slack_user_id, staff_id)
+
     invalidateUsersCache()
 
     return apiSuccess({
@@ -171,6 +175,7 @@ export async function POST(request: NextRequest) {
         ...mapping,
         staff_name: staff.full_name,
       },
+      messages_reclassified: reclassified,
     }, 201)
   } catch (error) {
     console.error('POST staff-slack mapping error:', error)
@@ -197,10 +202,10 @@ export async function DELETE(request: NextRequest) {
 
     const supabase = getAdminClient()
 
-    // Get the mapping first to clear staff.slack_id
+    // Get the mapping first to clear staff.slack_id and un-classify messages
     const { data: existing } = await supabase
       .from('entity_external_ids')
-      .select('entity_id')
+      .select('entity_id, external_id')
       .eq('id', mappingId)
       .eq('source', 'slack_user')
       .single()
@@ -216,17 +221,23 @@ export async function DELETE(request: NextRequest) {
       return ApiErrors.database()
     }
 
-    // Clear staff.slack_id
+    let messagesUnclassified = 0
+    // Clear staff.slack_id and un-classify messages (Phase 2.6)
     if (existing) {
       await supabase
         .from('staff')
         .update({ slack_id: null })
         .eq('id', existing.entity_id)
+
+      messagesUnclassified = await unclassifyStaffMessages(
+        existing.external_id,
+        existing.entity_id
+      )
     }
 
     invalidateUsersCache()
 
-    return apiSuccess({ deleted: true })
+    return apiSuccess({ deleted: true, messages_unclassified: messagesUnclassified })
   } catch (error) {
     console.error('DELETE staff-slack mapping error:', error)
     return ApiErrors.internal()

@@ -237,8 +237,61 @@ export async function listChannels(options?: {
   return allChannels
 }
 
+/** Result from a single page of channel history */
+export interface ChannelHistoryPage {
+  messages: SlackMessageMeta[]
+  has_more: boolean
+  next_cursor?: string
+}
+
 /**
- * Get message history for a channel (paginated)
+ * Get a single page of message history for a channel.
+ * Returns message metadata only — NOT content.
+ *
+ * @param channelId - Slack channel ID
+ * @param options.oldest - Only messages after this timestamp (exclusive)
+ * @param options.latest - Only messages before this timestamp (exclusive, for backfill)
+ * @param options.cursor - Pagination cursor from previous page
+ * @param options.limit - Messages per page (default: PAGE_SIZE = 200)
+ */
+export async function getChannelHistoryPage(
+  channelId: string,
+  options?: {
+    oldest?: string
+    latest?: string
+    cursor?: string
+    limit?: number
+  }
+): Promise<ChannelHistoryPage> {
+  const params: Record<string, string | number> = {
+    channel: channelId,
+    limit: options?.limit || PAGE_SIZE,
+  }
+  if (options?.oldest) params.oldest = options.oldest
+  if (options?.latest) params.latest = options.latest
+  if (options?.cursor) params.cursor = options.cursor
+
+  const data = await slackApi('conversations.history', params)
+  const rawMessages = (data.messages || []) as SlackMessageMeta[]
+
+  const messages: SlackMessageMeta[] = rawMessages.map(msg => ({
+    ts: msg.ts,
+    thread_ts: msg.thread_ts,
+    user: msg.user,
+    bot_id: msg.bot_id,
+    type: msg.type,
+    subtype: msg.subtype,
+  }))
+
+  return {
+    messages,
+    has_more: !!data.has_more,
+    next_cursor: data.response_metadata?.next_cursor || undefined,
+  }
+}
+
+/**
+ * Get message history for a channel (paginated, fetches all pages)
  * Returns message metadata only — NOT content
  *
  * @param channelId - Slack channel ID
@@ -255,29 +308,13 @@ export async function getChannelHistory(
   const maxMessages = limit || Infinity
 
   do {
-    const params: Record<string, string | number> = {
-      channel: channelId,
+    const page = await getChannelHistoryPage(channelId, {
+      oldest,
+      cursor,
       limit: Math.min(PAGE_SIZE, maxMessages - allMessages.length),
-    }
-    if (oldest) params.oldest = oldest
-    if (cursor) params.cursor = cursor
-
-    const data = await slackApi('conversations.history', params)
-    const messages = (data.messages || []) as SlackMessageMeta[]
-
-    // Extract metadata only (no content)
-    for (const msg of messages) {
-      allMessages.push({
-        ts: msg.ts,
-        thread_ts: msg.thread_ts,
-        user: msg.user,
-        bot_id: msg.bot_id,
-        type: msg.type,
-        subtype: msg.subtype,
-      })
-    }
-
-    cursor = data.response_metadata?.next_cursor || undefined
+    })
+    allMessages.push(...page.messages)
+    cursor = page.next_cursor
   } while (cursor && allMessages.length < maxMessages)
 
   return allMessages

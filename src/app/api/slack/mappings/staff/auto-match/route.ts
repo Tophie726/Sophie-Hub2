@@ -11,6 +11,7 @@ import { apiSuccess, ApiErrors } from '@/lib/api/response'
 import { slackConnector } from '@/lib/connectors/slack'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { invalidateUsersCache } from '@/lib/connectors/slack-cache'
+import { bulkReclassifyStaffMessages } from '@/lib/slack/sync'
 
 export async function POST() {
   const auth = await requireRole(ROLES.ADMIN)
@@ -115,6 +116,14 @@ export async function POST() {
       }
     }
 
+    // 6. Bulk reclassify existing messages for newly matched staff (Phase 2.6)
+    let messagesReclassified = 0
+    if (matches.length > 0) {
+      messagesReclassified = await bulkReclassifyStaffMessages(
+        matches.map(m => ({ slackUserId: m.slack_user_id, staffId: m.staff_id }))
+      )
+    }
+
     // Build unmatched Slack users list (not in any mapping, old or new)
     const unmatchedSlackUsers = slackUsers
       .filter(u => !alreadyMappedSlackUsers.has(u.id))
@@ -129,6 +138,7 @@ export async function POST() {
       total_slack_users: slackUsers.length,
       matched: matches.length,
       already_mapped: alreadyMappedStaff.size,
+      messages_reclassified: messagesReclassified,
       matches: matches.map(m => ({
         staff_name: m.staff_name,
         slack_user_name: m.slack_user_name,
