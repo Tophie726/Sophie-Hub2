@@ -321,11 +321,10 @@ export function GWSStaffMapping() {
     return mapped[reason] || reason.replace(/_/g, ' ').replace(/\s+/g, ' ').trim()
   }
 
-  function classificationSummary(user: DirectoryUser): string {
-    const resolvedType = user.account_type === 'shared_account' ? 'Shared inbox' : 'Person'
+  function classificationModeLabel(user: DirectoryUser): string {
     const source = user.account_type_overridden ? 'Manual' : 'Auto'
-    const reason = user.account_type_reason ? ` · ${formatClassificationReason(user.account_type_reason)}` : ''
-    return `${resolvedType} (${source}${reason})`
+    const resolvedType = user.account_type === 'shared_account' ? 'Shared' : 'Person'
+    return `${source} · ${resolvedType}`
   }
 
   // Sync directory
@@ -946,6 +945,16 @@ export function GWSStaffMapping() {
                         Override
                       </span>
                     )}
+                    <span
+                      className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground flex-shrink-0"
+                      title={
+                        user.account_type_reason
+                          ? `Reason: ${formatClassificationReason(user.account_type_reason)}`
+                          : undefined
+                      }
+                    >
+                      {classificationModeLabel(user)}
+                    </span>
                     {user.is_suspended && (
                       <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-red-500/10 text-red-500 flex-shrink-0">
                         Suspended
@@ -959,9 +968,6 @@ export function GWSStaffMapping() {
                         {user.org_unit_path}
                       </span>
                     )}
-                    <span className="text-[10px] text-muted-foreground/70 truncate hidden xl:inline">
-                      Classification: {classificationSummary(user)}
-                    </span>
                   </div>
                   {user.is_mapped && user.staff_name && (
                     <p className="text-sm text-muted-foreground ml-6 truncate">

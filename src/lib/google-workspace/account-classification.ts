@@ -81,6 +81,8 @@ const SHARED_PREFIX_HINTS = [
   'leadgeneration',
   'catalog',
   'catalogue',
+  'brandmanager',
+  'contentmanager',
   'noreply',
   'notifications',
   'billing',
@@ -133,13 +135,19 @@ export function classifyGoogleAccountEmail(email: string): {
   }
 
   const collapsed = localPart.replace(/[._-]/g, '')
+  const collapsedNoDigits = collapsed.replace(/\d+$/g, '')
   const tokens = localPart.split(/[._-]+/).filter(Boolean)
+  const normalizedTokens = tokens.map(token => token.replace(/\d+$/g, ''))
   const sharedTokenSet = new Set(SHARED_KEYWORDS.map(k => k.toLowerCase()))
   const sharedCollapsedSet = new Set(SHARED_KEYWORDS.map(k => k.toLowerCase().replace(/[-_]/g, '')))
 
   // Shared account detection first, using exact token/alias matches.
   // Avoid substring matching (e.g. "chris" should not match "hr").
-  if (tokens.some(token => sharedTokenSet.has(token)) || sharedCollapsedSet.has(collapsed)) {
+  if (
+    normalizedTokens.some(token => sharedTokenSet.has(token)) ||
+    sharedCollapsedSet.has(collapsed) ||
+    sharedCollapsedSet.has(collapsedNoDigits)
+  ) {
     return { type: 'shared_account', reason: 'shared_keyword_match' }
   }
 

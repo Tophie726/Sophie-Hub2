@@ -6,6 +6,9 @@ import { FileSpreadsheet, FileText, FileQuestion, Database, Building2 } from 'lu
 import { CategoryCard } from './category-card'
 import { SlackIcon } from '@/components/icons/slack-icon'
 import { RoamIcon } from '@/components/icons/roam-icon'
+import { SupTaskIcon } from '@/components/icons/suptask-icon'
+import { CloseIcon } from '@/components/icons/close-icon'
+import { NotionIcon } from '@/components/icons/notion-icon'
 
 interface DataSourceStats {
   sources: number
@@ -160,6 +163,33 @@ export function CategoryHub({ onSelectCategory }: CategoryHubProps) {
           title="Ro.am"
           description="Virtual office activity and attendance signals"
           icon={RoamIcon}
+          iconColor=""
+          bgColor="bg-zinc-500/10"
+          comingSoon
+        />
+
+        <CategoryCard
+          title="SupTask"
+          description="Task signals and operational workload context"
+          icon={SupTaskIcon}
+          iconColor=""
+          bgColor="bg-cyan-500/10"
+          comingSoon
+        />
+
+        <CategoryCard
+          title="Close.io"
+          description="CRM outreach and opportunity activity enrichment"
+          icon={CloseIcon}
+          iconColor=""
+          bgColor="bg-sky-500/10"
+          comingSoon
+        />
+
+        <CategoryCard
+          title="Notion"
+          description="Docs, projects, and operating knowledge signals"
+          icon={NotionIcon}
           iconColor=""
           bgColor="bg-zinc-500/10"
           comingSoon
