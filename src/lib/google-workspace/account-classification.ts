@@ -18,6 +18,10 @@ const SHARED_KEYWORDS = [
   'admin',
   'audit',
   'audits',
+  'catalog',
+  'catalogue',
+  'catalogmanager',
+  'cataloguemanager',
   'support',
   'help',
   'hello',
@@ -66,6 +70,23 @@ const SHARED_KEYWORDS = [
   'notifications',
   'brandmanager',
   'contentmanager',
+]
+
+/**
+ * Prefix-only hints catch role aliases with numeric suffixes, e.g. leadgen2@...
+ * Keep this list narrow to avoid false positives.
+ */
+const SHARED_PREFIX_HINTS = [
+  'leadgen',
+  'leadgeneration',
+  'catalog',
+  'catalogue',
+  'noreply',
+  'notifications',
+  'billing',
+  'support',
+  'admin',
+  'audit',
 ]
 
 const PERSON_PATTERN = /^[a-z]+([._-][a-z]+)+$/i
@@ -120,6 +141,10 @@ export function classifyGoogleAccountEmail(email: string): {
   // Avoid substring matching (e.g. "chris" should not match "hr").
   if (tokens.some(token => sharedTokenSet.has(token)) || sharedCollapsedSet.has(collapsed)) {
     return { type: 'shared_account', reason: 'shared_keyword_match' }
+  }
+
+  if (SHARED_PREFIX_HINTS.some(prefix => collapsed.startsWith(prefix))) {
+    return { type: 'shared_account', reason: 'shared_prefix_hint' }
   }
 
   if (PERSON_PATTERN.test(localPart)) {

@@ -299,17 +299,33 @@ export function GWSStaffMapping() {
   const mappedCount = countablePersonUsers.filter(u => u.is_mapped).length
   const unmappedCount = countablePersonUsers.filter(u => !u.is_mapped).length
 
-  function autoAccountTypeLabel(user: DirectoryUser): string {
-    return user.account_type === 'shared_account' ? 'Auto (Shared)' : 'Auto (Person)'
+  function formatClassificationReason(reason?: string): string {
+    if (!reason) return 'unspecified'
+
+    const mapped: Record<string, string> = {
+      default_person: 'default person fallback',
+      name_like_pattern: 'email matches person name pattern',
+      human_name_pattern: 'full name looks human',
+      shared_keyword_match: 'shared keyword match',
+      shared_prefix_hint: 'shared alias prefix match',
+      shared_name_hint: 'shared name hint',
+      shared_org_unit_hint: 'shared org unit hint',
+      shared_title_hint: 'shared title hint',
+    }
+
+    if (reason.startsWith('manual_override:')) {
+      const override = reason.replace('manual_override:', '').replace(/_/g, ' ')
+      return `manual override (${override})`
+    }
+
+    return mapped[reason] || reason.replace(/_/g, ' ').replace(/\s+/g, ' ').trim()
   }
 
-  function formatClassificationReason(reason?: string): string {
-    if (!reason) return ''
-    return reason
-      .replace(/manual_override:/g, 'manual override ')
-      .replace(/_/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
+  function classificationSummary(user: DirectoryUser): string {
+    const resolvedType = user.account_type === 'shared_account' ? 'Shared inbox' : 'Person'
+    const source = user.account_type_overridden ? 'Manual' : 'Auto'
+    const reason = user.account_type_reason ? ` · ${formatClassificationReason(user.account_type_reason)}` : ''
+    return `${resolvedType} (${source}${reason})`
   }
 
   // Sync directory
@@ -943,12 +959,9 @@ export function GWSStaffMapping() {
                         {user.org_unit_path}
                       </span>
                     )}
-                    {user.account_type_reason && (
-                      <span className="text-[10px] text-muted-foreground/70 truncate hidden xl:inline">
-                        {user.account_type_overridden ? 'Manual:' : 'Auto:'}{' '}
-                        {formatClassificationReason(user.account_type_reason)}
-                      </span>
-                    )}
+                    <span className="text-[10px] text-muted-foreground/70 truncate hidden xl:inline">
+                      Classification: {classificationSummary(user)}
+                    </span>
                   </div>
                   {user.is_mapped && user.staff_name && (
                     <p className="text-sm text-muted-foreground ml-6 truncate">
@@ -969,13 +982,13 @@ export function GWSStaffMapping() {
                     }
                     disabled={isClassificationSaving}
                   >
-                    <SelectTrigger className="w-[130px] h-8 text-sm">
-                      <SelectValue placeholder="Type" />
+                    <SelectTrigger className="w-[170px] h-8 text-sm">
+                      <SelectValue placeholder="Mode" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="auto">{autoAccountTypeLabel(user)}</SelectItem>
-                      <SelectItem value="person">Person</SelectItem>
-                      <SelectItem value="shared_account">Shared</SelectItem>
+                      <SelectItem value="auto">Auto detect</SelectItem>
+                      <SelectItem value="person">Force Person</SelectItem>
+                      <SelectItem value="shared_account">Force Shared Inbox</SelectItem>
                     </SelectContent>
                   </Select>
                   {user.is_mapped ? (
