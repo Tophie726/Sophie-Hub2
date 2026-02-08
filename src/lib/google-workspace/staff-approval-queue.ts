@@ -116,6 +116,7 @@ export async function refreshGoogleWorkspaceStaffApprovalQueue() {
         upserted: 0,
         resolved: 0,
         pending: candidates.length,
+        ignored: 0,
         skipped: true,
       }
     }
@@ -166,7 +167,8 @@ export async function refreshGoogleWorkspaceStaffApprovalQueue() {
   return {
     upserted: upserts.length,
     resolved: toResolve.length,
-    pending: candidates.length,
+    pending: upserts.filter(u => u.status === 'pending').length,
+    ignored: upserts.filter(u => u.status === 'ignored').length,
     skipped: false,
   }
 }

@@ -85,12 +85,27 @@ export async function GET() {
         .map(m => m.external_id)
     )
 
+    const { data: ignoredApprovalRows, error: ignoredApprovalError } = await supabase
+      .from('staff_approval_queue')
+      .select('source_user_id')
+      .eq('source', 'google_workspace')
+      .eq('status', 'ignored')
+
+    if (ignoredApprovalError && !isQueueSchemaError(ignoredApprovalError)) {
+      console.error('Failed to fetch ignored staff approvals:', ignoredApprovalError)
+    }
+
+    const ignoredGoogleUsers = new Set(
+      (ignoredApprovalRows || []).map(row => row.source_user_id)
+    )
+
     const total = rows.length
     const active = rows.filter(r => !r.is_suspended && !r.is_deleted).length
     const activePeople = rows.filter(
       r =>
         !r.is_suspended &&
         !r.is_deleted &&
+        !ignoredGoogleUsers.has(r.google_user_id) &&
         !inactiveMappedGoogleUsers.has(r.google_user_id) &&
         resolveGoogleAccountType(r.primary_email, r.account_type_override, {
           fullName: r.full_name,

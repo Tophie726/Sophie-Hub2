@@ -61,7 +61,7 @@ interface StaffMember {
   status?: string | null
 }
 
-type FilterType = 'all' | 'mapped' | 'unmapped' | 'suspended' | 'admin' | 'shared'
+type FilterType = 'all' | 'mapped' | 'unmapped' | 'suspended' | 'admin' | 'shared' | 'skipped'
 
 const easeOut: [number, number, number, number] = [0.22, 1, 0.36, 1]
 const PAGE_SIZE = 30
@@ -80,6 +80,8 @@ export function GWSStaffMapping() {
   const [selectedStaff, setSelectedStaff] = useState<Record<string, string>>({})
   const [savingUserId, setSavingUserId] = useState<string | null>(null)
   const [classificationSavingUserId, setClassificationSavingUserId] = useState<string | null>(null)
+  const [approvalSavingUserId, setApprovalSavingUserId] = useState<string | null>(null)
+  const [ignoredGoogleUserIds, setIgnoredGoogleUserIds] = useState<Set<string>>(new Set())
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
   const [error, setError] = useState<string | null>(null)
   const [syncStatus, setSyncStatus] = useState<{
@@ -120,6 +122,18 @@ export function GWSStaffMapping() {
       mappings: Number(raw.mappings ?? 0),
       pending_staff_approvals: Number(raw.pending_staff_approvals ?? 0),
       last_sync_at: (raw.last_sync_at as string | null | undefined) ?? null,
+    }
+  }
+
+  async function refreshSkippedApprovals() {
+    try {
+      const res = await fetch('/api/google-workspace/staff-approvals?status=ignored&limit=200')
+      if (!res.ok) return
+      const json = await res.json()
+      const approvals = json.data?.approvals || []
+      setIgnoredGoogleUserIds(new Set(approvals.map((a: { source_user_id: string }) => a.source_user_id)))
+    } catch {
+      // Non-critical
     }
   }
 
@@ -223,6 +237,10 @@ export function GWSStaffMapping() {
     fetchSyncStatus()
   }, [])
 
+  useEffect(() => {
+    refreshSkippedApprovals()
+  }, [])
+
   const mappedStaffIds = useMemo(() => {
     return new Set(
       directoryUsers
@@ -252,26 +270,48 @@ export function GWSStaffMapping() {
   }, [staffMembers])
 
   const countablePersonUsers = useMemo(() => {
-    return activePersonUsers.filter(u => !u.staff_id || !inactiveStaffIds.has(u.staff_id))
-  }, [activePersonUsers, inactiveStaffIds])
+    return activePersonUsers.filter(
+      u =>
+        !ignoredGoogleUserIds.has(u.google_user_id) &&
+        (!u.staff_id || !inactiveStaffIds.has(u.staff_id))
+    )
+  }, [activePersonUsers, ignoredGoogleUserIds, inactiveStaffIds])
+
+  const skippedCount = useMemo(
+    () => directoryUsers.filter(u => !u.is_deleted && ignoredGoogleUserIds.has(u.google_user_id)).length,
+    [directoryUsers, ignoredGoogleUserIds]
+  )
 
   const filteredUsers = useMemo(() => {
     let filtered = directoryUsers
 
     if (filter === 'all') {
-      filtered = filtered.filter(u => !u.is_deleted)
+      filtered = filtered.filter(u => !u.is_deleted && !ignoredGoogleUserIds.has(u.google_user_id))
     } else if (filter === 'mapped') {
-      filtered = filtered.filter(u => u.is_mapped && !u.is_deleted)
+      filtered = filtered.filter(
+        u => u.is_mapped && !u.is_deleted && !ignoredGoogleUserIds.has(u.google_user_id)
+      )
     } else if (filter === 'unmapped') {
       filtered = filtered.filter(
-        u => !u.is_mapped && !u.is_suspended && !u.is_deleted && u.account_type !== 'shared_account'
+        u =>
+          !u.is_mapped &&
+          !u.is_suspended &&
+          !u.is_deleted &&
+          u.account_type !== 'shared_account' &&
+          !ignoredGoogleUserIds.has(u.google_user_id)
       )
     } else if (filter === 'suspended') {
       filtered = filtered.filter(u => u.is_suspended)
     } else if (filter === 'admin') {
-      filtered = filtered.filter(u => u.is_admin && !u.is_deleted)
+      filtered = filtered.filter(
+        u => u.is_admin && !u.is_deleted && !ignoredGoogleUserIds.has(u.google_user_id)
+      )
     } else if (filter === 'shared') {
-      filtered = filtered.filter(u => u.account_type === 'shared_account' && !u.is_deleted)
+      filtered = filtered.filter(
+        u => u.account_type === 'shared_account' && !u.is_deleted && !ignoredGoogleUserIds.has(u.google_user_id)
+      )
+    } else if (filter === 'skipped') {
+      filtered = filtered.filter(u => !u.is_deleted && ignoredGoogleUserIds.has(u.google_user_id))
     }
 
     if (searchQuery) {
@@ -287,7 +327,7 @@ export function GWSStaffMapping() {
     }
 
     return filtered
-  }, [directoryUsers, searchQuery, filter])
+  }, [directoryUsers, ignoredGoogleUserIds, searchQuery, filter])
 
   useEffect(() => {
     setVisibleCount(PAGE_SIZE)
@@ -453,6 +493,7 @@ export function GWSStaffMapping() {
         const statusJson = await statusRes.json()
         setSyncStatus(normalizeSyncStatus(statusJson.data))
       }
+      await refreshSkippedApprovals()
     } catch (err) {
       console.error('Auto-match error:', err)
       toast.error('Auto-match failed')
@@ -542,6 +583,7 @@ export function GWSStaffMapping() {
         const statusJson = await statusRes.json()
         setSyncStatus(normalizeSyncStatus(statusJson.data))
       }
+      await refreshSkippedApprovals()
     } catch (err) {
       console.error('Staff bootstrap error:', err)
       toast.error(err instanceof Error ? err.message : 'Failed to seed staff from Google Workspace')
@@ -706,6 +748,7 @@ export function GWSStaffMapping() {
         const statusJson = await statusRes.json()
         setSyncStatus(normalizeSyncStatus(statusJson.data))
       }
+      await refreshSkippedApprovals()
 
       toast.success(
         accountTypeOverride === 'auto'
@@ -716,6 +759,58 @@ export function GWSStaffMapping() {
       toast.error(err instanceof Error ? err.message : 'Failed to update account type')
     } finally {
       setClassificationSavingUserId(null)
+    }
+  }
+
+  async function handleApprovalStatus(
+    user: DirectoryUser,
+    action: 'skip' | 'unskip'
+  ) {
+    setApprovalSavingUserId(user.google_user_id)
+    try {
+      const res = await fetch('/api/google-workspace/staff-approvals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          source_user_id: user.google_user_id,
+          action,
+          email: user.primary_email,
+          full_name: user.full_name,
+          title: user.title,
+          org_unit_path: user.org_unit_path,
+        }),
+      })
+      if (!res.ok) {
+        const json = await res.json().catch(() => null)
+        throw new Error(json?.error?.message || 'Failed to update approval status')
+      }
+
+      setIgnoredGoogleUserIds(prev => {
+        const next = new Set(prev)
+        if (action === 'skip') next.add(user.google_user_id)
+        else next.delete(user.google_user_id)
+        return next
+      })
+
+      if (action === 'skip') {
+        setSelectedStaff(prev => {
+          const next = { ...prev }
+          delete next[user.google_user_id]
+          return next
+        })
+      }
+
+      const statusRes = await fetch('/api/google-workspace/sync/status')
+      if (statusRes.ok) {
+        const statusJson = await statusRes.json()
+        setSyncStatus(normalizeSyncStatus(statusJson.data))
+      }
+
+      toast.success(action === 'skip' ? 'Skipped for now' : 'Returned to pending review')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to update skip state')
+    } finally {
+      setApprovalSavingUserId(null)
     }
   }
 
@@ -803,6 +898,9 @@ export function GWSStaffMapping() {
           <Badge variant="secondary" className="bg-amber-500/10 text-amber-500">
             {activeSharedUsers.length} shared inboxes
           </Badge>
+          <Badge variant="secondary" className="bg-slate-500/10 text-slate-400">
+            {skippedCount} skipped
+          </Badge>
           <Badge variant="secondary" className="bg-indigo-500/10 text-indigo-500">
             {syncStatus?.pending_staff_approvals ?? 0} pending approvals
           </Badge>
@@ -821,7 +919,13 @@ export function GWSStaffMapping() {
               </>
             )}
           </Button>
-          <Button onClick={handleEnrichStaff} disabled={isEnriching || mappedCount === 0} variant="outline" size="sm">
+          <Button
+            onClick={handleEnrichStaff}
+            disabled={isEnriching || mappedCount === 0}
+            variant="outline"
+            size="sm"
+            title="Pull title, phone, and avatar from Google Workspace into mapped staff records"
+          >
             {isEnriching ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -830,7 +934,7 @@ export function GWSStaffMapping() {
             ) : (
               <>
                 <Download className="h-4 w-4 mr-2" />
-                Enrich profiles
+                Enrich mapped staff
               </>
             )}
           </Button>
@@ -882,6 +986,7 @@ export function GWSStaffMapping() {
             <SelectItem value="all">All Active</SelectItem>
             <SelectItem value="mapped">Mapped</SelectItem>
             <SelectItem value="unmapped">Unmapped</SelectItem>
+            <SelectItem value="skipped">Skipped</SelectItem>
             <SelectItem value="suspended">Suspended</SelectItem>
             <SelectItem value="shared">Shared Inboxes</SelectItem>
             <SelectItem value="admin">Admins</SelectItem>
@@ -897,6 +1002,8 @@ export function GWSStaffMapping() {
           visibleUsers.map((user) => {
             const isSaving = savingUserId === user.google_user_id
             const isClassificationSaving = classificationSavingUserId === user.google_user_id
+            const isApprovalSaving = approvalSavingUserId === user.google_user_id
+            const isSkipped = ignoredGoogleUserIds.has(user.google_user_id)
             const selectedId = selectedStaff[user.google_user_id]
 
             return (
@@ -1008,39 +1115,69 @@ export function GWSStaffMapping() {
                       Remove
                     </Button>
                   ) : !user.is_suspended && user.account_type !== 'shared_account' ? (
-                    <>
-                      <Select
-                        value={selectedId || ''}
-                        onValueChange={(v) =>
-                          setSelectedStaff(prev => ({ ...prev, [user.google_user_id]: v }))
-                        }
-                      >
-                        <SelectTrigger className="w-[180px] h-8 text-sm">
-                          <SelectValue placeholder="Select staff..." />
-                        </SelectTrigger>
-                        <SelectContent className="max-h-[300px]">
-                          {staffMembers
-                            .filter(s => !mappedStaffIds.has(s.id) && isStaffEligibleForAutoMapping(s.status))
-                            .map(s => (
-                              <SelectItem key={s.id} value={s.id}>
-                                {s.full_name}
-                              </SelectItem>
-                            ))}
-                        </SelectContent>
-                      </Select>
-                      <Button
-                        size="sm"
-                        className="h-8"
-                        disabled={!selectedId || isSaving}
-                        onClick={() => handleSaveMapping(user.google_user_id)}
-                      >
-                        {isSaving ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Check className="h-4 w-4" />
-                        )}
-                      </Button>
-                    </>
+                    isSkipped ? (
+                      <>
+                        <span className="text-xs text-muted-foreground">Skipped</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 text-muted-foreground"
+                          disabled={isApprovalSaving}
+                          onClick={() => handleApprovalStatus(user, 'unskip')}
+                        >
+                          {isApprovalSaving ? (
+                            <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                          ) : null}
+                          Re-open
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <Select
+                          value={selectedId || ''}
+                          onValueChange={(v) =>
+                            setSelectedStaff(prev => ({ ...prev, [user.google_user_id]: v }))
+                          }
+                        >
+                          <SelectTrigger className="w-[180px] h-8 text-sm">
+                            <SelectValue placeholder="Select staff..." />
+                          </SelectTrigger>
+                          <SelectContent className="max-h-[300px]">
+                            {staffMembers
+                              .filter(s => !mappedStaffIds.has(s.id) && isStaffEligibleForAutoMapping(s.status))
+                              .map(s => (
+                                <SelectItem key={s.id} value={s.id}>
+                                  {s.full_name}
+                                </SelectItem>
+                              ))}
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          size="sm"
+                          className="h-8"
+                          disabled={!selectedId || isSaving || isApprovalSaving}
+                          onClick={() => handleSaveMapping(user.google_user_id)}
+                        >
+                          {isSaving ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Check className="h-4 w-4" />
+                          )}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 text-muted-foreground"
+                          disabled={isApprovalSaving}
+                          onClick={() => handleApprovalStatus(user, 'skip')}
+                        >
+                          {isApprovalSaving ? (
+                            <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                          ) : null}
+                          Skip for now
+                        </Button>
+                      </>
+                    )
                   ) : (
                     <span className="text-xs text-muted-foreground">
                       {user.account_type === 'shared_account' ? 'Shared account' : 'Suspended'}
@@ -1065,8 +1202,9 @@ export function GWSStaffMapping() {
 
       <p className="text-xs text-muted-foreground">
         Map Google Workspace directory users to Sophie Hub staff members. Use auto-match to bulk-match
-        by email address. After mapping, use &ldquo;Enrich profiles&rdquo; to pull job titles, phone numbers,
-        and avatar photos into staff records.
+        by email address. After mapping, use &ldquo;Enrich mapped staff&rdquo; to pull job titles, phone numbers,
+        and avatar photos into staff records. Use &ldquo;Skip for now&rdquo; for uncertain accounts and revisit
+        them from the Skipped filter.
       </p>
     </div>
   )
