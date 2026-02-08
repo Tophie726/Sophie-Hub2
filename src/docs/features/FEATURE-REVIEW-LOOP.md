@@ -42,3 +42,26 @@ Scores are valid only when baseline and post use the same rubric and include evi
 Use:
 
 - `skills/feature-rollout-review-loop/references/scorecard-rubric.md`
+
+## Local Skill Sync (Codex + Claude)
+
+To install/update local Sophie Hub skills into both runtimes:
+
+```bash
+cd /Users/test/Coding/Sophie-Data-Planning/sophie-hub-v2
+scripts/sync-local-skills.sh --target both
+```
+
+Dry run first:
+
+```bash
+scripts/sync-local-skills.sh --target both --dry-run
+```
+
+Sync only specific skills:
+
+```bash
+scripts/sync-local-skills.sh --target both --skills bam-loop,feature-rollout-review-loop
+```
+
+Then restart Codex/Claude so updated skills are picked up.

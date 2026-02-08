@@ -1,6 +1,6 @@
 ---
 name: bam-loop
-description: Fast trigger skill for Sophie Hub feature work. Use when the user says "BAM" to start a closed Codex<->Claude loop: plan, agents, build, Codex review, revise, repeat until approved.
+description: Shortcut trigger for Sophie Hub feature delivery. Use when the user says "BAM" to run the closed Codex<->Claude loop defined in feature-rollout-review-loop.
 ---
 
 # BAM Loop
@@ -11,52 +11,39 @@ If the user says `BAM` (or asks for the closed-loop flow), run this skill.
 
 ## Purpose
 
-This is the shortcut/orchestration skill for frequent feature delivery loops.
+This is a thin alias/orchestration skill for frequent feature delivery loops.
 
-It does not replace detailed planning templates; it routes execution into the standard loop with minimal friction.
+It does not define full process details itself.  
+The single source of truth is:
 
-## Closed Loop
+- `skills/feature-rollout-review-loop/SKILL.md`
 
-Run this sequence in order:
+## What To Do On BAM
 
-1. **Plan**
-   - Create feature folder: `src/docs/features/{feature-slug}/`
-   - Create/update:
-     - `00-context.md`
-     - `01-codex-proposal.md`
-2. **Agent Team Plan**
-   - Ask Claude to produce `02-claude-agent-plan.md` with wave dependencies and task ownership.
-3. **Codex Review**
-   - Codex writes `03-codex-review.md` with `P1/P2/P3` findings and precise fixes.
-4. **Claude Revision**
-   - Claude writes `04-claude-revision.md` and maps each finding to `fixed/partial/deferred`.
-5. **Repeat**
-   - Continue rounds (`05-*`, `06-*`) until no blocking findings remain.
-6. **Approve**
-   - Merge into `FINAL-APPROVED-PLAN.md`.
-7. **Build + Review Cycle**
-   - Execute in waves.
-   - After each wave: build/test -> Codex review -> patch -> re-check.
+When triggered:
+
+1. Resolve `{feature-slug}` and create:
+   - `src/docs/features/{feature-slug}/`
+2. Execute the full loop from `feature-rollout-review-loop`:
+   - plan -> Claude agent plan -> Codex review -> Claude revision -> repeat
+3. Do not implement until:
+   - `FINAL-APPROVED-PLAN.md` exists.
+4. During execution, enforce wave gates:
+   - build/test -> Codex review -> patch -> next wave.
 
 ## Score Rule
 
 Never accept score jumps as facts unless evidence is attached.
 
-Require baseline and post scores using:
+Require baseline and post scores using the core rubric:
 
 - `skills/feature-rollout-review-loop/references/scorecard-rubric.md`
 
 Each category must include evidence links and residual risks.
 
-## Required Artifacts
-
-- Feature loop files in `src/docs/features/{feature-slug}/`
-- Evidence-backed scorecard in results doc
-- Final paste-ready handoff message for the next actor (Codex or Claude)
-
 ## References
 
-Use detailed templates and rubric from:
+Delegate all detailed process/templates to:
 
 - `skills/feature-rollout-review-loop/SKILL.md`
 - `skills/feature-rollout-review-loop/references/feature-plan-template.md`
