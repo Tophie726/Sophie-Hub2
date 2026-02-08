@@ -1,0 +1,4 @@
+interface:
+  display_name: "Feature Rollout Review Loop"
+  short_description: "Run Codex<->Claude MD loops for non-connector features."
+  default_prompt: "Use $feature-rollout-review-loop to plan and review this feature with phases, agent tasks, and evidence-based scoring."

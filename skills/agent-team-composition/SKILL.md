@@ -5,6 +5,13 @@ description: Design and review multi-agent execution plans for Claude/Codex codi
 
 # Agent Team Composition
 
+## Scope Note
+
+Use this skill for team decomposition itself.  
+If you also need full MD planning/review sequencing (Codex<->Claude loop + scorecards), use:
+
+- `feature-rollout-review-loop`
+
 ## Quick Start
 
 1. Define the exact deliverable and go/no-go criteria.
