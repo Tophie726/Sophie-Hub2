@@ -1,0 +1,4 @@
+interface:
+  display_name: "BAM Loop"
+  short_description: "Trigger closed Codex<->Claude plan-build-review loops."
+  default_prompt: "BAM. Use $bam-loop for this feature and run the full closed review loop."

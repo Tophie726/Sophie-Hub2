@@ -12,6 +12,10 @@ Use this skill when feature work is larger than a quick patch and needs a repeat
 This skill is for general product/backend/frontend features, not connector-specific rollout.  
 For connector work, use `connector-rollout-playbook`.
 
+Shortcut trigger:
+
+- For fast orchestration, use `bam-loop` (keyword: `BAM`) and then follow this skill's detailed templates/rubric.
+
 ## Output Location
 
 Create one folder per feature:

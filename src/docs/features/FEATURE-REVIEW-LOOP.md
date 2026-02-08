@@ -6,6 +6,10 @@ For connector-specific work, use:
 
 - `src/docs/connectors/CONNECTOR-REVIEW-LOOP.md`
 
+Shortcut alias:
+
+- Say `BAM` and use `skills/bam-loop/SKILL.md` to trigger this loop quickly.
+
 ## Folder Layout
 
 Create one folder per feature:
