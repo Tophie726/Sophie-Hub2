@@ -280,7 +280,34 @@ Expected: `counts.pending` plus recent approval candidates from unmatched Google
 2. The Google Workspace card should appear in the category hub (indigo Building2 icon)
 3. Click it to enter the Google Workspace view
 4. Test Connection card should show your domain
-5. Staff Mapping tab should show directory users with auto-match/enrich buttons
+5. Staff Mapping tab should show directory users with:
+   - `Refresh Directory`
+   - `Auto-match by email`
+   - `Seed Staff`
+   - `Enrich mapped staff`
+   - per-row classification controls (`Auto detect`, `Person`, `Shared inbox`)
+   - per-row queue controls (`Skip`, `Re-open`) for approval triage
+
+---
+
+## Step 9: First-Run Operator Workflow (Recommended)
+
+Use this order for first rollout:
+
+1. **Refresh Directory** (or run API sync) to pull the latest snapshot.
+2. Review account classification:
+   - Keep `Auto detect` for normal `name@sophiesociety.com` staff patterns.
+   - Switch to `Shared inbox` for role aliases (`billing@`, `catalogue@`, `leadgen@`, etc.).
+   - Use `Skip` for uncertain rows and re-open later from the `Skipped` filter.
+3. If `/staff` is empty, run **Seed Staff** once to create baseline staff rows from person accounts.
+4. Run **Auto-match by email** to connect Google users to existing/seeded staff records.
+5. Run **Enrich mapped staff** to write profile fields onto mapped staff rows.
+
+Notes:
+- `Seed Staff` and `Auto-match by email` are separate on purpose.
+  - Seed creates baseline staff records.
+  - Auto-match links Google users to staff records via external IDs.
+- `Enrich mapped staff` only updates staff rows that already have a `google_workspace_user` mapping.
 
 ---
 
@@ -346,10 +373,21 @@ It also upserts the link in `entity_external_ids`:
 - `external_id=<google_user_id>`
 - `entity_type='staff'`, `entity_id=<staff.id>`
 
+### What "Enrich mapped staff" writes
+
+`POST /api/google-workspace/enrich-staff` updates only mapped staff rows:
+
+- Requires an existing `google_workspace_user` mapping.
+- Pulls fields from the snapshot into staff (for example `title`, `phone`, `avatar_url`).
+- Does not create new staff rows.
+
 ### Auto staff vs shared inbox classification
 
 `Auto` classification uses:
 
-- Email-local-part keyword rules (for shared inbox patterns like `leadgen`, `support`, `audits`, etc.)
-- Context hints from `full_name`, `org_unit_path`, and `title`
-- Optional manual override per row (`Auto`, `Person`, `Shared`)
+- Email-local-part first (primary signal).
+  - Shared keyword and prefix rules for role aliases (`catalogue`, `brandmanager`, `leadgen`, `billing`, etc.).
+  - Person-name pattern fallback for normal name-like aliases.
+- Context hints from `full_name`, `org_unit_path`, and `title` only when email pattern is ambiguous.
+- Optional manual override per row (`Auto detect`, `Person`, `Shared inbox`).
+- Optional queue triage per row (`Skip`/`Re-open`) so uncertain accounts do not block rollout.

@@ -265,10 +265,12 @@ Dependency graph:
 6. Apply migrations in order (up only in normal path; down path documented for incidents).
 7. Run smoke sequence:
 - test connection
-- list users
-- auto-match
-- enrich staff
 - trigger sync
+- list users
+- seed staff (first run only, if staff is empty)
+- review classification + skip/re-open outliers
+- auto-match by email
+- enrich mapped staff
 - verify status/drift outputs
 
 ---
@@ -291,7 +293,7 @@ Dependency graph:
 
 Open questions (non-blocking):
 1. Reuse existing `sophie-society-reporting` GCP project or isolate to new project?
-2. Whether to add draft staff creation flow in later phase.
+2. Whether `staff/bootstrap` should evolve into a stricter approval-gated seed flow.
 3. Whether to keep snapshot latest-state only or introduce append-only audit history.
 
 Assumptions:
@@ -356,3 +358,14 @@ Implementation should execute from this file only.
 - Added first-run bootstrap endpoint:
   - `POST /api/google-workspace/staff/bootstrap`
   - creates staff records from Google person emails and immediately maps them.
+
+### Post-Implementation Delta (2026-02-08)
+
+- Added skip/re-open triage for uncertain Google accounts:
+  - API: `POST /api/google-workspace/staff-approvals` with `action=skip|unskip`
+  - UI: `Skipped` filter and per-row `Skip` / `Re-open` controls.
+- Updated people/unmapped counters to exclude skipped/ignored queue rows from active workload counts.
+- Classification flow now prioritizes email-local-part signals (shared keyword/prefix rules) and falls back to context hints (`full_name`, `org_unit_path`, `title`) only when needed.
+- Renamed enrichment action in UI to **Enrich mapped staff** to make scope explicit:
+  - no new staff creation,
+  - updates only records already linked via `google_workspace_user`.
