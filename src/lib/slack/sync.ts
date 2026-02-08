@@ -469,43 +469,32 @@ async function updateSyncState(
 
 /**
  * Create a new sync run record. Returns the run ID.
+ * Uses atomic RPC that recovers stale runs before inserting.
+ * Unique index ensures at most one active run.
  */
 export async function createSyncRun(triggeredBy: string): Promise<string> {
   const supabase = getAdminClient()
 
-  // Check for existing active runs
-  const { data: existing } = await supabase
-    .from('slack_sync_runs')
-    .select('id, status')
-    .in('status', ['pending', 'running'])
-    .order('created_at', { ascending: false })
-    .limit(1)
-
-  if (existing && existing.length > 0) {
-    throw new Error(`A sync run is already ${existing[0].status} (${existing[0].id})`)
-  }
-
-  // Count mapped channels
+  // Count mapped channels for the run record
   const { count } = await supabase
     .from('slack_sync_state')
     .select('*', { count: 'exact', head: true })
     .not('partner_id', 'is', null)
 
-  const { data: run, error } = await supabase
-    .from('slack_sync_runs')
-    .insert({
-      status: 'pending',
-      triggered_by: triggeredBy,
-      total_channels: count || 0,
-    })
-    .select('id')
-    .single()
+  // Atomic: recover stale runs + insert new run (single transaction)
+  const { data, error } = await supabase.rpc('create_sync_run_atomic', {
+    p_triggered_by: triggeredBy,
+    p_total_channels: count || 0,
+  })
 
-  if (error || !run) {
-    throw new Error(`Failed to create sync run: ${error?.message || 'unknown error'}`)
+  if (error) {
+    if (error.code === '23505') {
+      throw new Error('A sync run is already active')
+    }
+    throw new Error(`Failed to create sync run: ${error.message}`)
   }
 
-  return run.id
+  return data as string
 }
 
 /**

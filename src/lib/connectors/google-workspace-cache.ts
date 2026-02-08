@@ -11,6 +11,9 @@
 import { CACHE } from '@/lib/constants'
 import type { DirectorySnapshotRow } from '@/lib/google-workspace/types'
 
+/** Snapshot row without raw_profile — used for browser-facing cache */
+type DirectoryUserRow = Omit<DirectorySnapshotRow, 'raw_profile'>
+
 const CACHE_TTL = CACHE.GOOGLE_WORKSPACE_TTL // 10 minutes — data considered fresh
 const STALE_TTL = 20 * 60 * 1000              // 20 minutes — stale data still serveable
 
@@ -18,11 +21,11 @@ const STALE_TTL = 20 * 60 * 1000              // 20 minutes — stale data still
 // Directory Users Cache
 // =============================================================================
 
-let cachedUsers: DirectorySnapshotRow[] | null = null
+let cachedUsers: DirectoryUserRow[] | null = null
 let usersCacheTimestamp = 0
 let usersRefreshInProgress = false
 
-export function getCachedDirectoryUsers(): DirectorySnapshotRow[] | null {
+export function getCachedDirectoryUsers(): DirectoryUserRow[] | null {
   if (!cachedUsers) return null
   if (Date.now() - usersCacheTimestamp > STALE_TTL) {
     cachedUsers = null
@@ -45,7 +48,7 @@ export function setDirectoryUsersRefreshInProgress(v: boolean): void {
   usersRefreshInProgress = v
 }
 
-export function setCachedDirectoryUsers(users: DirectorySnapshotRow[]): void {
+export function setCachedDirectoryUsers(users: DirectoryUserRow[]): void {
   cachedUsers = users
   usersCacheTimestamp = Date.now()
 }

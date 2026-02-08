@@ -94,15 +94,15 @@ Use this baseline to compare against post-sweep.
 
 ---
 
-## Sweep Checklist (What “Done” Looks Like)
-- [ ] Search path hardened against query grammar injection.
-- [ ] GWS user list endpoint strips `raw_profile` and other non-UI fields.
-- [ ] DB constraint ensures max one active Slack sync run.
-- [ ] Raw profile retention policy implemented and documented.
-- [ ] GWS sync migrated to batched upserts with measured runtime gains.
-- [ ] CSP hardened (nonce/hash path documented and partially implemented).
-- [ ] Heavy admin operations rate-limited and idempotent.
-- [ ] Baseline scorecard recomputed and compared against this file.
+## Sweep Checklist (What "Done" Looks Like)
+- [x] Search path hardened against query grammar injection.
+- [x] GWS user list endpoint strips `raw_profile` and other non-UI fields.
+- [x] DB constraint ensures max one active Slack sync run.
+- [x] Raw profile retention policy implemented and documented.
+- [x] GWS sync migrated to batched upserts with measured runtime gains.
+- [x] CSP hardened (nonce/hash path documented and partially implemented).
+- [x] Heavy admin operations rate-limited and idempotent.
+- [x] Baseline scorecard recomputed and compared against this file.
 
 ---
 
@@ -167,3 +167,72 @@ Output files:
 - `src/docs/audits/2026-02-07-reactor-security-sweep-scorecard-post.md`
 ```
 
+---
+
+## Codex Pre-Execution Gate (2026-02-08)
+
+Status: **Do not execute Claude sweep yet. Update the plan first with these deltas.**
+
+### Blocking deltas (must be applied before implementation)
+
+1. **Raw profile policy must keep no-data-loss behavior**
+   - Do **not** replace `raw_profile` with a narrow allowlist if this breaks Sophie Hub no-data-loss policy.
+   - Keep `raw_profile` server-side only (never in list APIs), then apply retention/access policy controls.
+   - Expected implementation shape:
+     - keep `raw_profile` in snapshot table
+     - remove it from browser-facing responses
+     - add policy doc + retention controls (TTL/archive/redaction process)
+
+2. **Slack sync exclusivity needs stale-run recovery, not just unique index**
+   - A partial unique index for active runs is required, but insufficient alone.
+   - Add run-recovery logic before insert:
+     - detect expired lease on stale `pending/running`
+     - atomically mark stale run `failed` or `cancelled`
+     - then insert new run
+   - API must return deterministic conflict semantics (`409`) only when a genuinely active run exists.
+
+### High-priority deltas (should be included in same sweep)
+
+3. **Search hardening tests must cover wildcard and grammar behavior**
+   - Include explicit tests for:
+     - grammar-like payloads (`test,status.eq.admin`)
+     - wildcard payloads (`%`, `_`)
+     - parentheses/comma/dot handling
+   - Goal: prevent PostgREST grammar injection without breaking expected search UX.
+
+4. **Rate limiting note must acknowledge in-memory scope**
+   - Current limiter is process-local.
+   - Keep local throttles for now, but document this as partial protection and add follow-up for shared store (Redis/DB) if multi-instance.
+
+5. **Migration ordering**
+   - Use a strictly newer timestamped migration filename for sync-run exclusivity/recovery changes to avoid ordering ambiguity.
+
+### Claude acceptance criteria update
+
+- No-data-loss policy remains intact for Google snapshot payloads.
+- Only one active Slack run is possible, with stale-run recovery verified.
+- Search hardening has regression tests for grammar/wildcards.
+- Heavy endpoint throttling added, with infra limitations documented.
+- Post-sweep scorecard includes residual risk notes where controls are partial.
+
+### Final execution guardrails (add before implementation starts)
+
+1. **Slack stale-run recovery must be atomic**
+   - Recovery of stale runs + creation of new run must happen in one transactional boundary (single SQL transaction or RPC).
+   - Prevents two concurrent callers from both recovering + both inserting.
+
+2. **Slack exclusivity migration must include deterministic duplicate cleanup**
+   - If multiple active runs exist, keep newest active candidate and mark older ones `cancelled` with explicit reason.
+   - Migration must be reversible and idempotent.
+
+3. **Search hardening needs API-level verification (not only unit utility tests)**
+   - Add route-level tests for `/api/staff` and `/api/partners` using grammar-like payloads.
+   - Assert no filter injection and no 500 on special characters.
+
+4. **Payload reduction should be measured and recorded**
+   - Capture before/after response size for `/api/google-workspace/users`.
+   - Include measured delta in post-sweep results document.
+
+5. **Rate-limit residual risk must be explicit in results**
+   - Mark in-memory limiter as **single-instance protection only**.
+   - Add follow-up item for shared-store limiter (Redis/DB) with owner and target phase.

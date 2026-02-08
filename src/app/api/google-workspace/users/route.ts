@@ -19,6 +19,9 @@ import {
   setDirectoryUsersRefreshInProgress,
 } from '@/lib/connectors/google-workspace-cache'
 import type { DirectorySnapshotRow } from '@/lib/google-workspace/types'
+
+/** Snapshot row without raw_profile — used for browser-facing responses */
+type DirectoryUserRow = Omit<DirectorySnapshotRow, 'raw_profile'>
 import { resolveGoogleAccountType } from '@/lib/google-workspace/account-classification'
 
 function isSnapshotSchemaError(error: unknown): boolean {
@@ -26,12 +29,19 @@ function isSnapshotSchemaError(error: unknown): boolean {
   return code === '42P01' || code === '42703' || code === 'PGRST204' || code === 'PGRST205'
 }
 
-async function fetchSnapshotUsers(): Promise<DirectorySnapshotRow[]> {
+async function fetchSnapshotUsers(): Promise<DirectoryUserRow[]> {
   const supabase = getAdminClient()
 
   const { data, error } = await supabase
     .from('google_workspace_directory_snapshot')
-    .select('*')
+    .select(
+      'id, google_user_id, primary_email, full_name, given_name, family_name, ' +
+      'org_unit_path, is_suspended, is_deleted, is_admin, is_delegated_admin, ' +
+      'title, phone, thumbnail_photo_url, aliases, non_editable_aliases, ' +
+      'creation_time, last_login_time, department, cost_center, location, ' +
+      'manager_email, account_type_override, last_seen_at, first_seen_at, ' +
+      'created_at, updated_at'
+    )
     .order('primary_email', { ascending: true })
 
   if (error) {
@@ -43,7 +53,7 @@ async function fetchSnapshotUsers(): Promise<DirectorySnapshotRow[]> {
     throw error
   }
 
-  return (data || []) as DirectorySnapshotRow[]
+  return (data || []) as unknown as DirectoryUserRow[]
 }
 
 export async function GET() {

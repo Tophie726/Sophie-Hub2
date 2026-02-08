@@ -80,6 +80,17 @@ export const RATE_LIMITS = {
     maxRequests: 5,
     windowMs: 60 * 1000, // 1 minute
   },
+
+  /**
+   * Heavy admin operations: 2 per 5 min.
+   * NOTE: In-memory limiter — process-local only.
+   * Partial protection in single-instance deployment.
+   * For multi-instance, migrate to Redis/DB-backed store.
+   */
+  ADMIN_HEAVY: {
+    maxRequests: 2,
+    windowMs: 5 * 60 * 1000, // 5 minutes
+  },
 } as const
 
 // =============================================================================

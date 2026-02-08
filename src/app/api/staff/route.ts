@@ -1,6 +1,7 @@
 import { getAdminClient } from '@/lib/supabase/admin'
 import { requireAuth } from '@/lib/auth/api-auth'
 import { apiSuccess, apiError, ApiErrors, ErrorCodes } from '@/lib/api/response'
+import { escapePostgrestValue } from '@/lib/api/search-utils'
 import { z } from 'zod'
 
 const supabase = getAdminClient()
@@ -64,8 +65,9 @@ export async function GET(request: Request) {
 
     // Search across full_name, email, staff_code
     if (search) {
+      const escaped = escapePostgrestValue(search)
       query = query.or(
-        `full_name.ilike.%${search}%,email.ilike.%${search}%,staff_code.ilike.%${search}%`
+        `full_name.ilike.%${escaped}%,email.ilike.%${escaped}%,staff_code.ilike.%${escaped}%`
       )
     }
 

@@ -2,6 +2,7 @@ import { getAdminClient } from '@/lib/supabase/admin'
 import { requireAuth, requireRole } from '@/lib/auth/api-auth'
 import { ROLES } from '@/lib/auth/roles'
 import { apiSuccess, apiError, ApiErrors, ErrorCodes, apiValidationError } from '@/lib/api/response'
+import { escapePostgrestValue } from '@/lib/api/search-utils'
 import { computePartnerStatus, matchesStatusFilter } from '@/lib/partners/computed-status'
 import { checkRateLimit, RATE_LIMITS, rateLimitHeaders } from '@/lib/rate-limit'
 import { z } from 'zod'
@@ -74,8 +75,9 @@ export async function GET(request: Request) {
 
     // Search across brand_name, client_name, partner_code
     if (search) {
+      const escaped = escapePostgrestValue(search)
       query = query.or(
-        `brand_name.ilike.%${search}%,client_name.ilike.%${search}%,partner_code.ilike.%${search}%`
+        `brand_name.ilike.%${escaped}%,client_name.ilike.%${escaped}%,partner_code.ilike.%${escaped}%`
       )
     }
 

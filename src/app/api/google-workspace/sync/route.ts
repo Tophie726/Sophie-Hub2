@@ -12,13 +12,16 @@
 
 import { requireRole } from '@/lib/auth/api-auth'
 import { ROLES } from '@/lib/auth/roles'
+import { NextResponse } from 'next/server'
 import { apiSuccess, ApiErrors } from '@/lib/api/response'
+import { checkRateLimit, RATE_LIMITS, rateLimitHeaders } from '@/lib/rate-limit'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { googleWorkspaceConnector } from '@/lib/connectors/google-workspace'
 import { invalidateDirectoryUsersCache } from '@/lib/connectors/google-workspace-cache'
 import type { GoogleDirectoryUser } from '@/lib/google-workspace/types'
 import type { DirectoryDriftEvent } from '@/lib/google-workspace/types'
 import { refreshGoogleWorkspaceStaffApprovalQueue } from '@/lib/google-workspace/staff-approval-queue'
+import { SYNC } from '@/lib/constants'
 
 function isSnapshotSchemaError(error: unknown): boolean {
   const code = (error as { code?: string } | null)?.code
@@ -29,6 +32,21 @@ export async function POST() {
   const auth = await requireRole(ROLES.ADMIN)
   if (!auth.authenticated) {
     return auth.response
+  }
+
+  // Rate limit: 2 syncs per 5 minutes per user
+  const rateCheck = checkRateLimit(auth.user.id, 'gws:sync', RATE_LIMITS.ADMIN_HEAVY)
+  if (!rateCheck.allowed) {
+    return NextResponse.json(
+      { success: false, error: { code: 'RATE_LIMITED', message: 'Too many sync requests. Try again later.' } },
+      {
+        status: 429,
+        headers: {
+          ...rateLimitHeaders(rateCheck),
+          'Retry-After': Math.ceil(rateCheck.resetIn / 1000).toString(),
+        },
+      }
+    )
   }
 
   try {
@@ -80,11 +98,11 @@ export async function POST() {
       (existingSnapshot || []).map(r => [r.google_user_id, r])
     )
 
-    // 3. Upsert each directory user into snapshot
+    // 3. Build upsert records + detect drift
     const now = new Date().toISOString()
     const driftEvents: DirectoryDriftEvent[] = []
     const pulledGoogleIds = new Set<string>()
-    let upserted = 0
+    const upsertRecords: Record<string, unknown>[] = []
 
     for (const user of directoryUsers) {
       pulledGoogleIds.add(user.id)
@@ -129,37 +147,41 @@ export async function POST() {
         }
       }
 
-      // Upsert into snapshot
+      // Build upsert record (NOT upserted yet)
+      upsertRecords.push({
+        google_user_id: user.id,
+        primary_email: user.primaryEmail,
+        full_name: user.name.fullName,
+        given_name: user.name.givenName || null,
+        family_name: user.name.familyName || null,
+        org_unit_path: user.orgUnitPath || null,
+        is_suspended: user.suspended,
+        is_deleted: false,
+        is_admin: user.isAdmin,
+        is_delegated_admin: user.isDelegatedAdmin || false,
+        title: user.title || null,
+        phone: primaryPhone,
+        thumbnail_photo_url: user.thumbnailPhotoUrl || null,
+        aliases,
+        non_editable_aliases: user.nonEditableAliases || [],
+        creation_time: user.creationTime || null,
+        last_login_time: user.lastLoginTime || null,
+        department: user.department || null,
+        cost_center: user.costCenter || null,
+        location: user.location || null,
+        manager_email: user.managerEmail || null,
+        raw_profile: user.rawProfile || null,
+        last_seen_at: now,
+      })
+    }
+
+    // 4. Batch upsert into snapshot (chunks of SYNC.UPSERT_BATCH_SIZE)
+    let upserted = 0
+    for (let i = 0; i < upsertRecords.length; i += SYNC.UPSERT_BATCH_SIZE) {
+      const batch = upsertRecords.slice(i, i + SYNC.UPSERT_BATCH_SIZE)
       const { error } = await supabase
         .from('google_workspace_directory_snapshot')
-        .upsert(
-          {
-            google_user_id: user.id,
-            primary_email: user.primaryEmail,
-            full_name: user.name.fullName,
-            given_name: user.name.givenName || null,
-            family_name: user.name.familyName || null,
-            org_unit_path: user.orgUnitPath || null,
-            is_suspended: user.suspended,
-            is_deleted: false, // User is present in pull → not deleted
-            is_admin: user.isAdmin,
-            is_delegated_admin: user.isDelegatedAdmin || false,
-            title: user.title || null,
-            phone: primaryPhone,
-            thumbnail_photo_url: user.thumbnailPhotoUrl || null,
-            aliases,
-            non_editable_aliases: user.nonEditableAliases || [],
-            creation_time: user.creationTime || null,
-            last_login_time: user.lastLoginTime || null,
-            department: user.department || null,
-            cost_center: user.costCenter || null,
-            location: user.location || null,
-            manager_email: user.managerEmail || null,
-            raw_profile: user.rawProfile || null,
-            last_seen_at: now,
-          },
-          { onConflict: 'google_user_id' }
-        )
+        .upsert(batch, { onConflict: 'google_user_id' })
 
       if (error) {
         if (isSnapshotSchemaError(error)) {
@@ -169,13 +191,13 @@ export async function POST() {
             tombstoned: 0,
           })
         }
-        console.error(`Failed to upsert snapshot for ${user.primaryEmail}:`, error)
+        console.error(`Batch upsert failed (offset ${i}):`, error)
       } else {
-        upserted++
+        upserted += batch.length
       }
     }
 
-    // 4. Tombstone users NOT in this pull (safe: full pull completed successfully)
+    // 5. Tombstone users NOT in this pull (safe: full pull completed successfully)
     let tombstoned = 0
     for (const [googleId, existing] of Array.from(existingByGoogleId.entries())) {
       if (!pulledGoogleIds.has(googleId) && !existing.is_deleted) {
