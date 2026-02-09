@@ -63,6 +63,8 @@ Round: 01 (Codex proposal)
 
 - Source of truth:
   - Canonical labels and IDs come from products catalog (`/admin/products`).
+- Current known catalog IDs:
+  - `ppc_basic`, `sophie_ppc`, `cc`, `fam`, `pli`, `tiktok`
 - Primary mapping:
   - `PPC Premium` -> `Sophie PPC Package`
   - `Content Premium (only content)` -> `CC`
@@ -208,9 +210,5 @@ Use `references/scorecard-rubric.md`.
 ## Open Questions
 
 1. Confirm exact product catalog slugs/IDs for:
-   - `Sophie PPC Package`
-   - `Sophie PPC Partnership`
-   - `CC`
-   - `FAM`
-   - `PLI`
-   - `TTS`
+   - `PPC Premium` target: `sophie_ppc` vs premium SKU extension
+   - `TTS` target: `tiktok` vs dedicated `tts` SKU extension

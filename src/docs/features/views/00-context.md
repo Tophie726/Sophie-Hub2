@@ -53,6 +53,15 @@ Round: 00 (Context capture)
 - `FAM` -> `FAM`
 - `T0 / Product Incubator` -> `PLI`
 
+### Current Product Catalog IDs (from `/admin/products` implementation)
+
+- `ppc_basic` -> PPC Basic
+- `sophie_ppc` -> The Sophie PPC Partnership
+- `cc` -> Content & Creative
+- `fam` -> Full Account Management
+- `pli` -> Product Launch Incubator
+- `tiktok` -> TikTok (candidate canonical for `TTS`)
+
 ### Staffing-Derived Fallback Rules (When Needed)
 
 - If `POD Leader` exists (PPC basic pod leader): classify as PPC Basic.
@@ -109,6 +118,6 @@ Proposed precedence (highest to lowest):
 
 ## Open Questions
 
-1. What exact product IDs/slugs in the products catalog should each mapped label use (`Sophie PPC Package`, `PLI`, `CC`, etc.)?
+1. Confirm whether `PPC Premium` should normalize to `sophie_ppc` (partnership) or another premium SKU not yet modeled in products.
 2. Expected behavior when an admin has both personal default view and role default view (tie-break policy).
 3. Whether pod leaders should eventually get limited "see as team member" in phase 2+ (currently assumed no; admin-only).
