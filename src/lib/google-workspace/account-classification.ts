@@ -1,8 +1,8 @@
 /**
  * Heuristics for distinguishing person accounts from shared inbox/service accounts.
  *
- * This is intentionally conservative: if uncertain, classify as "person" to avoid
- * suppressing legitimate staff accounts from matching flows.
+ * This is intentionally conservative toward shared classification:
+ * if uncertain, classify as shared_account and require operator override.
  */
 
 export type GoogleAccountType = 'person' | 'shared_account'
@@ -148,13 +148,64 @@ const SHARED_TITLE_HINTS = [
   'group mailbox',
 ]
 
+function normalizeToken(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z]/g, '')
+}
+
+function extractNameTokens(fullName: string): string[] {
+  return fullName
+    .split(/\s+/)
+    .map(normalizeToken)
+    .filter(token => token.length >= 2)
+}
+
+function emailMatchesHumanName(localPart: string, fullName: string): boolean {
+  const nameTokens = extractNameTokens(fullName)
+  if (nameTokens.length < 2) return false
+
+  const first = nameTokens[0]
+  const last = nameTokens[nameTokens.length - 1]
+  const localCollapsed = normalizeToken(localPart).replace(/\d+$/g, '')
+  const localTokens = localPart
+    .split(/[._-]+/)
+    .map(normalizeToken)
+    .filter(Boolean)
+
+  if (!localCollapsed) return false
+
+  // Direct token matches (first-name aliases are common in this workspace).
+  if (localCollapsed === first || localCollapsed === last) return true
+
+  // Common generated aliases.
+  const commonAliases = new Set([
+    `${first}${last}`,
+    `${first}${last.charAt(0)}`,
+    `${first.charAt(0)}${last}`,
+  ])
+  if (commonAliases.has(localCollapsed)) return true
+
+  // Tokenized aliases: first.last, first_l, f.last, etc.
+  if (localTokens.length >= 2) {
+    const tokenMatches = localTokens.every(token => {
+      if (!token) return false
+      if (nameTokens.includes(token)) return true
+      return nameTokens.some(name => token.length === 1 && name.startsWith(token))
+    })
+    if (tokenMatches) return true
+  }
+
+  return false
+}
+
 export function classifyGoogleAccountEmail(email: string): {
   type: GoogleAccountType
   reason: string
 } {
   const localPart = email.split('@')[0]?.toLowerCase() || ''
   if (!localPart) {
-    return { type: 'person', reason: 'no_local_part' }
+    return { type: 'shared_account', reason: 'no_local_part' }
   }
 
   const collapsed = localPart.replace(/[._-]/g, '')
@@ -186,11 +237,12 @@ export function classifyGoogleAccountEmail(email: string): {
     return { type: 'shared_account', reason: 'shared_prefix_hint' }
   }
 
-  if (PERSON_PATTERN.test(localPart)) {
+  // Strong person-only email pattern: explicit first.last style.
+  if (PERSON_PATTERN.test(localPart) && /[._-]/.test(localPart)) {
     return { type: 'person', reason: 'name_like_pattern' }
   }
 
-  return { type: 'person', reason: 'default_person' }
+  return { type: 'shared_account', reason: 'default_shared_fallback' }
 }
 
 export function resolveGoogleAccountType(
@@ -208,6 +260,17 @@ export function resolveGoogleAccountType(
 
   const auto = classifyGoogleAccountEmail(email)
   if (auto.type === 'shared_account') {
+    // Some person aliases are single-token (e.g., "kevin@").
+    // Promote to person only when we have positive human-name evidence.
+    const fullName = (context?.fullName || '').trim().toLowerCase()
+    if (fullName && HUMAN_FULL_NAME_PATTERN.test(fullName) && emailMatchesHumanName(email.split('@')[0] || '', fullName)) {
+      return {
+        type: 'person',
+        reason: 'human_name_email_match',
+        overridden: false,
+      }
+    }
+
     return {
       type: auto.type,
       reason: auto.reason,
@@ -254,8 +317,8 @@ export function resolveGoogleAccountType(
   }
 
   return {
-    type: auto.type,
-    reason: auto.reason,
+    type: 'shared_account',
+    reason: 'default_shared_fallback',
     overridden: false,
   }
 }

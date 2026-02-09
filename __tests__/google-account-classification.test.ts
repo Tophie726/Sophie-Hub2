@@ -22,12 +22,26 @@ describe('Google account classification', () => {
     })
   })
 
-  it('keeps real personal emails as person', () => {
+  it('keeps explicit personal alias patterns as person', () => {
     expect(classifyGoogleAccountEmail('chris.rawlings@sophiesociety.com')).toMatchObject({
       type: 'person',
     })
+  })
+
+  it('treats ambiguous single-token emails as shared until human-name evidence exists', () => {
     expect(classifyGoogleAccountEmail('kevin@sophiesociety.com')).toMatchObject({
+      type: 'shared_account',
+    })
+
+    expect(
+      resolveGoogleAccountType('kevin@sophiesociety.com', null, {
+        fullName: 'Kevin Rodriguez',
+        orgUnitPath: '/',
+        title: null,
+      })
+    ).toMatchObject({
       type: 'person',
+      reason: 'human_name_email_match',
     })
   })
 
@@ -40,5 +54,27 @@ describe('Google account classification', () => {
 
     expect(resolved.type).toBe('shared_account')
     expect(resolved.overridden).toBe(false)
+  })
+
+  it('keeps partner/pod role aliases as shared even with a human display name', () => {
+    expect(
+      resolveGoogleAccountType('partner-success@sophiesociety.com', null, {
+        fullName: 'Chris Rawlings',
+        orgUnitPath: '/',
+        title: null,
+      })
+    ).toMatchObject({
+      type: 'shared_account',
+    })
+
+    expect(
+      resolveGoogleAccountType('podanalytics@sophiesociety.com', null, {
+        fullName: 'Richard Turner',
+        orgUnitPath: '/',
+        title: null,
+      })
+    ).toMatchObject({
+      type: 'shared_account',
+    })
   })
 })
