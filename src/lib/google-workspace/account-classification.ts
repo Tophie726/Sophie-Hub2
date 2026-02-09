@@ -79,6 +79,9 @@ const SHARED_KEYWORDS = [
   'notifications',
   'brandmanager',
   'contentmanager',
+  'partner',
+  'success',
+  'analytics',
 ]
 
 /**
@@ -112,6 +115,12 @@ const SHARED_COMPOUND_TOKENS: Array<[string, string]> = [
   ['partner', 'admin'],
   ['partner', 'success'],
   ['pod', 'analytics'],
+  ['brand', 'manager'],
+  ['content', 'team'],
+  ['customer', 'success'],
+  ['customer', 'service'],
+  ['lead', 'gen'],
+  ['lead', 'generation'],
 ]
 
 const PERSON_PATTERN = /^[a-z]+([._-][a-z]+)+$/i
@@ -178,7 +187,7 @@ function emailMatchesHumanName(localPart: string, fullName: string): boolean {
   const last = nameTokens[nameTokens.length - 1]
   const localCollapsed = normalizeToken(localPart).replace(/\d+$/g, '')
   const localTokens = localPart
-    .split(/[._-]+/)
+    .split(/[._+\-]+/)
     .map(normalizeToken)
     .filter(Boolean)
 
@@ -232,19 +241,21 @@ export function classifyGoogleAccountEmail(email: string): {
     return { type: 'shared_account', reason: 'no_local_part' }
   }
 
-  const collapsed = localPart.replace(/[._-]/g, '')
-  const collapsedNoDigits = collapsed.replace(/\d+$/g, '')
-  const tokens = localPart.split(/[._-]+/).filter(Boolean)
-  const normalizedTokens = tokens.map(token => token.replace(/\d+$/g, ''))
-  const sharedTokenSet = new Set(SHARED_KEYWORDS.map(k => k.toLowerCase()))
-  const sharedCollapsedSet = new Set(SHARED_KEYWORDS.map(k => k.toLowerCase().replace(/[-_]/g, '')))
+  const normalizedLocal = normalizeToken(localPart)
+  const normalizedNoDigits = normalizedLocal.replace(/\d+$/g, '')
+  const tokens = localPart.split(/[._+\-]+/).filter(Boolean)
+  const normalizedTokens = tokens
+    .map(token => normalizeToken(token).replace(/\d+$/g, ''))
+    .filter(Boolean)
+  const sharedTokenSet = new Set(SHARED_KEYWORDS.map(normalizeToken))
+  const sharedPrefixSet = SHARED_PREFIX_HINTS.map(normalizeToken)
 
   // Shared account detection first, using exact token/alias matches.
   // Avoid substring matching (e.g. "chris" should not match "hr").
   if (
     normalizedTokens.some(token => sharedTokenSet.has(token)) ||
-    sharedCollapsedSet.has(collapsed) ||
-    sharedCollapsedSet.has(collapsedNoDigits)
+    sharedTokenSet.has(normalizedLocal) ||
+    sharedTokenSet.has(normalizedNoDigits)
   ) {
     return { type: 'shared_account', reason: 'shared_keyword_match' }
   }
@@ -257,7 +268,7 @@ export function classifyGoogleAccountEmail(email: string): {
     return { type: 'shared_account', reason: 'shared_compound_hint' }
   }
 
-  if (SHARED_PREFIX_HINTS.some(prefix => collapsed.startsWith(prefix))) {
+  if (sharedPrefixSet.some(prefix => normalizedNoDigits.startsWith(prefix))) {
     return { type: 'shared_account', reason: 'shared_prefix_hint' }
   }
 
@@ -297,6 +308,17 @@ export function resolveGoogleAccountType(
       }
     }
 
+    // Prefer person signals from email/full-name before weaker metadata hints.
+    // This prevents false shared classifications like "daniel.q@..." where
+    // org-unit/title metadata may be noisy.
+    if (fullName && emailMatchesHumanName(email.split('@')[0] || '', fullName)) {
+      return {
+        type: 'person',
+        reason: 'human_name_email_match',
+        overridden: false,
+      }
+    }
+
     if (
       orgUnitPath &&
       SHARED_ORG_UNIT_HINTS.some(h => orgUnitPath.includes(h))
@@ -324,15 +346,6 @@ export function resolveGoogleAccountType(
       }
     }
 
-    // Some person aliases are single-token (e.g., "kevin@", "ana@", "viki@").
-    if (fullName && emailMatchesHumanName(email.split('@')[0] || '', fullName)) {
-      return {
-        type: 'person',
-        reason: 'human_name_email_match',
-        overridden: false,
-      }
-    }
-
     return {
       type: auto.type,
       reason: auto.reason,
@@ -340,37 +353,21 @@ export function resolveGoogleAccountType(
     }
   }
 
-  if (orgUnitPath && SHARED_ORG_UNIT_HINTS.some(h => orgUnitPath.includes(h))) {
+  // Strong person aliases (e.g. first.last, first.initial) should not be
+  // downgraded by noisy org-unit/title metadata.
+  if (auto.type === 'person') {
     return {
-      type: 'shared_account',
-      reason: 'shared_org_unit_hint',
+      type: 'person',
+      reason: auto.reason,
       overridden: false,
     }
   }
 
-  if (title && SHARED_TITLE_HINTS.some(h => title.includes(h))) {
+  if (fullName && HUMAN_FULL_NAME_PATTERN.test(fullName) && PERSON_PATTERN.test(email.split('@')[0]?.toLowerCase() || '')) {
     return {
-      type: 'shared_account',
-      reason: 'shared_title_hint',
+      type: 'person',
+      reason: 'human_name_pattern',
       overridden: false,
-    }
-  }
-
-  if (fullName) {
-    if (SHARED_NAME_HINTS.some(h => fullName.includes(h))) {
-      return {
-        type: 'shared_account',
-        reason: 'shared_name_hint',
-        overridden: false,
-      }
-    }
-
-    if (HUMAN_FULL_NAME_PATTERN.test(fullName) && PERSON_PATTERN.test(email.split('@')[0]?.toLowerCase() || '')) {
-      return {
-        type: 'person',
-        reason: 'human_name_pattern',
-        overridden: false,
-      }
     }
   }
 

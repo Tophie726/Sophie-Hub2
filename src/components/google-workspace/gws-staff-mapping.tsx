@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import {
   Search,
@@ -76,6 +76,8 @@ type FilterType = 'all' | 'mapped' | 'unmapped' | 'suspended' | 'shared' | 'skip
 
 const easeOut: [number, number, number, number] = [0.22, 1, 0.36, 1]
 const PAGE_SIZE = 30
+const REQUEST_TIMEOUT_MS = 30000
+const MAX_PAGINATION_PAGES = 25
 type EnrichFieldKey = 'title' | 'phone' | 'directory_snapshot'
 
 export function GWSStaffMapping() {
@@ -143,9 +145,22 @@ export function GWSStaffMapping() {
     }
   }
 
-  async function refreshSkippedApprovals() {
+  const fetchWithTimeout = useCallback(async (input: RequestInfo | URL, init?: RequestInit, timeoutMs = REQUEST_TIMEOUT_MS) => {
+    const controller = new AbortController()
+    const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs)
     try {
-      const res = await fetch('/api/google-workspace/staff-approvals?status=ignored&limit=200')
+      return await fetch(input, {
+        ...init,
+        signal: controller.signal,
+      })
+    } finally {
+      window.clearTimeout(timeoutId)
+    }
+  }, [])
+
+  const refreshSkippedApprovals = useCallback(async () => {
+    try {
+      const res = await fetchWithTimeout('/api/google-workspace/staff-approvals?status=ignored&limit=200')
       if (!res.ok) return
       const json = await res.json()
       const approvals = json.data?.approvals || []
@@ -153,19 +168,19 @@ export function GWSStaffMapping() {
     } catch {
       // Non-critical
     }
-  }
+  }, [fetchWithTimeout])
 
   // Fetch directory users from snapshot
   useEffect(() => {
     async function fetchUsers() {
       try {
-        const res = await fetch('/api/google-workspace/users')
+        const res = await fetchWithTimeout('/api/google-workspace/users')
         if (!res.ok) throw new Error('Failed to fetch directory users')
         const json = await res.json()
         const users = json.data?.users || []
 
         // Fetch mappings to enrich user data
-        const mappingsRes = await fetch('/api/google-workspace/mappings/staff')
+        const mappingsRes = await fetchWithTimeout('/api/google-workspace/mappings/staff')
         const mappingsJson = mappingsRes.ok ? await mappingsRes.json() : { data: { mappings: [] } }
         const mappings = mappingsJson.data?.mappings || []
 
@@ -195,13 +210,13 @@ export function GWSStaffMapping() {
         setError(null)
       } catch (err) {
         console.error('Error fetching directory users:', err)
-        setError('Failed to load directory users. Has the directory been synced?')
+        setError('Failed to load directory users. Try Refresh Directory.')
       } finally {
         setIsLoadingUsers(false)
       }
     }
     fetchUsers()
-  }, [])
+  }, [fetchWithTimeout])
 
   // Fetch staff members
   useEffect(() => {
@@ -211,16 +226,23 @@ export function GWSStaffMapping() {
         const pageSize = 100
         let offset = 0
         let hasMore = true
+        let pageCount = 0
 
-        while (hasMore) {
-          const res = await fetch(`/api/staff?limit=${pageSize}&offset=${offset}`)
+        while (hasMore && pageCount < MAX_PAGINATION_PAGES) {
+          const res = await fetchWithTimeout(`/api/staff?limit=${pageSize}&offset=${offset}`)
           if (!res.ok) throw new Error('Failed to fetch staff')
           const json = await res.json()
           const list = json.data?.staff || json.staff || []
 
+          if (!Array.isArray(list)) break
           all.push(...list)
-          hasMore = Boolean(json.data?.has_more)
+          hasMore = Boolean(json.data?.has_more) && list.length > 0
           offset += pageSize
+          pageCount += 1
+        }
+
+        if (pageCount === MAX_PAGINATION_PAGES) {
+          console.warn('Stopped staff pagination at safety cap', { pageCount, offset })
         }
 
         setStaffMembers(
@@ -233,12 +255,13 @@ export function GWSStaffMapping() {
         )
       } catch (err) {
         console.error('Error fetching staff:', err)
+        toast.error('Failed to load staff list')
       } finally {
         setIsLoadingStaff(false)
       }
     }
     fetchStaff()
-  }, [])
+  }, [fetchWithTimeout])
 
   // Fetch sync status
   useEffect(() => {
@@ -257,7 +280,7 @@ export function GWSStaffMapping() {
 
   useEffect(() => {
     refreshSkippedApprovals()
-  }, [])
+  }, [refreshSkippedApprovals])
 
   const selectedEnrichFields = useMemo(
     () =>
@@ -631,14 +654,17 @@ export function GWSStaffMapping() {
       const pageSize = 100
       let offset = 0
       let hasMore = true
-      while (hasMore) {
-        const staffRes = await fetch(`/api/staff?limit=${pageSize}&offset=${offset}`)
+      let pageCount = 0
+      while (hasMore && pageCount < MAX_PAGINATION_PAGES) {
+        const staffRes = await fetchWithTimeout(`/api/staff?limit=${pageSize}&offset=${offset}`)
         if (!staffRes.ok) break
         const staffJson = await staffRes.json()
         const list = staffJson.data?.staff || staffJson.staff || []
+        if (!Array.isArray(list)) break
         all.push(...list)
-        hasMore = Boolean(staffJson.data?.has_more)
+        hasMore = Boolean(staffJson.data?.has_more) && list.length > 0
         offset += pageSize
+        pageCount += 1
       }
       setStaffMembers(
         all.map((s: { id: string; full_name: string; email: string; status?: string | null }) => ({
@@ -1086,10 +1112,19 @@ export function GWSStaffMapping() {
             const mappedStaffChoice = user.staff_id
               ? staffMembers.find(s => s.id === user.staff_id)
               : undefined
-            const rowStaffChoices =
-              mappedStaffChoice && !availableStaffChoices.some(s => s.id === mappedStaffChoice.id)
-                ? [mappedStaffChoice, ...availableStaffChoices]
-                : availableStaffChoices
+            const mappedFallbackChoice =
+              !mappedStaffChoice && user.staff_id && user.staff_name
+                ? { id: user.staff_id, full_name: user.staff_name, email: user.primary_email, status: null }
+                : undefined
+            const rowStaffChoices = [
+              ...(mappedStaffChoice && !availableStaffChoices.some(s => s.id === mappedStaffChoice.id)
+                ? [mappedStaffChoice]
+                : []),
+              ...(mappedFallbackChoice && !availableStaffChoices.some(s => s.id === mappedFallbackChoice.id)
+                ? [mappedFallbackChoice]
+                : []),
+              ...availableStaffChoices,
+            ]
             const canMapToPerson = !user.is_suspended && user.account_type !== 'shared_account'
             const showSaveButton = Boolean(selectedId) && (!user.is_mapped || selectedId !== user.staff_id)
 
