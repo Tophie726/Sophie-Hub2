@@ -32,7 +32,7 @@ Round: 01 (Codex proposal)
   - Existing auth/session (`requireAuth`, role mapping).
   - Existing navigation + sidebar profile UI.
   - Existing modules/dashboards tables and APIs.
-  - Canonical partner type strategy (data definition needed).
+  - Products catalog as canonical taxonomy source.
 
 ## C) Architecture + Data Impact
 
@@ -50,11 +50,33 @@ Round: 01 (Codex proposal)
     - `view_profiles` (named reusable view definitions)
     - `view_audience_rules` (who gets what view, with priority)
     - `view_profile_modules` (module/widget composition links)
-  - Optional canonicalization:
-    - Add normalized partner-type field or lookup table for stable targeting.
+  - Canonical partner/product normalization:
+    - Add normalized `partner_type` enrichment field from `Partner type`.
+    - Add canonical product reference field (`product_id` or `product_slug`) resolved from products catalog.
+    - Ignore `Content Subscriber` for taxonomy classification.
+    - Preserve raw source values for audit/debug.
 - Backward compatibility notes:
   - Existing admin module builder remains source of composition truth.
   - If no matching view assignment exists, runtime falls back to default current behavior.
+
+### Partner Type Canonicalization Rules
+
+- Source of truth:
+  - Canonical labels and IDs come from products catalog (`/admin/products`).
+- Primary mapping:
+  - `PPC Premium` -> `Sophie PPC Package`
+  - `Content Premium (only content)` -> `CC`
+  - `FAM` -> `FAM`
+  - `T0 / Product Incubator` -> `PLI`
+- Fallback inference (when direct `Partner type` value is missing/ambiguous):
+  - `POD Leader` present -> PPC Basic
+  - `POD Leader` + `Conversion Strategist` -> Sophie PPC Partnership product
+  - `Brand Manager` present -> includes FAM ownership
+  - `Brand Manager` + `POD Leader` -> shared FAM + PPC Basic
+  - `Brand Manager` without `POD Leader` -> FAM handles PPC
+  - `Brand Manager` without `Conversion Strategist` -> FAM handling CC under pod
+- Forward-compat:
+  - New product families (for example `TTS` / TikTok Shop) must be onboarded by catalog entry, not hard-coded in role logic.
 
 ## D) Phases
 
@@ -67,7 +89,10 @@ Round: 01 (Codex proposal)
   - Admin-only sidebar control for:
     - `Admin Mode` toggle,
     - `See as` selector (partner/staff role/staff person/partner type).
-  - Context persistence (signed cookie or session-scoped store) with clear reset path.
+  - Context persistence as session-only (signed cookie/session-scoped store) with clear reset path.
+  - Role gate:
+    - `admin` gets full see-as controls,
+    - `operations_admin` does not automatically inherit `admin` see-as scope.
 - Risks:
   - Mixing actor permissions with subject filters.
   - Context leaks across tabs or sessions.
@@ -92,7 +117,7 @@ Round: 01 (Codex proposal)
   - Integrate audience-to-view resolution with existing module/dashboard render path.
 - Risks:
   - Rule conflicts causing nondeterministic UI.
-  - Missing partner-type taxonomy blocking clean assignment.
+  - Partner-type/product mapping drift from products catalog.
 - Validation gates:
   - Conflict detection + explicit tie-break logging.
   - API tests for each assignment tier.
@@ -116,7 +141,7 @@ Round: 01 (Codex proposal)
 
 | Agent | Scope | Owns | Blocked By |
 |---|---|---|---|
-| `schema-core` | view-control schema + precedence encoding | migrations, constraints, fallback behavior | partner-type taxonomy decision |
+| `schema-core` | view-control schema + precedence encoding | migrations, constraints, fallback behavior | canonical product IDs/slugs from catalog |
 | `api-flow` | viewer context + view assignment APIs | authz guardrails, context resolver, API contracts | schema-core contracts |
 | `ui-ops` | sidebar controls + views admin UX | admin mode UX, see-as selector, view assignment UI | api-flow endpoints |
 | `qa-review` | adversarial + regression validation | authz abuse tests, smoke evidence, rollout checklist | all prior waves |
@@ -127,10 +152,11 @@ Round: 01 (Codex proposal)
 |---|---|---|---|---|
 | V1 | Define viewer-context object and actor/subject invariants | `api-flow` | none | context contract doc + tests |
 | V2 | Add migrations for `view_profiles`, `view_audience_rules`, `view_profile_modules` | `schema-core` | none | migration SQL + rollback plan |
+| V2a | Add partner taxonomy normalization fields (`partner_type`, canonical product ref) | `schema-core` | none | migration + mapping notes |
 | V3 | Build context set/get/reset endpoints (admin-only) | `api-flow` | V1 | API routes + auth tests |
 | V4 | Add sidebar `Admin Mode` + `See as` controls | `ui-ops` | V3 | production UI control |
-| V5 | Build `/admin/views` create/assign workflow | `ui-ops` | V2, V3 | views management UI |
-| V6 | Implement precedence resolver for effective view | `api-flow` | V2, V3 | resolver utility + API integration |
+| V5 | Build `/admin/views` create/assign workflow | `ui-ops` | V2, V2a, V3 | views management UI |
+| V6 | Implement precedence resolver for effective view | `api-flow` | V2, V2a, V3 | resolver utility + API integration |
 | V7 | Hook resolved view to module/dashboard runtime | `api-flow` | V6 | audience-aware rendering path |
 | V8 | Add `Work Calendar Overview` module contract shell | `ui-ops` | V7 | reusable module baseline |
 | V9 | Execute smoke + security-edge validation | `qa-review` | V4-V8 | evidence bundle |
@@ -140,7 +166,7 @@ Round: 01 (Codex proposal)
 - [P1] Privilege escalation if subject context influences authorization checks.
 - [P1] Data leak if admin-client queries do not enforce effective audience filters.
 - [P2] Assignment-rule conflicts create unpredictable "what does user see" behavior.
-- [P2] Missing or inconsistent partner-type data blocks scalable partner-type views.
+- [P2] Incorrect partner-type/product normalization from enrichment inputs causes wrong view exposure.
 - [P3] Sidebar control complexity harms mobile usability without progressive disclosure.
 
 ## H) Verification Checklist
@@ -168,13 +194,23 @@ Use `references/scorecard-rubric.md`.
 
 | Flow | Scenario | Expected | Evidence |
 |---|---|---|---|
-| Happy path | Admin toggles `Admin Mode OFF`, selects `See as -> Staff Role: CC`, opens dashboard | UI resolves to CC-assigned view/modules with visible context badge | Screen recording + API context response |
+| Happy path | Admin toggles `Admin Mode OFF`, selects `See as -> Staff Role: PPC`, opens dashboard | UI resolves to PPC-assigned view/modules with visible context badge | Screen recording + API context response |
 | Failure path | Non-admin user attempts to access `See as` control or context API | Control hidden; API returns 403 | Screenshot + API logs |
 | Security edge | Admin selects `See as partner` for unassigned sensitive partner and attempts privileged admin action | Rendering follows subject scope, but admin-only write actions still require actor admin and are audited | Request/response logs + audit entry |
+| Mapping integrity | Partner with `Partner type = PPC Premium` and matching staffing columns is normalized to canonical product mapping | Resolved audience tag matches canonical product mapping from products catalog | Test fixture + resolver logs |
+
+## Decisions Confirmed
+
+1. Partner type is first-class and normalized to products catalog taxonomy.
+2. `See as` persistence is session-only first.
+3. `operations_admin` remains separate from top-level `admin` for see-as scope.
 
 ## Open Questions
 
-1. Should partner type be modeled as first-class DB field now, or derived from existing metadata short-term?
-2. Should admin see-as context be session-only (recommended first) or persistent across sessions/devices?
-3. Should `operations_admin` behave identically to `admin` for see-as and admin mode?
-
+1. Confirm exact product catalog slugs/IDs for:
+   - `Sophie PPC Package`
+   - `Sophie PPC Partnership`
+   - `CC`
+   - `FAM`
+   - `PLI`
+   - `TTS`

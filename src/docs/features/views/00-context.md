@@ -11,12 +11,57 @@ Round: 00 (Context capture)
   - a partner type,
   - a staff role,
   - a specific staff person.
+- Role examples for planning: `CC`, `PPC`, `FAM` (not `BBC`).
 - Keep a persistent `Admin Mode` toggle:
   - `Admin Mode ON`: admin can return to full admin behavior at any time.
   - `Admin Mode OFF`: admin sees normal role-based experience (or selected "see as" target).
 - Non-admin users must never see or use impersonation controls.
 - Long-term direction: a dedicated `Views` capability where admins can create views, assign audience, and reuse modules/widgets.
 - Candidate first reusable module: `Work Calendar Overview` module for partner-facing schedules (meetings/work items), reusable across multiple audiences.
+
+## Decisions Locked (2026-02-09)
+
+1. Partner type is a first-class enriched data point (not inferred-only metadata).
+2. `Products` page/catalog is source of truth for canonical product taxonomy.
+3. `See as` persistence is session-only first (not cross-device/cross-session).
+4. `operations_admin` is a separate tier and does not automatically inherit full `admin` see-as powers.
+
+## Partner Type Inputs + Mapping Rules
+
+### Source Inputs
+
+- Primary enrichment input column: `Partner type`.
+- Column explicitly ignored for taxonomy mapping: `Content Subscriber`.
+- Supporting staffing inputs used for rule-based fallback:
+  - `POD Leader`
+  - `Conversion Strategist`
+  - `Brand Manager`
+
+### Raw Partner Type Values Seen
+
+- `PPC Client`
+- `PPC Premium`
+- `Content Premium (only content)`
+- `FAM`
+- `T0 / Product Incubator`
+- Future/extended product examples include `TTS (TikTok Shop)` from products catalog.
+
+### Canonical Mapping Intent (Initial)
+
+- `PPC Premium` -> `Sophie PPC Package`
+- `Content Premium (only content)` -> `CC`
+- `FAM` -> `FAM`
+- `T0 / Product Incubator` -> `PLI`
+
+### Staffing-Derived Fallback Rules (When Needed)
+
+- If `POD Leader` exists (PPC basic pod leader): classify as PPC Basic.
+- If `POD Leader` and `Conversion Strategist` both exist: classify as Sophie PPC Partnership product.
+- If `Brand Manager` exists: always includes FAM ownership.
+- Shared partner case:
+  - `Brand Manager` + `POD Leader` => shared FAM + PPC Basic.
+  - `Brand Manager` without `POD Leader` => FAM handles PPC too.
+  - `Brand Manager` without `Conversion Strategist` => FAM handling CC under pod.
 
 ## Intake Answers (From Prompt + Assumptions)
 
@@ -60,12 +105,10 @@ Proposed precedence (highest to lowest):
 
 - Permission confusion between actor (real signed-in admin) and subject (target "see as" identity).
 - Drift between `Views` assignment model and existing module/dashboard ownership.
-- Missing canonical partner-type taxonomy in current data model may block clean partner-type targeting unless normalized.
+- Product mapping drift if `Partner type` values diverge from products catalog without normalization.
 
 ## Open Questions
 
-1. Canonical list of partner types and ownership of that taxonomy.
-2. Whether "See as" state should persist only per browser session or across devices.
-3. Expected behavior when an admin has both personal default view and role default view (tie-break policy).
-4. Whether pod leaders should eventually get limited "see as team member" in phase 2+ (currently assumed no; admin-only).
-
+1. What exact product IDs/slugs in the products catalog should each mapped label use (`Sophie PPC Package`, `PLI`, `CC`, etc.)?
+2. Expected behavior when an admin has both personal default view and role default view (tie-break policy).
+3. Whether pod leaders should eventually get limited "see as team member" in phase 2+ (currently assumed no; admin-only).
