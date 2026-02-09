@@ -48,6 +48,7 @@
 ## H) Verification Checklist
 - [ ] Build/lint/type checks
 - [ ] Unit/API/integration tests
+- [ ] Smoke tests (happy path, failure path, security edge) with evidence links
 - [ ] Failure mode checks
 - [ ] Rollback path tested
 - [ ] Docs updated

@@ -29,7 +29,18 @@ When triggered:
 3. Do not implement until:
    - `FINAL-APPROVED-PLAN.md` exists.
 4. During execution, enforce wave gates:
-   - build/test -> Codex review -> patch -> next wave.
+   - build/test -> smoke tests (happy + failure + security edge) -> Codex review -> patch -> next wave.
+
+## Smoke Test Rule
+
+Smoke tests are mandatory in BAM before sign-off.
+
+- Include at least:
+  - happy-path flow,
+  - failure-path flow,
+  - one abuse/security-edge check.
+- Record evidence in markdown (commands, API responses, screenshots, or logs).
+- Do not mark a wave complete without smoke evidence.
 
 ## Score Rule
 

@@ -64,9 +64,10 @@ Always produce:
 1. Feature plan with phase gates.
 2. Agent team composition with dependencies and ownership boundaries.
 3. Test/validation matrix (unit, API, integration, ops).
-4. Rollout and rollback steps.
-5. Risk register and mitigations.
-6. Baseline and post scorecards using the same rubric.
+4. Smoke test matrix (happy path, failure path, security edge) with evidence requirements.
+5. Rollout and rollback steps.
+6. Risk register and mitigations.
+7. Baseline and post scorecards using the same rubric.
 
 ## Score Truth Policy
 
@@ -97,6 +98,10 @@ Wave order:
 ## Review Gate (must pass before "complete")
 
 - Build, lint, and type-check status are explicit.
+- Smoke tests are explicit and evidenced:
+  - happy path,
+  - failure path,
+  - security/abuse edge.
 - Blocking findings (`P1`) are closed or accepted with documented risk owner.
 - Route/schema/docs drift is resolved.
 - Rollback path exists for migration/runtime changes.
