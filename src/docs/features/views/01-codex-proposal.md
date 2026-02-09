@@ -7,7 +7,7 @@ Round: 01 (Codex proposal)
 
 - Business/user outcome:
   - Admins can preview the product exactly as different audiences see it, without logging in/out or mutating access rights.
-  - Teams can define reusable `Views` mapped to audiences (person, role, partner, partner type, default) so UI composition scales as Sophie Hub grows.
+  - Teams can define reusable `Views` mapped to audiences (staff person, staff role, partner, partner type, default) so UI composition scales as Sophie Hub grows.
 - Shipping definition:
   - Admin-only `See as` + `Admin Mode` shipped with deterministic context resolution.
   - `Views` assignment model defined and integrated with existing modules/dashboards engine.
@@ -90,7 +90,9 @@ Round: 01 (Codex proposal)
     - `subject` = target audience identity for rendering only.
   - Admin-only sidebar control for:
     - `Admin Mode` toggle,
-    - `See as` selector (partner/staff role/staff person/partner type).
+    - `See as` selector hierarchy:
+      - `See as Staff` -> `Person` or `Role`
+      - `See as Partner` -> `Partner` or `Partner Type`.
   - Context persistence as session-only (signed cookie/session-scoped store) with clear reset path.
   - Role gate:
     - `admin` gets full see-as controls,
@@ -197,6 +199,7 @@ Use `references/scorecard-rubric.md`.
 | Flow | Scenario | Expected | Evidence |
 |---|---|---|---|
 | Happy path | Admin toggles `Admin Mode OFF`, selects `See as -> Staff Role: PPC`, opens dashboard | UI resolves to PPC-assigned view/modules with visible context badge | Screen recording + API context response |
+| Happy path 2 | Admin selects `See as -> Partner -> Partner Type: FAM` | UI resolves using partner-type audience assignment and shows effective context badge | Screen recording + resolver response |
 | Failure path | Non-admin user attempts to access `See as` control or context API | Control hidden; API returns 403 | Screenshot + API logs |
 | Security edge | Admin selects `See as partner` for unassigned sensitive partner and attempts privileged admin action | Rendering follows subject scope, but admin-only write actions still require actor admin and are audited | Request/response logs + audit entry |
 | Mapping integrity | Partner with `Partner type = PPC Premium` and matching staffing columns is normalized to canonical product mapping | Resolved audience tag matches canonical product mapping from products catalog | Test fixture + resolver logs |

@@ -7,10 +7,12 @@ Round: 00 (Context capture)
 
 - Add an admin-only "See as" capability from the current user/profile control (where name + `Admin` is shown today).
 - Let admins preview the experience as:
-  - a specific partner,
-  - a partner type,
-  - a staff role,
-  - a specific staff person.
+  - `See as Staff`
+    - by specific staff person
+    - by staff role
+  - `See as Partner`
+    - by specific partner
+    - by partner type
 - Role examples for planning: `CC`, `PPC`, `FAM` (not `BBC`).
 - Keep a persistent `Admin Mode` toggle:
   - `Admin Mode ON`: admin can return to full admin behavior at any time.
@@ -25,6 +27,9 @@ Round: 00 (Context capture)
 2. `Products` page/catalog is source of truth for canonical product taxonomy.
 3. `See as` persistence is session-only first (not cross-device/cross-session).
 4. `operations_admin` is a separate tier and does not automatically inherit full `admin` see-as powers.
+5. `See as` selector hierarchy is:
+   - `See as Staff` -> `Person` or `Role`
+   - `See as Partner` -> `Partner` or `Partner Type`
 
 ## Partner Type Inputs + Mapping Rules
 
