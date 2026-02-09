@@ -75,3 +75,21 @@ Round: 03 (Review of `02-claude-agent-plan.md`)
 - Blocking findings: **3 P1**
 - Non-blocking but required before approval: **3 P2**
 - `FINAL-APPROVED-PLAN.md` should not advance until P1 items are resolved in `04-claude-revision.md` with explicit file-level plan changes.
+
+## Round 05 Re-Review (2026-02-10)
+
+Reviewed `04-claude-revision.md` against all six findings above.
+
+- P1.1: fixed (server-derived context only on runtime reads)
+- P1.2: fixed (explicit `ViewResolverInput` + builder task V1a)
+- P1.3: fixed (plan rebased on shipped `computed_partner_type` model; V2c removed)
+- P2.1: fixed (tier/target CHECKs + partial unique indexes documented)
+- P2.2: fixed (two-phase rollback; partner taxonomy columns out of rollback scope)
+- P2.3: fixed (auth split between control-plane admin routes and runtime `requireAuth` reads)
+
+### Re-Review Outcome
+
+- Unresolved P1: **0**
+- Unresolved P2: **0**
+- No additional blocking findings introduced in the revision.
+- Plan can move to `FINAL-APPROVED-PLAN.md` merge gate.
