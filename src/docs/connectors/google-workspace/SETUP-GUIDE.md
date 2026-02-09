@@ -172,9 +172,34 @@ Set the same 4 variables in Vercel dashboard under **Settings > Environment Vari
 
 ---
 
-## Step 7: Verify - Run Smoke Tests
+## Step 7: Verify (Safe Capture + Smoke)
+
+### 7a) Non-destructive capture for team review (recommended first)
+
+Use this to generate a shareable artifact folder (JSON responses, headers, timings, summary) without writing to staff CRM rows.
+
+```bash
+COOKIE_HEADER="<your-session-cookie>" ./scripts/gws-sync-capture.sh
+```
+
+Outputs:
+- `/tmp/gws-sync-capture-YYYYMMDD-HHMMSS/` folder
+- `/tmp/gws-sync-capture-YYYYMMDD-HHMMSS.tar.gz` bundle
+
+Notes:
+- This does **not** call `/api/google-workspace/staff/bootstrap`, mapping writes, or enrich routes.
+- It is safe for backend sync validation and troubleshooting with external devs.
+- Add `--no-sync` to skip `POST /api/google-workspace/sync` and only capture connection + status + users.
+
+### 7b) Full smoke flow
 
 Start the dev server and run these in order:
+
+```bash
+# Optional helper: runs the full sequence below.
+# Add --with-bootstrap when staff is empty and you want to seed from directory users.
+COOKIE_HEADER="<your-session-cookie>" ./scripts/smoke-google-workspace.sh --with-bootstrap
+```
 
 ### 1. Test Connection
 
@@ -183,7 +208,7 @@ curl -X POST http://localhost:3000/api/google-workspace/test-connection \
   -H "Cookie: <your-session-cookie>"
 ```
 
-Expected: `{ "data": { "connected": true, "domain": "yourdomain.com", "user_count": 1 } }`
+Expected: `{ "data": { "connected": true, "domain": "yourdomain.com", "user_count": <greater-than-zero> } }`
 
 **Common errors:**
 - `"Not Authorized"` → Domain-wide delegation not configured (step 4b) or wrong Client ID
@@ -217,21 +242,7 @@ curl http://localhost:3000/api/google-workspace/users \
 
 Expected: Array of directory users from the snapshot.
 
-### 5. Auto-Match Staff
-
-```bash
-curl -X POST http://localhost:3000/api/google-workspace/mappings/staff/auto-match \
-  -H "Cookie: <your-session-cookie>"
-```
-
-Expected: includes `matched`, `suggested_alias_matches`, and `staff_approvals_queue`.
-
-Notes:
-- Shared inboxes are skipped from staff mapping.
-- Staff records with inactive lifecycle statuses (for example `departed`, `legacy_hidden`) are excluded from auto-match.
-- Unmatched person accounts are persisted to `staff_approval_queue` for admin review.
-
-### 5b. First-Run Bootstrap (Create Staff from Directory)
+### 5. First-Run Bootstrap (Optional)
 
 ```bash
 curl -X POST http://localhost:3000/api/google-workspace/staff/bootstrap \
@@ -245,7 +256,21 @@ Behavior:
 - Skips shared inboxes and suspended/deleted users.
 - Creates `google_workspace_user` mappings for created or existing-by-email staff.
 
-### 6. Enrich Staff
+### 6. Auto-Match Staff
+
+```bash
+curl -X POST http://localhost:3000/api/google-workspace/mappings/staff/auto-match \
+  -H "Cookie: <your-session-cookie>"
+```
+
+Expected: includes `matched`, `suggested_alias_matches`, and `staff_approvals_queue`.
+
+Notes:
+- Shared inboxes are skipped from staff mapping.
+- Staff records with inactive lifecycle statuses (for example `departed`, `legacy_hidden`) are excluded from auto-match.
+- Unmatched person accounts are persisted to `staff_approval_queue` for admin review.
+
+### 7. Enrich Staff
 
 ```bash
 curl -X POST http://localhost:3000/api/google-workspace/enrich-staff \
@@ -254,7 +279,7 @@ curl -X POST http://localhost:3000/api/google-workspace/enrich-staff \
 
 Expected: `{ "data": { "enriched": 80, "fields_updated": { "title": 60, "phone": 30, "avatar_url": 45 } } }`
 
-### 7. Check Mappings
+### 8. Check Mappings
 
 ```bash
 curl http://localhost:3000/api/google-workspace/mappings/staff \
@@ -263,7 +288,7 @@ curl http://localhost:3000/api/google-workspace/mappings/staff \
 
 Expected: Array of staff-to-Google user mappings.
 
-### 8. Check Staff Approval Queue
+### 9. Check Staff Approval Queue
 
 ```bash
 curl http://localhost:3000/api/google-workspace/staff-approvals \
