@@ -6,13 +6,14 @@ Implementation docs for the Slack data enrichment connector in Sophie Hub v2.
 
 ## 1. Overview
 
-The Slack connector enriches Sophie Hub with three capabilities:
+The Slack connector enriches Sophie Hub with four capabilities:
 
 1. **Staff mapping** -- Link Slack user IDs to staff records (auto-match by email)
-2. **Channel-partner mapping** -- Link Slack channels to partner records (pattern-based auto-match)
-3. **Response time analytics** -- Measure how quickly staff respond to partner messages in mapped channels
+2. **Partner-contact mapping** -- Link partner records to specific Slack contact users
+3. **Channel-partner mapping** -- Link Slack channels to partner records (pattern-based auto-match with channel typing)
+4. **Response time analytics** -- Measure how quickly staff respond to partner messages in mapped channels
 
-Slack is a **non-tabular** connector. It extends `BaseConnector`, stubs the tabular interface (getTabs, getRawRows, getData), and exposes custom methods for users, channels, and message history.
+Slack is a **non-tabular** connector. It extends `BaseConnector`, stubs the tabular interface (getTabs, getRawRows, getData), and exposes custom methods for users, contacts, channels, and message history.
 
 ---
 
@@ -151,9 +152,10 @@ This keeps manual staff edits intact while backfilling missing profile fields.
 
 ### Phase 1: `entity_external_ids` (existing)
 
-No new tables needed for basic mapping. Uses two `source` values:
+No new tables needed for basic mapping. Uses three `source` values:
 
 - `'slack_user'` -- maps `staff` entity to Slack user ID
+- `'slack_partner_contact'` -- maps `partners` entity to external Slack contact user IDs
 - `'slack_channel'` -- maps `partners` entity to Slack channel ID
 
 ### Phase 1: `slack_sync_state`
@@ -242,7 +244,7 @@ CREATE TABLE slack_response_metrics (
 
 ## 5. entity_external_ids Usage
 
-The Slack connector uses **two source values** to map different entity relationships:
+The Slack connector uses **three source values** to map different entity relationships:
 
 ### `source: 'slack_user'` -- Staff mapping
 
@@ -284,6 +286,31 @@ const { data } = await supabase
   .single()
 ```
 
+### `source: 'slack_partner_contact'` -- Partner-contact mapping
+
+```typescript
+// Save: partner -> Slack user contact (can have multiple contacts per partner)
+await supabase.from('entity_external_ids').upsert({
+  entity_type: 'partners',
+  entity_id: partnerId,         // UUID from partners table
+  source: 'slack_partner_contact',
+  external_id: slackUserId,     // e.g., 'U04XPARTNER1'
+  metadata: {
+    slack_name: contactName,
+    is_primary_contact: false,  // first mapping for partner defaults to true
+    match_type: 'manual',
+  },
+}, { onConflict: 'source,external_id' })
+
+// Query: "Which partner is Slack user U04XPARTNER1 attached to?"
+const { data } = await supabase
+  .from('entity_external_ids')
+  .select('entity_id, metadata')
+  .eq('source', 'slack_partner_contact')
+  .eq('external_id', 'U04XPARTNER1')
+  .single()
+```
+
 ### `source: 'slack_channel'` -- Channel-partner mapping
 
 ```typescript
@@ -295,6 +322,7 @@ await supabase.from('entity_external_ids').upsert({
   external_id: channelId,       // e.g., 'C06MABCDEF'
   metadata: {
     channel_name: channel.name,
+    channel_type: 'partner_facing', // or alerts/internal
     match_type: 'auto',
     match_confidence: 0.95,
   },
@@ -340,21 +368,35 @@ for (const user of slackUsers) {
 }
 ```
 
+### Partner-contact mapping (partner-side Slack users)
+
+1. Fetch candidate Slack users via `GET /api/slack/contacts`
+2. Exclude users already mapped to staff (`source: 'slack_user'`)
+3. Prioritize guest/connect users for partner-contact mapping
+4. Map user -> partner via `POST /api/slack/mappings/contacts`
+5. First mapped contact per partner is marked `is_primary_contact = true`
+
+This mapping layer is intentionally separate from staff mapping so the same partner can have multiple contact users.
+
 ### Channel auto-match (naming pattern)
 
 1. Fetch all channels via `listChannels()`
 2. Fetch all partners from Supabase
 3. Apply naming convention pattern (e.g., `client-{brand_name}`)
 4. Skip internal channels by prefix (e.g., `team-`, `ops-`, `general`)
-5. Extract brand name from channel name, fuzzy-match against partner names
-6. Save high-confidence matches, flag ambiguous matches for manual review
+5. Detect channel type: `partner_facing | alerts | internal`
+6. Strip alert/internal suffixes (e.g., `-alerts`, `-internal`, `-backend`) to derive brand key
+7. Fuzzy-match derived brand key against partner names
+8. Save high-confidence matches, flag ambiguous matches for manual review
 
 ```typescript
-// Pattern: "client-coat-defense" -> "coat defense" -> fuzzy match to "Coat Defense"
+// Pattern:
+// "client-coat-defense" -> partner_facing -> "coat defense"
+// "client-coat-defense-alerts" -> alerts -> "coat defense"
 const prefix = 'client-'
 for (const channel of channels) {
   if (!channel.name.startsWith(prefix)) continue
-  const extracted = channel.name.slice(prefix.length).replace(/-/g, ' ')
+  const extracted = stripPartnerSuffixes(channel.name.slice(prefix.length)).replace(/-/g, ' ')
   const match = fuzzyMatch(extracted, partners)
   if (match && match.confidence > 0.8) {
     // Save mapping
@@ -366,7 +408,10 @@ for (const channel of channels) {
 
 For items that don't auto-match, the admin UI provides:
 
-- List of unmatched Slack users / channels
+- Separate tabs for:
+  - Staff mappings
+  - Partner-contact mappings
+  - Channel mappings
 - Searchable dropdown of Sophie Hub staff / partners
 - One-click save per mapping
 - Bulk operations for efficiency
@@ -483,12 +528,16 @@ All routes live under `src/app/api/slack/`.
 |--------|-------|---------|
 | POST | `/api/slack/test-connection` | Test bot token, return workspace info |
 | GET | `/api/slack/users` | List all Slack users (cached) |
+| GET | `/api/slack/contacts` | List partner-contact mapping candidates |
 | GET | `/api/slack/channels` | List all channels (cached) |
 | POST | `/api/slack/mappings/staff/auto-match` | Run email-based auto-match for staff |
 | GET | `/api/slack/mappings/staff` | Get all staff-Slack user mappings |
 | POST | `/api/slack/mappings/staff` | Save/update a single staff mapping |
 | DELETE | `/api/slack/mappings/staff?id={id}` | Remove a staff mapping |
 | POST | `/api/slack/enrich-staff` | Enrich mapped staff with avatar/title/timezone/phone |
+| GET | `/api/slack/mappings/contacts` | Get all partner-contact mappings |
+| POST | `/api/slack/mappings/contacts` | Save/update a partner-contact mapping |
+| DELETE | `/api/slack/mappings/contacts?id={id}` | Remove a partner-contact mapping |
 | POST | `/api/slack/mappings/channels/auto-match` | Run pattern-based auto-match for channels |
 | GET | `/api/slack/mappings/channels` | Get all channel-partner mappings |
 | POST | `/api/slack/mappings/channels` | Save/update a single channel mapping |
@@ -537,15 +586,18 @@ export async function GET() {
 
 ### Phase 1: Connection + Mappings
 
-**Goal:** Connect to Slack, map users to staff, map channels to partners.
+**Goal:** Connect to Slack, map users to staff, map partner contacts, and map channels to partners.
 
 **Deliverables:**
 - `SLACK_BOT_TOKEN` env var configuration
 - Test connection endpoint
 - Users list with caching
+- Partner contact candidates list with caching
 - Channels list with caching
 - Staff auto-match by email
+- Partner-contact mapping APIs/UI
 - Channel auto-match by naming pattern
+- Channel type detection (`partner_facing`, `alerts`, `internal`)
 - Manual mapping UI for unmatched items
 - CategoryHub card for Slack
 - `slack_sync_state` table migration

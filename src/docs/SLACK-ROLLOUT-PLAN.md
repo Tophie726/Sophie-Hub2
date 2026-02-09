@@ -271,7 +271,7 @@ WHERE sender_slack_id = :slack_user_id
 - "Start Sync" button (disabled while running)
 - "Sync Channel" button per row for single-channel sync
 
-Add as third tab in SlackMappingHub: `Staff | Channels | Sync`
+Add as fourth tab in SlackMappingHub: `Staff | Partner Contacts | Channels | Sync`
 
 ### 2.9 Rollback Plan
 
@@ -558,7 +558,7 @@ LIMIT 20;
 - Trend sparklines
 
 **Integration points:**
-- New tab in SlackMappingHub: `Staff | Channels | Sync | Analytics`
+- New tab in SlackMappingHub: `Staff | Partner Contacts | Channels | Sync | Analytics`
 - Partner detail page: response time widget (if channel mapped)
 - Admin dashboard: optional response time KPI card
 
@@ -1060,13 +1060,15 @@ Once Slack app is set up, execute in order:
 - `src/lib/slack/analytics.ts` (353 lines) — Response time algorithm (7-day lookahead)
 - `src/lib/slack/analytics-utils.ts` (157 lines) — Pure math utilities
 
-**API Routes (17 files)**
+**API Routes (19 files)**
 - `api/slack/test-connection` — POST: verify bot token
 - `api/slack/channels` — GET: list workspace channels (cached)
+- `api/slack/contacts` — GET: list partner-contact mapping candidates
 - `api/slack/users` — GET: list workspace users (cached)
 - `api/slack/mappings/staff` — GET/POST/DELETE: staff-Slack mappings
 - `api/slack/mappings/staff/auto-match` — POST: bulk email match
 - `api/slack/enrich-staff` — POST: enrich mapped staff profiles from Slack
+- `api/slack/mappings/contacts` — GET/POST/DELETE: partner-contact mappings
 - `api/slack/mappings/channels` — GET/POST/DELETE: channel-partner mappings
 - `api/slack/mappings/channels/auto-match` — POST: bulk name pattern match
 - `api/slack/sync/start` — POST: create sync run
@@ -1079,11 +1081,12 @@ Once Slack app is set up, execute in order:
 - `api/cron/slack-sync` — POST: 5-min chunked sync cron
 - `api/cron/slack-analytics` — POST: daily rolling analytics cron
 
-**UI Components (8 files)**
+**UI Components (9 files)**
 - `slack-connection-card.tsx` — Bot connection test
 - `slack-staff-mapping.tsx` — Staff-Slack user mapping table
+- `slack-partner-contact-mapping.tsx` — Partner-contact mapping table
 - `slack-channel-mapping.tsx` — Channel-partner mapping table
-- `slack-mapping-hub.tsx` — 4-tab hub (Staff/Channels/Sync/Analytics)
+- `slack-mapping-hub.tsx` — 5-tab hub (Staff/Partner Contacts/Channels/Sync/Analytics)
 - `slack-sync-status.tsx` — Sync progress with per-channel table
 - `slack-analytics-summary.tsx` — KPI cards + sparklines + leaderboard
 - `slack-response-chart.tsx` — Recharts line + stacked bar
