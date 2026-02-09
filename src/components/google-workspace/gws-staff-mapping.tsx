@@ -36,6 +36,7 @@ import {
   Select,
   SelectContent,
   SelectItem,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
@@ -78,6 +79,9 @@ const easeOut: [number, number, number, number] = [0.22, 1, 0.36, 1]
 const PAGE_SIZE = 30
 const REQUEST_TIMEOUT_MS = 30000
 const MAX_PAGINATION_PAGES = 25
+const ACTION_FORCE_SHARED = '__action_force_shared__'
+const ACTION_SKIP = '__action_skip__'
+const ACTION_REOPEN = '__action_reopen__'
 type EnrichFieldKey = 'title' | 'phone' | 'directory_snapshot'
 
 export function GWSStaffMapping() {
@@ -1127,6 +1131,7 @@ export function GWSStaffMapping() {
             ]
             const canMapToPerson = !user.is_suspended && user.account_type !== 'shared_account'
             const showSaveButton = Boolean(selectedId) && (!user.is_mapped || selectedId !== user.staff_id)
+            const useSingleMappedDropdown = user.is_mapped && canMapToPerson
 
             return (
               <motion.div
@@ -1207,45 +1212,62 @@ export function GWSStaffMapping() {
 
                 {/* Actions */}
                 <div className="flex items-center gap-2 flex-shrink-0">
-                  <Select
-                    onValueChange={(v) => {
-                      if (v === 'skip') {
-                        void handleApprovalStatus(user, 'skip')
-                        return
-                      }
-                      if (v === 'unskip') {
-                        void handleApprovalStatus(user, 'unskip')
-                        return
-                      }
-                      void handleSetAccountTypeOverride(
-                        user.google_user_id,
-                        v as 'person' | 'shared_account'
-                      )
-                    }}
-                    disabled={isClassificationSaving || isApprovalSaving}
-                    key={`${user.google_user_id}-${user.account_type_override || 'auto'}-${isSkipped ? 'skipped' : 'active'}`}
-                  >
-                    <SelectTrigger className="w-[170px] h-8 text-sm">
-                      <SelectValue placeholder="Actions" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="person">Force Person</SelectItem>
-                      <SelectItem value="shared_account">Force Shared Inbox</SelectItem>
-                      <SelectItem value={isSkipped ? 'unskip' : 'skip'}>
-                        {isSkipped ? 'Re-open' : 'Skip for now'}
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
+                  {!useSingleMappedDropdown && (
+                    <Select
+                      onValueChange={(v) => {
+                        if (v === 'skip') {
+                          void handleApprovalStatus(user, 'skip')
+                          return
+                        }
+                        if (v === 'unskip') {
+                          void handleApprovalStatus(user, 'unskip')
+                          return
+                        }
+                        void handleSetAccountTypeOverride(
+                          user.google_user_id,
+                          v as 'person' | 'shared_account'
+                        )
+                      }}
+                      disabled={isClassificationSaving || isApprovalSaving}
+                      key={`${user.google_user_id}-${user.account_type_override || 'auto'}-${isSkipped ? 'skipped' : 'active'}`}
+                    >
+                      <SelectTrigger className="w-[170px] h-8 text-sm">
+                        <SelectValue placeholder="Actions" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="person">Force Person</SelectItem>
+                        <SelectItem value="shared_account">Force Shared Inbox</SelectItem>
+                        <SelectItem value={isSkipped ? 'unskip' : 'skip'}>
+                          {isSkipped ? 'Re-open' : 'Skip for now'}
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
                   {canMapToPerson ? (
                     <>
                       <Select
                         value={selectedId}
-                        onValueChange={(v) =>
+                        onValueChange={(v) => {
+                          if (useSingleMappedDropdown) {
+                            if (v === ACTION_FORCE_SHARED) {
+                              void handleSetAccountTypeOverride(user.google_user_id, 'shared_account')
+                              return
+                            }
+                            if (v === ACTION_SKIP) {
+                              void handleApprovalStatus(user, 'skip')
+                              return
+                            }
+                            if (v === ACTION_REOPEN) {
+                              void handleApprovalStatus(user, 'unskip')
+                              return
+                            }
+                          }
+
                           setSelectedStaff(prev => ({ ...prev, [user.google_user_id]: v }))
-                        }
+                        }}
                         disabled={isApprovalSaving}
                       >
-                        <SelectTrigger className="w-[180px] h-8 text-sm">
+                        <SelectTrigger className={`${useSingleMappedDropdown ? 'w-[280px]' : 'w-[180px]'} h-8 text-sm`}>
                           <SelectValue placeholder="Select staff..." />
                         </SelectTrigger>
                         <SelectContent className="max-h-[300px]">
@@ -1254,6 +1276,15 @@ export function GWSStaffMapping() {
                               {s.full_name}
                             </SelectItem>
                           ))}
+                          {useSingleMappedDropdown && (
+                            <>
+                              <SelectSeparator />
+                              <SelectItem value={ACTION_FORCE_SHARED}>Change to shared inbox</SelectItem>
+                              <SelectItem value={isSkipped ? ACTION_REOPEN : ACTION_SKIP}>
+                                {isSkipped ? 'Re-open' : 'Skip for now'}
+                              </SelectItem>
+                            </>
+                          )}
                         </SelectContent>
                       </Select>
                       <Button
