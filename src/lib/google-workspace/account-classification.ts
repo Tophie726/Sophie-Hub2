@@ -63,6 +63,15 @@ const SHARED_KEYWORDS = [
   'business_development',
   'growth',
   'partnerships',
+  'partneradmin',
+  'partner-admin',
+  'partner_admin',
+  'partnersuccess',
+  'partner-success',
+  'partner_success',
+  'podanalytics',
+  'pod-analytics',
+  'pod_analytics',
   'procurement',
   'comms',
   'noreply',
@@ -89,6 +98,20 @@ const SHARED_PREFIX_HINTS = [
   'support',
   'admin',
   'audit',
+  'partneradmin',
+  'partnersuccess',
+  'podanalytics',
+]
+
+/**
+ * Compound token rules for role aliases that are split by separator:
+ * - partner-success@
+ * - pod-analytics@
+ */
+const SHARED_COMPOUND_TOKENS: Array<[string, string]> = [
+  ['partner', 'admin'],
+  ['partner', 'success'],
+  ['pod', 'analytics'],
 ]
 
 const PERSON_PATTERN = /^[a-z]+([._-][a-z]+)+$/i
@@ -149,6 +172,14 @@ export function classifyGoogleAccountEmail(email: string): {
     sharedCollapsedSet.has(collapsedNoDigits)
   ) {
     return { type: 'shared_account', reason: 'shared_keyword_match' }
+  }
+
+  if (
+    SHARED_COMPOUND_TOKENS.some(
+      ([a, b]) => normalizedTokens.includes(a) && normalizedTokens.includes(b)
+    )
+  ) {
+    return { type: 'shared_account', reason: 'shared_compound_hint' }
   }
 
   if (SHARED_PREFIX_HINTS.some(prefix => collapsed.startsWith(prefix))) {

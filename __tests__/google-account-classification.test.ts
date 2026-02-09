@@ -10,6 +10,18 @@ describe('Google account classification', () => {
     })
   })
 
+  it('classifies partner and pod role aliases as shared', () => {
+    expect(classifyGoogleAccountEmail('partner-success@sophiesociety.com')).toMatchObject({
+      type: 'shared_account',
+    })
+    expect(classifyGoogleAccountEmail('partneradmin@sophiesociety.com')).toMatchObject({
+      type: 'shared_account',
+    })
+    expect(classifyGoogleAccountEmail('podanalytics@sophiesociety.com')).toMatchObject({
+      type: 'shared_account',
+    })
+  })
+
   it('keeps real personal emails as person', () => {
     expect(classifyGoogleAccountEmail('chris.rawlings@sophiesociety.com')).toMatchObject({
       type: 'person',
@@ -30,4 +42,3 @@ describe('Google account classification', () => {
     expect(resolved.overridden).toBe(false)
   })
 })
-
