@@ -10,6 +10,7 @@ import { getConnector, type GoogleSheetConnectorConfig } from '@/lib/connectors'
 import { audit } from '@/lib/audit'
 import { createLogger } from '@/lib/logger'
 import { SYNC } from '@/lib/constants'
+import { buildPartnerTypePersistenceFields } from '@/lib/partners/computed-partner-type'
 import { applyTransform } from './transforms'
 import type {
   SyncOptions,
@@ -611,11 +612,23 @@ export class SyncEngine {
 
     // Batch creates — with ID capture for lineage tracking
     if (creates.length > 0) {
-      const createRecords = creates.map((c) => ({
-        [c.keyField]: c.keyValue,
-        ...c.fields,
-        ...(c.sourceData ? { source_data: c.sourceData } : {}),
-      }))
+      const createRecords = creates.map((c) => {
+        const record: Record<string, unknown> = {
+          [c.keyField]: c.keyValue,
+          ...c.fields,
+          ...(c.sourceData ? { source_data: c.sourceData } : {}),
+        }
+
+        if (config.tabMapping.primary_entity === 'partners') {
+          Object.assign(record, buildPartnerTypePersistenceFields({
+            sourceData: asPartnerSourceData(record.source_data),
+            podLeaderName: asString(record.pod_leader_name),
+            brandManagerName: asString(record.brand_manager_name),
+          }))
+        }
+
+        return record
+      })
 
       const keyField = creates[0].keyField
       const totalBatches = Math.ceil(createRecords.length / SYNC.UPSERT_BATCH_SIZE)
@@ -683,6 +696,20 @@ export class SyncEngine {
       if (update.sourceData) {
         const existingSourceData = (update.existing?.source_data as Record<string, unknown>) || {}
         updateFields.source_data = deepMergeSourceData(existingSourceData, update.sourceData)
+      }
+
+      if (config.tabMapping.primary_entity === 'partners') {
+        const sourceData = asPartnerSourceData(
+          updateFields.source_data ?? update.existing?.source_data
+        )
+        const podLeaderName = asString(updateFields.pod_leader_name ?? update.existing?.pod_leader_name)
+        const brandManagerName = asString(updateFields.brand_manager_name ?? update.existing?.brand_manager_name)
+
+        Object.assign(updateFields, buildPartnerTypePersistenceFields({
+          sourceData,
+          podLeaderName,
+          brandManagerName,
+        }))
       }
 
       const { error } = await this.supabase
@@ -986,6 +1013,19 @@ function deepMergeSourceData(
   }
 
   return merged
+}
+
+function asString(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  return trimmed || null
+}
+
+function asPartnerSourceData(
+  value: unknown
+): Record<string, Record<string, Record<string, unknown>>> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  return value as Record<string, Record<string, Record<string, unknown>>>
 }
 
 /**

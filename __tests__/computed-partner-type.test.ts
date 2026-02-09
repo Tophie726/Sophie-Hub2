@@ -1,4 +1,4 @@
-import { computePartnerType } from '@/lib/partners/computed-partner-type'
+import { buildPartnerTypePersistenceFields, computePartnerType } from '@/lib/partners/computed-partner-type'
 
 function buildSourceData(values: Record<string, string>) {
   return {
@@ -78,5 +78,29 @@ describe('computePartnerType', () => {
 
     expect(result.computedCanonical).toBe('pli')
     expect(result.computedLabel).toBe('PLI')
+  })
+
+  it('builds persisted fields payload for partner writes', () => {
+    const computedAt = '2026-02-09T00:00:00.000Z'
+    const fields = buildPartnerTypePersistenceFields({
+      sourceData: buildSourceData({
+        'Partner type': 'PPC Client',
+        'Conversion Strategist': 'Sam',
+      }),
+      podLeaderName: 'Matias',
+      brandManagerName: null,
+    }, computedAt)
+
+    expect(fields).toEqual({
+      computed_partner_type: 'sophie_ppc',
+      computed_partner_type_source: 'staffing',
+      staffing_partner_type: 'sophie_ppc',
+      legacy_partner_type_raw: 'PPC Client',
+      legacy_partner_type: 'ppc_basic',
+      partner_type_matches: false,
+      partner_type_is_shared: false,
+      partner_type_reason: 'PPC Strategist + Conversion Strategist -> The Sophie PPC Partnership; legacy Partner type maps to PPC Basic',
+      partner_type_computed_at: computedAt,
+    })
   })
 })

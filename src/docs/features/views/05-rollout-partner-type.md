@@ -1,7 +1,7 @@
 # Views Feature — Partner Type Rollout (Phase Delta)
 
 Date: 2026-02-09  
-Status: Rolled out to branch `codex/views` (implementation + tests)
+Status: Rolled out to branch `codex/views` (runtime + persistence + reconciliation)
 
 ## What Shipped
 
@@ -16,6 +16,13 @@ Status: Rolled out to branch `codex/views` (implementation + tests)
 4. Naming update:
    - user-facing `Pod Leader` label changed to `PPC Strategist` where relevant
    - backend assignment role/key remains `pod_leader` for compatibility
+5. Persistence + reconciliation:
+   - migration adds canonical partner-type columns to `partners` for billing/reporting stability
+   - sync engine writes partner-type computed fields on create/update
+   - single-partner sync endpoint also writes computed fields
+   - admin reconciliation endpoint added:
+     - `GET /api/admin/partners/partner-type-reconciliation` (report, drift + mismatch visibility)
+     - `POST /api/admin/partners/partner-type-reconciliation` (dry-run default; can persist updates)
 
 ## Canonical Mapping Active in Code
 
@@ -30,20 +37,19 @@ Status: Rolled out to branch `codex/views` (implementation + tests)
 
 - Test:
   - `npm test -- computed-partner-type.test.ts`
-  - result: pass (`5/5`)
+  - result: pass (`6/6`)
 - Scoped lint:
-  - `npm run lint -- --file src/lib/partners/computed-partner-type.ts --file src/app/(dashboard)/partners/page.tsx --file src/lib/entity-fields/registry.ts`
+  - `npm run lint -- --file src/lib/partners/computed-partner-type.ts --file src/lib/sync/engine.ts --file src/app/api/partners/[id]/sync/route.ts --file src/app/api/admin/partners/partner-type-reconciliation/route.ts`
   - result: pass (no warnings/errors)
 
 ## Residual Risks
 
-1. Runtime-derived value is not yet persisted in DB columns.
-2. `Conversion Strategist` relies on source-data header extraction today.
+1. `Conversion Strategist` still relies on source-data header extraction today.
+2. Reconciliation currently runs via API call (manual/automation) and is not yet scheduled as a background job.
 3. Product taxonomy drift can still occur if sheet values evolve without catalog alignment.
 
 ## Next Rollout Step
 
-1. Add persisted columns for canonical partner type + source + mismatch status (for billing/reporting stability).
-2. Add nightly reconciliation job and mismatch queue/report.
-3. Add admin resolution controls on partner detail page.
-
+1. Add a scheduled automation/nightly job to execute reconciliation POST with `dry_run=false`.
+2. Add admin resolution controls on partner detail page.
+3. Wire billing pipelines to read canonical `computed_partner_type` directly.

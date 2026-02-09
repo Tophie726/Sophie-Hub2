@@ -4,6 +4,7 @@ import { requireAuth, canAccessPartner } from '@/lib/auth/api-auth'
 import { apiSuccess, ApiErrors } from '@/lib/api/response'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { getConnector, hasConnector, type GoogleSheetConnectorConfig, type ConnectorTypeId } from '@/lib/connectors'
+import { buildPartnerTypePersistenceFields } from '@/lib/partners/computed-partner-type'
 import { applyTransform } from '@/lib/sync/transforms'
 import type { TransformType } from '@/lib/sync/types'
 
@@ -16,6 +17,12 @@ interface SyncSourceResult {
   success: boolean
   fieldsUpdated: string[]
   error?: string
+}
+
+function asNullableString(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  return trimmed || null
 }
 
 /**
@@ -55,7 +62,7 @@ export async function POST(
     // 1. Get the partner with current source_data
     const { data: partner, error: partnerError } = await supabase
       .from('partners')
-      .select('id, brand_name, partner_code, source_data')
+      .select('id, brand_name, partner_code, source_data, pod_leader_name, brand_manager_name')
       .eq('id', id)
       .single()
 
@@ -287,11 +294,18 @@ export async function POST(
       })
     }
 
+    const computedPartnerTypeFields = buildPartnerTypePersistenceFields({
+      sourceData: mergedSourceData,
+      podLeaderName: asNullableString(mergedFields.pod_leader_name ?? partner.pod_leader_name),
+      brandManagerName: asNullableString(mergedFields.brand_manager_name ?? partner.brand_manager_name),
+    })
+
     const { error: updateError } = await supabase
       .from('partners')
       .update({
         ...mergedFields,
         source_data: mergedSourceData,
+        ...computedPartnerTypeFields,
         updated_at: new Date().toISOString(),
       })
       .eq('id', id)

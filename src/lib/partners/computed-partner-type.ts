@@ -19,6 +19,15 @@ export type CanonicalPartnerType =
   | 'pli'
   | 'tiktok'
 
+export const CANONICAL_PARTNER_TYPES: CanonicalPartnerType[] = [
+  'ppc_basic',
+  'sophie_ppc',
+  'cc',
+  'fam',
+  'pli',
+  'tiktok',
+]
+
 export const CANONICAL_PARTNER_TYPE_LABELS: Record<CanonicalPartnerType, string> = {
   ppc_basic: 'PPC Basic',
   sophie_ppc: 'The Sophie PPC Partnership',
@@ -46,6 +55,18 @@ export interface ComputedPartnerTypeResult {
   matchesLegacy: boolean
   isSharedPartner: boolean
   reason: string
+}
+
+export interface PersistedPartnerTypeFields {
+  computed_partner_type: CanonicalPartnerType | null
+  computed_partner_type_source: ComputedPartnerTypeResult['computedSource']
+  staffing_partner_type: CanonicalPartnerType | null
+  legacy_partner_type_raw: string | null
+  legacy_partner_type: CanonicalPartnerType | null
+  partner_type_matches: boolean
+  partner_type_is_shared: boolean
+  partner_type_reason: string
+  partner_type_computed_at: string
 }
 
 function normalizeText(input: string): string {
@@ -243,5 +264,24 @@ export function computePartnerType(input: ComputePartnerTypeInput): ComputedPart
     matchesLegacy,
     isSharedPartner: staffing.isSharedPartner,
     reason,
+  }
+}
+
+export function buildPartnerTypePersistenceFields(
+  input: ComputePartnerTypeInput,
+  computedAt: string = new Date().toISOString()
+): PersistedPartnerTypeFields {
+  const computed = computePartnerType(input)
+
+  return {
+    computed_partner_type: computed.computedCanonical,
+    computed_partner_type_source: computed.computedSource,
+    staffing_partner_type: computed.staffingCanonical,
+    legacy_partner_type_raw: computed.legacyRaw,
+    legacy_partner_type: computed.legacyCanonical,
+    partner_type_matches: computed.matchesLegacy,
+    partner_type_is_shared: computed.isSharedPartner,
+    partner_type_reason: computed.reason,
+    partner_type_computed_at: computedAt,
   }
 }
