@@ -27,20 +27,23 @@ Each section below corresponds to one agent's work scope. Review independently a
 | File | Change |
 |------|--------|
 | `src/lib/api/search-utils.ts` | **New** — `escapePostgrestValue()` utility |
-| `src/lib/api/__tests__/search-utils.test.ts` | **New** — 7 unit tests |
-| `src/app/api/staff/route.ts` | Line 67 — `search` param now escaped |
-| `src/app/api/partners/route.ts` | Line 77 — `search` param now escaped |
+| `src/lib/api/__tests__/search-utils.test.ts` | **New** — 9 unit tests |
+| `src/app/api/staff/route.ts` | Line 67 — `search` param now quoted |
+| `src/app/api/partners/route.ts` | Line 77 — `search` param now quoted |
 
 **Review checklist:**
-- [ ] All PostgREST grammar characters escaped: `,` `.` `(` `)` `\` `%` `_`
-- [ ] Backslash escaped first (prevents double-escaping)
+- [ ] PostgREST double-quoting used (not backslash-escaping — `.or()` does not support `\` escaping)
+- [ ] ILIKE wildcards (`%`, `_`) escaped with `\` inside the double-quoted value
+- [ ] Double-quote delimiter (`"`) escaped as `""` inside the value
+- [ ] Result format: `"%value%"` (quotes and ILIKE wildcards wrapped together)
+- [ ] Callers do NOT add their own `%` wildcards (function includes them)
 - [ ] Empty/whitespace input returns empty string
-- [ ] Normal search terms (`John Smith`) pass through unchanged
+- [ ] Normal search terms (`John Smith`) → `"%John Smith%"`
 - [ ] Apostrophe handling (`o'hara`) — no parser break (guardrail #3)
-- [ ] Wildcard chars (`%`, `_`) escaped (Codex delta #3)
-- [ ] Grammar injection payload (`test,status.eq.admin`) escaped (Codex delta #3)
-- [ ] `.or()` filter strings remain syntactically valid after escaping
+- [ ] Grammar injection payload (`test,status.eq.admin`) → `"%test,status.eq.admin%"` (Codex delta #3)
+- [ ] `.or()` filter strings remain syntactically valid after quoting
 - [ ] Import added correctly in both route files
+- [ ] 9 unit tests passing (grammar, wildcards, parens, apostrophe, double-quote, empty, backslash)
 - [ ] No other search paths missed (check: are there other `.or()` with user input?)
 
 ---

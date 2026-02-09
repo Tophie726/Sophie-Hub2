@@ -52,15 +52,16 @@
 | Item | Detail |
 |------|--------|
 | **Files changed** | `src/lib/api/search-utils.ts` (new), `src/lib/api/__tests__/search-utils.test.ts` (new), `src/app/api/staff/route.ts`, `src/app/api/partners/route.ts` |
-| **Tests** | 7 unit tests passing (grammar injection, wildcards, apostrophes, normal, empty, backslash) |
-| **Residual risk** | None — all PostgREST special characters escaped |
+| **Tests** | 9 unit tests passing (grammar injection, wildcards, apostrophes, double-quotes, normal, empty, backslash) |
+| **Approach** | PostgREST double-quoting (not backslash-escaping — PostgREST does not support `\` in `.or()` values). ILIKE wildcards (`%`, `_`) escaped with `\` inside the double-quoted value. |
+| **Residual risk** | None — all PostgREST grammar characters neutralized by double-quoting |
 
 ### Fix 2: GWS Users Payload (P1)
 
 | Item | Detail |
 |------|--------|
 | **Files changed** | `src/app/api/google-workspace/users/route.ts`, `src/lib/connectors/google-workspace-cache.ts` |
-| **Payload delta** | `select('*')` replaced with explicit 24-column projection excluding `raw_profile`. Expected ~50-70% response size reduction for 700 users (raw_profile is ~1.5-3KB JSONB per user). Measured via `Buffer.byteLength(JSON.stringify(response.data.users))` — actual delta to be recorded on first live sync. |
+| **Payload delta** | `select('*')` replaced with explicit column projection excluding `raw_profile`. Measured via `Buffer.byteLength(JSON.stringify(response.data.users))`: **191,479 bytes for 184 users** (~1,041 bytes/user without `raw_profile`). Estimated with `raw_profile`: ~450-750KB (2.5-4KB/user). Estimated reduction: **~60-75%**. |
 | **Residual risk** | None — `raw_profile` stays in DB for no-data-loss, just excluded from browser |
 
 ### Fix 3: Slack Sync Race Condition (P1)
@@ -133,9 +134,51 @@
 
 - `npm run build` — passes clean (97 pages)
 - `npm run lint` — no new lint errors
-- Unit tests: 7/7 search hardening tests pass
+- Unit tests: 9/9 search hardening tests pass
 - All P1 findings resolved
 - All P2 findings resolved
 - P3 finding resolved
 - Codex gate deltas: all 5 satisfied
 - Final guardrails: all 5 satisfied
+
+---
+
+## Live Smoke Test Evidence (2026-02-09)
+
+Authenticated smoke tests run against localhost:3000 with programmatically generated NextAuth JWT.
+
+### Search Injection (Fix 1)
+
+| Payload | Route | HTTP | Result |
+|---------|-------|------|--------|
+| `test,status.eq.admin` | `/api/staff` | **200** | No grammar injection, 0 results (literal match) |
+| `%` (URL-encoded `%25`) | `/api/partners` | **200** | No crash, no 500 |
+| `foo(bar)` | `/api/staff` | **200** | No crash, 0 results |
+| `o'hara` | `/api/staff` | **200** | No parser break, 0 results |
+
+**Fix iteration note:** Initial backslash-escaping approach (`\,` `\.` etc.) caused `PGRST100` parser errors because PostgREST does not support backslash-escaping in `.or()` values. Corrected to PostgREST double-quoting (`"value"`) which properly neutralizes grammar characters.
+
+### GWS Users Payload (Fix 2)
+
+| Metric | Value |
+|--------|-------|
+| HTTP status | 200 |
+| User count | 184 |
+| `raw_profile` present | **false** |
+| Payload size | **191,479 bytes** (1,041 bytes/user) |
+| Keys returned | `id, google_user_id, primary_email, full_name, given_name, family_name, org_unit_path, is_suspended, is_deleted, is_admin, is_delegated_admin, title, phone, thumbnail_photo_url, aliases, non_editable_aliases, creation_time, last_login_time, department, cost_center, location, manager_email, account_type_override, last_seen_at, first_seen_at, created_at, updated_at, account_type, account_type_reason, account_type_overridden` |
+
+### Rate Limiting (Fix 7)
+
+| Attempt | HTTP | Headers |
+|---------|------|---------|
+| 1 | 200 | (sync executed) |
+| 2 | 200 | (sync executed) |
+| 3 | **429** | `X-RateLimit-Limit: 2`, `X-RateLimit-Remaining: 0`, `Retry-After: 287` |
+
+### Slack Sync Race Condition (Fix 3)
+
+| Request | HTTP | Outcome |
+|---------|------|---------|
+| 1 (sequential) | **201** | Sync run created |
+| 2 (sequential) | **409** | Blocked by DB-level unique index |
