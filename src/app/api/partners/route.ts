@@ -4,6 +4,7 @@ import { ROLES } from '@/lib/auth/roles'
 import { apiSuccess, apiError, ApiErrors, ErrorCodes, apiValidationError } from '@/lib/api/response'
 import { escapePostgrestValue } from '@/lib/api/search-utils'
 import { computePartnerStatus, matchesStatusFilter } from '@/lib/partners/computed-status'
+import { computePartnerType } from '@/lib/partners/computed-partner-type'
 import { checkRateLimit, RATE_LIMITS, rateLimitHeaders } from '@/lib/rate-limit'
 import { z } from 'zod'
 
@@ -77,7 +78,7 @@ export async function GET(request: Request) {
     if (search) {
       const escaped = escapePostgrestValue(search)
       query = query.or(
-        `brand_name.ilike.%${escaped}%,client_name.ilike.%${escaped}%,partner_code.ilike.%${escaped}%`
+        `brand_name.ilike.${escaped},client_name.ilike.${escaped},partner_code.ilike.${escaped}`
       )
     }
 
@@ -104,9 +105,15 @@ export async function GET(request: Request) {
       return ApiErrors.database()
     }
 
-    // Compute status for each partner and apply status filter
+    // Compute status/type signals for each partner and apply status filter
     let filteredPartners = (allPartners || []).map(p => {
       const computed = computePartnerStatus(p.source_data, p.status)
+      const computedType = computePartnerType({
+        sourceData: p.source_data,
+        podLeaderName: p.pod_leader_name,
+        brandManagerName: p.brand_manager_name,
+      })
+
       return {
         ...p,
         computed_status: computed.computedStatus,
@@ -115,6 +122,17 @@ export async function GET(request: Request) {
         latest_weekly_status: computed.latestWeeklyStatus,
         status_matches: computed.matchesSheetStatus,
         weeks_without_data: computed.weeksWithoutData,
+        computed_partner_type: computedType.computedCanonical,
+        computed_partner_type_label: computedType.computedLabel,
+        computed_partner_type_source: computedType.computedSource,
+        staffing_partner_type: computedType.staffingCanonical,
+        staffing_partner_type_label: computedType.staffingLabel,
+        legacy_partner_type_raw: computedType.legacyRaw,
+        legacy_partner_type: computedType.legacyCanonical,
+        legacy_partner_type_label: computedType.legacyLabel,
+        partner_type_matches: computedType.matchesLegacy,
+        partner_type_is_shared: computedType.isSharedPartner,
+        partner_type_reason: computedType.reason,
       }
     })
 

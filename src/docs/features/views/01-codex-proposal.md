@@ -66,16 +66,16 @@ Round: 01 (Codex proposal)
 - Current known catalog IDs:
   - `ppc_basic`, `sophie_ppc`, `cc`, `fam`, `pli`, `tiktok`
 - Primary mapping:
-  - `PPC Premium` -> `Sophie PPC Package`
+  - `PPC Premium` -> `The Sophie PPC Partnership` (`sophie_ppc`)
   - `Content Premium (only content)` -> `CC`
   - `FAM` -> `FAM`
   - `T0 / Product Incubator` -> `PLI`
 - Fallback inference (when direct `Partner type` value is missing/ambiguous):
-  - `POD Leader` present -> PPC Basic
-  - `POD Leader` + `Conversion Strategist` -> Sophie PPC Partnership product
+  - `PPC Strategist` (stored in `pod_leader`) present -> PPC Basic
+  - `PPC Strategist` + `Conversion Strategist` -> The Sophie PPC Partnership
   - `Brand Manager` present -> includes FAM ownership
-  - `Brand Manager` + `POD Leader` -> shared FAM + PPC Basic
-  - `Brand Manager` without `POD Leader` -> FAM handles PPC
+  - `Brand Manager` + `PPC Strategist` -> shared FAM + PPC Basic
+  - `Brand Manager` without `PPC Strategist` -> FAM handles PPC
   - `Brand Manager` without `Conversion Strategist` -> FAM handling CC under pod
 - Forward-compat:
   - New product families (for example `TTS` / TikTok Shop) must be onboarded by catalog entry, not hard-coded in role logic.
@@ -206,9 +206,10 @@ Use `references/scorecard-rubric.md`.
 1. Partner type is first-class and normalized to products catalog taxonomy.
 2. `See as` persistence is session-only first.
 3. `operations_admin` remains separate from top-level `admin` for see-as scope.
+4. `PPC Premium` normalization target is `sophie_ppc` (`The Sophie PPC Partnership`).
+5. User-facing `Pod Leader` language should be `PPC Strategist` (backend key remains `pod_leader`).
 
 ## Open Questions
 
 1. Confirm exact product catalog slugs/IDs for:
-   - `PPC Premium` target: `sophie_ppc` vs premium SKU extension
    - `TTS` target: `tiktok` vs dedicated `tts` SKU extension

@@ -72,14 +72,14 @@ const PARTNER_FIELDS: FieldDefinition[] = [
 
   // Staff Names (raw text - stores name even without staff link)
   // These enable graceful degradation: name shows with "unlinked" indicator until staff syncs
-  { name: 'pod_leader_name', label: 'POD Leader', description: 'POD Leader name (may not link to staff yet)', type: 'text', group: 'Staff Assignments', aliases: ['pod leader', 'pl', 'pod lead'] },
+  { name: 'pod_leader_name', label: 'PPC Strategist', description: 'PPC Strategist name (stored in pod_leader field; may not link to staff yet)', type: 'text', group: 'Staff Assignments', aliases: ['pod leader', 'ppc strategist', 'pl', 'pod lead'] },
   { name: 'brand_manager_name', label: 'Brand Manager', description: 'Brand Manager name (may not link to staff yet)', type: 'text', group: 'Staff Assignments', aliases: ['brand manager', 'bm'] },
   { name: 'account_manager_name', label: 'Account Manager', description: 'Account Manager name (may not link to staff yet)', type: 'text', group: 'Staff Assignments', aliases: ['account manager', 'am'] },
   { name: 'sales_rep_name', label: 'Sales Rep', description: 'Sales Rep name (may not link to staff yet)', type: 'text', group: 'Staff Assignments', aliases: ['sales rep', 'salesperson', 'sales person', 'sales representative'] },
 
   // Staff References (junction table - created when staff syncs and names match)
   {
-    name: 'pod_leader_id', label: 'POD Leader (Linked)', description: 'Linked POD Leader staff record',
+    name: 'pod_leader_id', label: 'PPC Strategist (Linked)', description: 'Linked PPC Strategist staff record (stored in pod_leader assignment role)',
     type: 'reference', group: 'Staff Assignments',
     reference: { entity: 'staff', matchField: 'full_name', storage: 'junction', junctionTable: 'partner_assignments', junctionRole: 'pod_leader' },
   },

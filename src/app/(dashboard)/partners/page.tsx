@@ -14,6 +14,7 @@ import { ShimmerGrid } from '@/components/ui/shimmer-grid'
 import { EntityListToolbar } from '@/components/entities/entity-list-toolbar'
 import { StatusBadge, ComputedStatusBadge } from '@/components/entities/status-badge'
 import { TierBadge } from '@/components/entities/tier-badge'
+import { ComputedPartnerTypeBadge } from '@/components/partners/computed-partner-type-badge'
 import { WeeklyStatusPreview } from '@/components/partners/weekly-status-preview'
 import { WeeklyStatusDialog } from '@/components/partners/weekly-status-dialog'
 import { StatusInvestigationDialog } from '@/components/partners/status-investigation-dialog'
@@ -78,6 +79,18 @@ interface Partner {
   latest_weekly_status?: string | null
   status_matches?: boolean
   weeks_without_data?: number
+  // Computed partner type fields from API
+  computed_partner_type?: string | null
+  computed_partner_type_label?: string
+  computed_partner_type_source?: 'staffing' | 'legacy_partner_type' | 'unknown'
+  staffing_partner_type?: string | null
+  staffing_partner_type_label?: string | null
+  legacy_partner_type_raw?: string | null
+  legacy_partner_type?: string | null
+  legacy_partner_type_label?: string | null
+  partner_type_matches?: boolean
+  partner_type_is_shared?: boolean
+  partner_type_reason?: string | null
   // BigQuery mapping
   has_bigquery?: boolean
   bigquery_client_name?: string | null
@@ -140,6 +153,28 @@ const CORE_COLUMNS: ColumnDef[] = [
     )
   },
   {
+    key: 'computed_partner_type_label',
+    label: 'Partner Type',
+    source: 'db',
+    sourceType: 'computed',
+    defaultVisible: true,
+    minWidth: 170,
+    flex: 0,
+    filterable: true,
+    filterType: 'enum',
+    render: (p) => (
+      <ComputedPartnerTypeBadge
+        computedLabel={p.computed_partner_type_label || 'Unknown'}
+        computedSource={p.computed_partner_type_source || 'unknown'}
+        legacyRaw={p.legacy_partner_type_raw}
+        legacyLabel={p.legacy_partner_type_label}
+        partnerTypeMatches={p.partner_type_matches ?? true}
+        isSharedPartner={p.partner_type_is_shared ?? false}
+        reason={p.partner_type_reason || null}
+      />
+    ),
+  },
+  {
     key: 'weekly',
     label: 'Weekly',
     source: 'db',
@@ -187,7 +222,7 @@ const CORE_COLUMNS: ColumnDef[] = [
   { key: 'client_phone', label: 'Phone', source: 'db', sourceType: 'sheet', defaultVisible: false, minWidth: 110, flex: 0 },
   {
     key: 'pod_leader_name',
-    label: 'Pod Leader',
+    label: 'PPC Strategist',
     source: 'db',
     sourceType: 'sheet',
     defaultVisible: true,
@@ -717,8 +752,8 @@ function PartnerRow({ partner, columns, visibleColumns, onSync, onWeeklyClick, o
           flex: col.flex ?? 1,
         }
 
-        // Don't truncate status column - badges need to display fully
-        const shouldTruncate = col.key !== 'status'
+        // Don't truncate badge-style columns.
+        const shouldTruncate = col.key !== 'status' && col.key !== 'computed_partner_type_label'
 
         return (
           <div

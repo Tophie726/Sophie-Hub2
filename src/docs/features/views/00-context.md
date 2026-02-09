@@ -48,7 +48,7 @@ Round: 00 (Context capture)
 
 ### Canonical Mapping Intent (Initial)
 
-- `PPC Premium` -> `Sophie PPC Package`
+- `PPC Premium` -> `The Sophie PPC Partnership` (`sophie_ppc`)
 - `Content Premium (only content)` -> `CC`
 - `FAM` -> `FAM`
 - `T0 / Product Incubator` -> `PLI`
@@ -64,13 +64,19 @@ Round: 00 (Context capture)
 
 ### Staffing-Derived Fallback Rules (When Needed)
 
-- If `POD Leader` exists (PPC basic pod leader): classify as PPC Basic.
-- If `POD Leader` and `Conversion Strategist` both exist: classify as Sophie PPC Partnership product.
+- If `PPC Strategist` exists (stored in `pod_leader` / `pod_leader_name`): classify as PPC Basic.
+- If `PPC Strategist` and `Conversion Strategist` both exist: classify as The Sophie PPC Partnership.
 - If `Brand Manager` exists: always includes FAM ownership.
 - Shared partner case:
-  - `Brand Manager` + `POD Leader` => shared FAM + PPC Basic.
-  - `Brand Manager` without `POD Leader` => FAM handles PPC too.
+  - `Brand Manager` + `PPC Strategist` => shared FAM + PPC Basic.
+  - `Brand Manager` without `PPC Strategist` => FAM handles PPC too.
   - `Brand Manager` without `Conversion Strategist` => FAM handling CC under pod.
+
+## Implemented Delta (2026-02-09)
+
+- Added runtime computed partner-type resolver in API (`legacy Partner type` vs staffing-derived logic).
+- Added mismatch visibility in Partners table via computed badge + warning tooltip.
+- Added `PPC Strategist` user-facing label in partner/staff-assignment surfaces while keeping backend keys stable (`pod_leader*`).
 
 ## Intake Answers (From Prompt + Assumptions)
 
