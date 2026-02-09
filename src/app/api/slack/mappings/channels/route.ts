@@ -12,12 +12,22 @@ import { ROLES } from '@/lib/auth/roles'
 import { apiSuccess, apiError, apiValidationError, ApiErrors } from '@/lib/api/response'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { invalidateChannelsCache } from '@/lib/connectors/slack-cache'
+import { SLACK } from '@/lib/constants'
 
 const CreateMappingSchema = z.object({
   partner_id: z.string().uuid('partner_id must be a valid UUID'),
   channel_id: z.string().min(1, 'channel_id is required'),
   channel_name: z.string().optional(),
 })
+
+type SlackChannelType = 'partner_facing' | 'alerts' | 'internal'
+
+function detectChannelType(channelName: string): SlackChannelType {
+  const lower = channelName.toLowerCase()
+  if (SLACK.PARTNER_CHANNEL_SUFFIXES.some((suffix) => lower.endsWith(suffix))) return 'alerts'
+  if (SLACK.PARTNER_CHANNEL_INTERNAL_SUFFIXES.some((suffix) => lower.endsWith(suffix))) return 'internal'
+  return 'partner_facing'
+}
 
 /**
  * GET — Fetch all channel ↔ partner mappings
@@ -63,6 +73,8 @@ export async function GET() {
       partner_tier: partnerInfo[m.entity_id]?.tier || null,
       channel_id: m.external_id,
       channel_name: (m.metadata as Record<string, unknown>)?.channel_name || null,
+      channel_type:
+        ((m.metadata as Record<string, unknown>)?.channel_type as SlackChannelType | undefined) || 'partner_facing',
       created_at: m.created_at,
     })) || []
 
@@ -91,6 +103,8 @@ export async function POST(request: NextRequest) {
 
     const { partner_id, channel_id, channel_name } = validation.data
     const supabase = getAdminClient()
+    const resolvedChannelName = channel_name || channel_id
+    const channelType = detectChannelType(resolvedChannelName)
 
     // Verify partner exists
     const { data: partner, error: partnerError } = await supabase
@@ -113,7 +127,11 @@ export async function POST(request: NextRequest) {
         entity_id: partner_id,
         source: 'slack_channel',
         external_id: channel_id,
-        metadata: channel_name ? { channel_name } : {},
+        metadata: {
+          channel_name: resolvedChannelName,
+          channel_type: channelType,
+          match_type: 'manual',
+        },
         updated_at: new Date().toISOString(),
       }, {
         onConflict: 'source,external_id',
@@ -131,7 +149,7 @@ export async function POST(request: NextRequest) {
       .from('slack_sync_state')
       .upsert({
         channel_id,
-        channel_name: channel_name || channel_id,
+        channel_name: resolvedChannelName,
         partner_id,
       }, {
         onConflict: 'channel_id',

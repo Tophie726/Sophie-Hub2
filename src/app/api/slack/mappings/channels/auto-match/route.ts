@@ -31,9 +31,18 @@ function normalize(str: string): string {
   return str.toLowerCase().replace(/[-_\s]+/g, '').trim()
 }
 
+type SlackChannelType = 'partner_facing' | 'alerts' | 'internal'
+
+function detectChannelType(str: string): SlackChannelType {
+  if (SLACK.PARTNER_CHANNEL_SUFFIXES.some((suffix) => str.endsWith(suffix))) return 'alerts'
+  if (SLACK.PARTNER_CHANNEL_INTERNAL_SUFFIXES.some((suffix) => str.endsWith(suffix))) return 'internal'
+  return 'partner_facing'
+}
+
 function stripPartnerSuffixes(str: string): string {
   let value = str
-  for (const suffix of SLACK.PARTNER_CHANNEL_SUFFIXES) {
+  const allSuffixes = [...SLACK.PARTNER_CHANNEL_SUFFIXES, ...SLACK.PARTNER_CHANNEL_INTERNAL_SUFFIXES]
+  for (const suffix of allSuffixes) {
     if (value.endsWith(suffix)) {
       value = value.slice(0, -suffix.length)
       break
@@ -95,6 +104,8 @@ export async function POST(request: NextRequest) {
       channel_name: string
       partner_id: string
       partner_name: string
+      channel_type: SlackChannelType
+      brand_key: string
       confidence: number
     }> = []
     const unmatchedChannels: string[] = []
@@ -121,6 +132,7 @@ export async function POST(request: NextRequest) {
         // Channel doesn't match pattern, skip
         continue
       }
+      const channelType = detectChannelType(channelBrand)
       channelBrand = stripPartnerSuffixes(channelBrand)
       if (!channelBrand.trim()) continue
 
@@ -135,6 +147,8 @@ export async function POST(request: NextRequest) {
           partner_id: exactMatch.id,
           partner_name: exactMatch.brand_name,
           confidence: 1.0,
+          channel_type: channelType,
+          brand_key: normalizedChannel,
         })
         continue
       }
@@ -159,6 +173,8 @@ export async function POST(request: NextRequest) {
           partner_id: bestMatch.id,
           partner_name: bestMatch.brand_name,
           confidence: bestMatch.score,
+          channel_type: channelType,
+          brand_key: normalizedChannel,
         })
       } else {
         unmatchedChannels.push(channel.name)
@@ -173,7 +189,13 @@ export async function POST(request: NextRequest) {
         entity_id: m.partner_id,
         source: 'slack_channel' as const,
         external_id: m.channel_id,
-        metadata: { channel_name: m.channel_name, match_type: 'auto', confidence: m.confidence },
+        metadata: {
+          channel_name: m.channel_name,
+          channel_type: m.channel_type,
+          brand_key: m.brand_key,
+          match_type: 'auto',
+          confidence: m.confidence,
+        },
         created_by: auth.user.email,
       }))
 
@@ -216,6 +238,7 @@ export async function POST(request: NextRequest) {
       auto_matched_list: highConfidence.map(m => ({
         channel_name: m.channel_name,
         partner_name: m.partner_name,
+        channel_type: m.channel_type,
         confidence: m.confidence,
       })),
       needs_review_list: lowConfidence.map(m => ({
@@ -223,6 +246,7 @@ export async function POST(request: NextRequest) {
         channel_name: m.channel_name,
         partner_id: m.partner_id,
         partner_name: m.partner_name,
+        channel_type: m.channel_type,
         confidence: m.confidence,
       })),
       unmatched_channels: unmatchedChannels.slice(0, 30),

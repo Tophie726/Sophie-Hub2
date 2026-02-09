@@ -33,6 +33,7 @@ interface SlackContact {
   mapping_id: string | null
   partner_id: string | null
   partner_name: string | null
+  is_primary_contact: boolean
   is_mapped: boolean
   mapped_to_staff: boolean
   staff_name: string | null
@@ -280,6 +281,11 @@ export function SlackPartnerContactMapping() {
                         Staff mapped
                       </Badge>
                     )}
+                    {contact.is_mapped && contact.is_primary_contact && (
+                      <Badge variant="outline" className="text-xs border-green-500/30 text-green-600">
+                        Primary contact
+                      </Badge>
+                    )}
                   </div>
                   <p className="text-sm text-muted-foreground truncate ml-6">{contact.email || 'No email'}</p>
                   {contact.is_mapped && contact.partner_name && (
@@ -356,8 +362,9 @@ export function SlackPartnerContactMapping() {
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Map partner-facing Slack users to partner brands. Staff-linked Slack users are blocked from partner-contact
-        mapping to avoid attribution conflicts.
+        Map partner-facing Slack users to partner brands. A partner can have multiple mapped contacts;
+        the first mapped contact is marked primary by default. Staff-linked Slack users are blocked
+        from partner-contact mapping to avoid attribution conflicts.
       </p>
     </div>
   )

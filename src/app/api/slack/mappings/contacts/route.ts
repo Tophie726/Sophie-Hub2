@@ -57,6 +57,7 @@ export async function GET() {
       partner_name: partnerInfo[m.entity_id]?.brand_name || null,
       slack_user_id: m.external_id,
       slack_user_name: (m.metadata as Record<string, unknown>)?.slack_name || null,
+      is_primary_contact: Boolean((m.metadata as Record<string, unknown>)?.is_primary_contact),
       created_at: m.created_at,
     })) || []
 
@@ -112,6 +113,18 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const { count: existingCount, error: countError } = await supabase
+      .from('entity_external_ids')
+      .select('id', { count: 'exact', head: true })
+      .eq('source', 'slack_partner_contact')
+      .eq('entity_type', 'partners')
+      .eq('entity_id', partner_id)
+
+    if (countError) {
+      console.error('Error checking existing partner contacts:', countError)
+      return ApiErrors.database()
+    }
+
     const { data: mapping, error } = await supabase
       .from('entity_external_ids')
       .upsert({
@@ -119,7 +132,11 @@ export async function POST(request: NextRequest) {
         entity_id: partner_id,
         source: 'slack_partner_contact',
         external_id: slack_user_id,
-        metadata: slack_user_name ? { slack_name: slack_user_name } : {},
+        metadata: {
+          ...(slack_user_name ? { slack_name: slack_user_name } : {}),
+          is_primary_contact: (existingCount || 0) === 0,
+          match_type: 'manual',
+        },
         updated_at: new Date().toISOString(),
       }, {
         onConflict: 'source,external_id',
@@ -176,4 +193,3 @@ export async function DELETE(request: NextRequest) {
     return ApiErrors.internal()
   }
 }
-

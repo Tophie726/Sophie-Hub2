@@ -28,7 +28,7 @@ export async function GET() {
 
     const { data: partnerMappings } = await supabase
       .from('entity_external_ids')
-      .select('id, entity_id, external_id')
+      .select('id, entity_id, external_id, metadata')
       .eq('source', 'slack_partner_contact')
       .eq('entity_type', 'partners')
 
@@ -63,11 +63,16 @@ export async function GET() {
       }
     }
 
-    const partnerBySlackUser = new Map<string, { partner_id: string; mapping_id: string }>()
+    const partnerBySlackUser = new Map<string, {
+      partner_id: string
+      mapping_id: string
+      is_primary_contact: boolean
+    }>()
     for (const m of partnerMappings || []) {
       partnerBySlackUser.set(m.external_id, {
         partner_id: m.entity_id,
         mapping_id: m.id,
+        is_primary_contact: Boolean((m.metadata as Record<string, unknown>)?.is_primary_contact),
       })
     }
 
@@ -89,6 +94,7 @@ export async function GET() {
           image: user.profile.image_48 || null,
           user_type: userType,
           mapping_id: partnerMapping?.mapping_id || null,
+          is_primary_contact: partnerMapping?.is_primary_contact || false,
           partner_id: partnerId || null,
           partner_name: partnerId ? partnerNames[partnerId] || null : null,
           is_mapped: !!partnerId,

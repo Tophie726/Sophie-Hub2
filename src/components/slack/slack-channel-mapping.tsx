@@ -36,6 +36,7 @@ interface SlackChannel {
   purpose: string
   partner_id: string | null
   partner_name: string | null
+  channel_type: 'partner_facing' | 'alerts' | 'internal'
   is_mapped: boolean
 }
 
@@ -51,6 +52,12 @@ function isAlertsChannel(name: string): boolean {
   return SLACK.PARTNER_CHANNEL_SUFFIXES.some((suffix) => name.endsWith(suffix))
 }
 
+const CHANNEL_TYPE_LABEL: Record<SlackChannel['channel_type'], string> = {
+  partner_facing: 'Brand-facing',
+  alerts: 'Alerts',
+  internal: 'Internal',
+}
+
 export function SlackChannelMapping() {
   const [channels, setChannels] = useState<SlackChannel[]>([])
   const [partners, setPartners] = useState<Partner[]>([])
@@ -59,7 +66,7 @@ export function SlackChannelMapping() {
   const [isAutoMatching, setIsAutoMatching] = useState(false)
   const [autoMatchPrefix, setAutoMatchPrefix] = useState('client-')
   const [searchQuery, setSearchQuery] = useState('')
-  const [filter, setFilter] = useState<'all' | 'mapped' | 'unmapped'>('all')
+  const [filter, setFilter] = useState<'all' | 'mapped' | 'unmapped' | 'partner_facing' | 'alerts' | 'internal'>('all')
   const [selectedPartners, setSelectedPartners] = useState<Record<string, string>>({})
   const [savingChannelId, setSavingChannelId] = useState<string | null>(null)
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
@@ -122,6 +129,9 @@ export function SlackChannelMapping() {
 
     if (filter === 'mapped') filtered = filtered.filter(c => c.is_mapped)
     if (filter === 'unmapped') filtered = filtered.filter(c => !c.is_mapped)
+    if (filter === 'partner_facing') filtered = filtered.filter(c => c.channel_type === 'partner_facing')
+    if (filter === 'alerts') filtered = filtered.filter(c => c.channel_type === 'alerts')
+    if (filter === 'internal') filtered = filtered.filter(c => c.channel_type === 'internal')
 
     return filtered
   }, [channels, searchQuery, filter])
@@ -315,13 +325,16 @@ export function SlackChannelMapping() {
           />
         </div>
         <Select value={filter} onValueChange={(v) => setFilter(v as typeof filter)}>
-          <SelectTrigger className="w-[140px] h-9">
+          <SelectTrigger className="w-[170px] h-9">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All</SelectItem>
             <SelectItem value="mapped">Mapped</SelectItem>
             <SelectItem value="unmapped">Unmapped</SelectItem>
+            <SelectItem value="partner_facing">Brand-facing</SelectItem>
+            <SelectItem value="alerts">Alerts</SelectItem>
+            <SelectItem value="internal">Internal</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -361,7 +374,10 @@ export function SlackChannelMapping() {
                       <Hash className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
                     )}
                     <span className="font-medium truncate">{channel.name}</span>
-                    {isAlertsChannel(channel.name) && (
+                    <Badge variant="outline" className="text-xs">
+                      {CHANNEL_TYPE_LABEL[channel.channel_type]}
+                    </Badge>
+                    {isAlertsChannel(channel.name) && channel.channel_type !== 'alerts' && (
                       <Badge variant="outline" className="text-xs">
                         Alerts
                       </Badge>
