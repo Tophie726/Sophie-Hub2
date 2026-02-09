@@ -7,6 +7,10 @@
     {
       "path": "/api/cron/slack-analytics",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/partner-type-reconciliation",
+      "schedule": "20 6 * * *"
     }
   ]
 }
