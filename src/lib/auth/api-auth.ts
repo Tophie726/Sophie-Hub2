@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { authOptions } from './config'
 import { Role, Permission, ROLES, hasPermission } from './roles'
 import { getAdminClient } from '@/lib/supabase/admin'
+import { isAdminEmail } from './admin-access'
 
 // Server-side Supabase client for auth lookups
 const supabase = getAdminClient()
@@ -37,11 +38,7 @@ export type AuthResult = AuthSuccess | AuthFailure
  * You can add an `access_level` column to staff table for more control
  */
 function mapRoleToAccessLevel(staffRole: string | null, email: string): Role {
-  // Admin emails from environment variable (comma-separated)
-  // Example: ADMIN_EMAILS=admin@example.com,tomas@sophiesociety.com
-  const adminEmails = process.env.ADMIN_EMAILS?.split(',').map(e => e.trim().toLowerCase()).filter(Boolean) ?? []
-
-  if (adminEmails.includes(email.toLowerCase())) {
+  if (isAdminEmail(email)) {
     return ROLES.ADMIN
   }
 

@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth/config'
 import { getAdminClient } from '@/lib/supabase/admin'
+import { isAdminEmail } from '@/lib/auth/admin-access'
 
 // Server-side Supabase client for auth lookups
 const supabase = getAdminClient()
@@ -37,12 +38,8 @@ export default async function AdminLayout({
  * Uses same logic as api-auth.ts mapRoleToAccessLevel
  */
 async function checkIsAdmin(email: string): Promise<boolean> {
-  // Check ADMIN_EMAILS env var first (highest priority)
-  const adminEmails = process.env.ADMIN_EMAILS?.split(',')
-    .map(e => e.trim().toLowerCase())
-    .filter(Boolean) ?? []
-
-  if (adminEmails.includes(email.toLowerCase())) {
+  // Check configured admin emails first (static allowlist + ADMIN_EMAILS env var)
+  if (isAdminEmail(email)) {
     return true
   }
 
