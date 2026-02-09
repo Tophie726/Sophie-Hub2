@@ -26,6 +26,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
+import { SLACK } from '@/lib/constants'
 
 interface SlackChannel {
   id: string
@@ -45,6 +46,10 @@ interface Partner {
 
 const easeOut: [number, number, number, number] = [0.22, 1, 0.36, 1]
 const PAGE_SIZE = 30
+
+function isAlertsChannel(name: string): boolean {
+  return SLACK.PARTNER_CHANNEL_SUFFIXES.some((suffix) => name.endsWith(suffix))
+}
 
 export function SlackChannelMapping() {
   const [channels, setChannels] = useState<SlackChannel[]>([])
@@ -356,6 +361,11 @@ export function SlackChannelMapping() {
                       <Hash className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
                     )}
                     <span className="font-medium truncate">{channel.name}</span>
+                    {isAlertsChannel(channel.name) && (
+                      <Badge variant="outline" className="text-xs">
+                        Alerts
+                      </Badge>
+                    )}
                     <span className="text-xs text-muted-foreground tabular-nums">
                       {channel.num_members} members
                     </span>
@@ -431,7 +441,7 @@ export function SlackChannelMapping() {
 
       <p className="text-xs text-muted-foreground">
         Map Slack channels to Sophie Hub partners. Use auto-match with your channel naming convention
-        to bulk-match channels to partners.
+        to bulk-match channels to partners. `-alerts` channel suffixes are grouped with their brand channel.
       </p>
     </div>
   )

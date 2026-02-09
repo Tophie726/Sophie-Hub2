@@ -31,6 +31,17 @@ function normalize(str: string): string {
   return str.toLowerCase().replace(/[-_\s]+/g, '').trim()
 }
 
+function stripPartnerSuffixes(str: string): string {
+  let value = str
+  for (const suffix of SLACK.PARTNER_CHANNEL_SUFFIXES) {
+    if (value.endsWith(suffix)) {
+      value = value.slice(0, -suffix.length)
+      break
+    }
+  }
+  return value
+}
+
 export async function POST(request: NextRequest) {
   const auth = await requireRole(ROLES.ADMIN)
   if (!auth.authenticated) {
@@ -102,7 +113,7 @@ export async function POST(request: NextRequest) {
       // Skip archived channels
       if (channel.is_archived) continue
 
-      // Strip prefix and normalize
+      // Strip prefix and partner-channel suffixes (e.g. "brand-alerts")
       let channelBrand = channel.name
       if (channelBrand.startsWith(prefix)) {
         channelBrand = channelBrand.slice(prefix.length)
@@ -110,6 +121,8 @@ export async function POST(request: NextRequest) {
         // Channel doesn't match pattern, skip
         continue
       }
+      channelBrand = stripPartnerSuffixes(channelBrand)
+      if (!channelBrand.trim()) continue
 
       const normalizedChannel = normalize(channelBrand)
 

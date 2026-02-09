@@ -2,17 +2,18 @@
 
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Users, Hash, ArrowLeft, RefreshCw, BarChart3 } from 'lucide-react'
+import { Users, UserRoundCheck, Hash, ArrowLeft, RefreshCw, BarChart3 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { SlackConnectionCard } from './slack-connection-card'
 import { SlackStaffMapping } from './slack-staff-mapping'
+import { SlackPartnerContactMapping } from './slack-partner-contact-mapping'
 import { SlackChannelMapping } from './slack-channel-mapping'
 import { SlackSyncStatus } from './slack-sync-status'
 import { SlackAnalyticsSummary } from './slack-analytics-summary'
 import { SlackResponseChart } from './slack-response-chart'
 import { SlackChannelHeatmap } from './slack-channel-heatmap'
 
-type Tab = 'staff' | 'channels' | 'sync' | 'analytics'
+type Tab = 'staff' | 'contacts' | 'channels' | 'sync' | 'analytics'
 
 interface SlackMappingHubProps {
   onBack?: () => void
@@ -20,6 +21,7 @@ interface SlackMappingHubProps {
 
 const tabs: { id: Tab; label: string; icon: typeof Users }[] = [
   { id: 'staff', label: 'Staff', icon: Users },
+  { id: 'contacts', label: 'Partner Contacts', icon: UserRoundCheck },
   { id: 'channels', label: 'Channels', icon: Hash },
   { id: 'sync', label: 'Sync', icon: RefreshCw },
   { id: 'analytics', label: 'Analytics', icon: BarChart3 },
@@ -42,7 +44,7 @@ export function SlackMappingHub({ onBack }: SlackMappingHubProps) {
         <div>
           <h2 className="text-xl font-semibold">Slack Integration</h2>
           <p className="text-sm text-muted-foreground">
-            Map Slack users to staff and channels to partners
+            Map Slack users to staff and partner contacts, then map channels to brands
           </p>
         </div>
       </div>
@@ -83,6 +85,7 @@ export function SlackMappingHub({ onBack }: SlackMappingHubProps) {
           {/* Tab content */}
           <div>
             {activeTab === 'staff' && <SlackStaffMapping />}
+            {activeTab === 'contacts' && <SlackPartnerContactMapping />}
             {activeTab === 'channels' && <SlackChannelMapping />}
             {activeTab === 'sync' && <SlackSyncStatus />}
             {activeTab === 'analytics' && (
