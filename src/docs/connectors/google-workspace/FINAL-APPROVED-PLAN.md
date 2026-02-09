@@ -373,6 +373,11 @@ Implementation should execute from this file only.
   - UI: `Skipped` filter and per-row `Skip` / `Re-open` controls.
 - Updated people/unmapped counters to exclude skipped/ignored queue rows from active workload counts.
 - Classification flow now prioritizes email-local-part signals (shared keyword/prefix rules) and falls back to context hints (`full_name`, `org_unit_path`, `title`) only when needed.
-- Renamed enrichment action in UI to **Enrich mapped staff** to make scope explicit:
+- Classification now includes shared compound-token detection (`partner-success`, `pod.analytics`, etc.) while preserving person aliases like `daniel.q@...`.
+- Mapping dropdown now only lists person-like staff targets (shared/service aliases filtered out).
+- Enrichment action moved behind **Enrichment settings**:
+  - operators choose which fields to sync (`title`, `phone`, `directory_snapshot`),
+  - `avatar_url` is always included in enrichment runs (source priority handled at staff/backend level),
   - no new staff creation,
   - updates only records already linked via `google_workspace_user`.
+- Avatar rendering supports Google + Slack image domains (CSP updated for `*.slack-edge.com`) with fallback initials.

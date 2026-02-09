@@ -309,7 +309,7 @@ Expected: `counts.pending` plus recent approval candidates from unmatched Google
    - `Refresh Directory`
    - `Auto-match by email`
    - `Seed Staff`
-   - `Enrich mapped staff`
+   - `Enrichment settings`
    - per-row classification controls (`Auto detect`, `Person`, `Shared inbox`)
    - per-row queue controls (`Skip`, `Re-open`) for approval triage
 
@@ -326,13 +326,14 @@ Use this order for first rollout:
    - Use `Skip` for uncertain rows and re-open later from the `Skipped` filter.
 3. If `/staff` is empty, run **Seed Staff** once to create baseline staff rows from person accounts.
 4. Run **Auto-match by email** to connect Google users to existing/seeded staff records.
-5. Run **Enrich mapped staff** to write profile fields onto mapped staff rows.
+5. Open **Enrichment settings** and choose fields to sync onto mapped staff rows.
 
 Notes:
 - `Seed Staff` and `Auto-match by email` are separate on purpose.
   - Seed creates baseline staff records.
   - Auto-match links Google users to staff records via external IDs.
-- `Enrich mapped staff` only updates staff rows that already have a `google_workspace_user` mapping.
+- Enrichment only updates staff rows that already have a `google_workspace_user` mapping.
+- Manual mapper dropdown intentionally shows person-like staff only (shared/service aliases are excluded from mapping targets).
 
 ---
 
@@ -353,6 +354,11 @@ The service account's Client ID needs to be added in Google Workspace Admin Cons
 
 ### Users endpoint returns empty
 - Run sync first (`POST /api/google-workspace/sync`) - the users endpoint reads from the local snapshot, not the live API
+
+### Some avatar images appear broken
+- Restart the dev server after CSP changes (`next.config.mjs`) so new `img-src` domains take effect.
+- Verify avatar domains are allowed (`*.googleusercontent.com`, `lh3.google.com`, `*.slack-edge.com`).
+- If an image URL is dead/expired, the row falls back to initials.
 
 ### Auto-match returns 0 matches
 - Verify staff email addresses in the `staff` table match Google Workspace primary emails
@@ -398,12 +404,17 @@ It also upserts the link in `entity_external_ids`:
 - `external_id=<google_user_id>`
 - `entity_type='staff'`, `entity_id=<staff.id>`
 
-### What "Enrich mapped staff" writes
+### What enrichment writes
 
 `POST /api/google-workspace/enrich-staff` updates only mapped staff rows:
 
 - Requires an existing `google_workspace_user` mapping.
-- Pulls fields from the snapshot into staff (for example `title`, `phone`, `avatar_url`).
+- Enrichment settings allow selecting fields per run:
+  - `title`
+  - `phone`
+  - `directory_snapshot` metadata in `staff.source_data.google_workspace.directory_snapshot`
+- `avatar_url` is always included in enrich runs (Slack-first fallback behavior at staff/backend level).
+- Selected direct staff fields only fill empty values by default.
 - Does not create new staff rows.
 
 ### Auto staff vs shared inbox classification
@@ -411,7 +422,7 @@ It also upserts the link in `entity_external_ids`:
 `Auto` classification uses:
 
 - Email-local-part first (primary signal).
-  - Shared keyword and prefix rules for role aliases (`catalogue`, `brandmanager`, `leadgen`, `billing`, etc.).
+  - Shared keyword/prefix/compound rules for role aliases (`catalogue`, `brandmanager`, `leadgen`, `billing`, `partner-success`, `pod.analytics`, etc.).
   - Person-name pattern fallback for normal name-like aliases.
 - Context hints from `full_name`, `org_unit_path`, and `title` only when email pattern is ambiguous.
 - Optional manual override per row (`Auto detect`, `Person`, `Shared inbox`).

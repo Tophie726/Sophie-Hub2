@@ -23,6 +23,16 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Label } from '@/components/ui/label'
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -32,6 +42,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { ShimmerGrid } from '@/components/ui/shimmer-grid'
 import { isStaffEligibleForAutoMapping } from '@/lib/staff/lifecycle'
+import { resolveGoogleAccountType } from '@/lib/google-workspace/account-classification'
 
 interface DirectoryUser {
   google_user_id: string
@@ -61,10 +72,11 @@ interface StaffMember {
   status?: string | null
 }
 
-type FilterType = 'all' | 'mapped' | 'unmapped' | 'suspended' | 'admin' | 'shared' | 'skipped'
+type FilterType = 'all' | 'mapped' | 'unmapped' | 'suspended' | 'shared' | 'skipped'
 
 const easeOut: [number, number, number, number] = [0.22, 1, 0.36, 1]
 const PAGE_SIZE = 30
+type EnrichFieldKey = 'title' | 'phone' | 'directory_snapshot'
 
 export function GWSStaffMapping() {
   const [directoryUsers, setDirectoryUsers] = useState<DirectoryUser[]>([])
@@ -73,6 +85,7 @@ export function GWSStaffMapping() {
   const [isLoadingStaff, setIsLoadingStaff] = useState(true)
   const [isAutoMatching, setIsAutoMatching] = useState(false)
   const [isEnriching, setIsEnriching] = useState(false)
+  const [isEnrichSettingsOpen, setIsEnrichSettingsOpen] = useState(false)
   const [isSyncing, setIsSyncing] = useState(false)
   const [isBootstrappingStaff, setIsBootstrappingStaff] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -82,6 +95,11 @@ export function GWSStaffMapping() {
   const [classificationSavingUserId, setClassificationSavingUserId] = useState<string | null>(null)
   const [approvalSavingUserId, setApprovalSavingUserId] = useState<string | null>(null)
   const [ignoredGoogleUserIds, setIgnoredGoogleUserIds] = useState<Set<string>>(new Set())
+  const [enrichFields, setEnrichFields] = useState<Record<EnrichFieldKey, boolean>>({
+    title: true,
+    phone: true,
+    directory_snapshot: true,
+  })
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
   const [error, setError] = useState<string | null>(null)
   const [syncStatus, setSyncStatus] = useState<{
@@ -241,6 +259,26 @@ export function GWSStaffMapping() {
     refreshSkippedApprovals()
   }, [])
 
+  const selectedEnrichFields = useMemo(
+    () =>
+      (Object.entries(enrichFields) as Array<[EnrichFieldKey, boolean]>)
+        .filter(([, enabled]) => enabled)
+        .map(([field]) => field),
+    [enrichFields]
+  )
+
+  const mappableStaffMembers = useMemo(() => {
+    return staffMembers.filter(s => {
+      if (!isStaffEligibleForAutoMapping(s.status)) return false
+
+      // Keep shared/service aliases out of manual person mapping options.
+      const classification = resolveGoogleAccountType(s.email, null, {
+        fullName: s.full_name,
+      })
+      return classification.type === 'person'
+    })
+  }, [staffMembers])
+
   const mappedStaffIds = useMemo(() => {
     return new Set(
       directoryUsers
@@ -248,6 +286,10 @@ export function GWSStaffMapping() {
         .map(u => u.staff_id!)
     )
   }, [directoryUsers])
+
+  const availableStaffChoices = useMemo(() => {
+    return mappableStaffMembers.filter(s => !mappedStaffIds.has(s.id))
+  }, [mappableStaffMembers, mappedStaffIds])
 
   const activeUsers = useMemo(() => {
     return directoryUsers.filter(u => !u.is_suspended && !u.is_deleted)
@@ -282,6 +324,37 @@ export function GWSStaffMapping() {
     [directoryUsers, ignoredGoogleUserIds]
   )
 
+  // Pre-select exact email matches to reduce manual clickwork.
+  useEffect(() => {
+    setSelectedStaff(prev => {
+      const next = { ...prev }
+      const reservedStaffIds = new Set([
+        ...Array.from(mappedStaffIds),
+        ...Object.values(prev).filter(Boolean),
+      ])
+      const availableByEmail = new Map(
+        availableStaffChoices.map(staff => [staff.email.toLowerCase(), staff.id])
+      )
+      let changed = false
+
+      for (const user of directoryUsers) {
+        if (user.is_mapped || user.is_suspended || user.is_deleted) continue
+        if (user.account_type === 'shared_account') continue
+        if (ignoredGoogleUserIds.has(user.google_user_id)) continue
+        if (next[user.google_user_id]) continue
+
+        const candidateId = availableByEmail.get(user.primary_email.toLowerCase())
+        if (!candidateId || reservedStaffIds.has(candidateId)) continue
+
+        next[user.google_user_id] = candidateId
+        reservedStaffIds.add(candidateId)
+        changed = true
+      }
+
+      return changed ? next : prev
+    })
+  }, [directoryUsers, ignoredGoogleUserIds, availableStaffChoices, mappedStaffIds])
+
   const filteredUsers = useMemo(() => {
     let filtered = directoryUsers
 
@@ -302,10 +375,6 @@ export function GWSStaffMapping() {
       )
     } else if (filter === 'suspended') {
       filtered = filtered.filter(u => u.is_suspended)
-    } else if (filter === 'admin') {
-      filtered = filtered.filter(
-        u => u.is_admin && !u.is_deleted && !ignoredGoogleUserIds.has(u.google_user_id)
-      )
     } else if (filter === 'shared') {
       filtered = filtered.filter(
         u => u.account_type === 'shared_account' && !u.is_deleted && !ignoredGoogleUserIds.has(u.google_user_id)
@@ -346,11 +415,14 @@ export function GWSStaffMapping() {
       default_person: 'default person fallback',
       name_like_pattern: 'email matches person name pattern',
       human_name_pattern: 'full name looks human',
+      human_name_email_match: 'email aligns with display name',
       shared_keyword_match: 'shared keyword match',
+      shared_compound_hint: 'shared role token combination',
       shared_prefix_hint: 'shared alias prefix match',
       shared_name_hint: 'shared name hint',
       shared_org_unit_hint: 'shared org unit hint',
       shared_title_hint: 'shared title hint',
+      default_shared_fallback: 'no person signal detected',
     }
 
     if (reason.startsWith('manual_override:')) {
@@ -596,7 +668,13 @@ export function GWSStaffMapping() {
   async function handleEnrichStaff() {
     setIsEnriching(true)
     try {
-      const res = await fetch('/api/google-workspace/enrich-staff', { method: 'POST' })
+      const res = await fetch('/api/google-workspace/enrich-staff', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fields: ['avatar_url', ...selectedEnrichFields],
+        }),
+      })
       if (!res.ok) throw new Error('Enrichment failed')
       const json = await res.json()
       const result = json.data
@@ -606,10 +684,14 @@ export function GWSStaffMapping() {
       if (fields.title > 0) parts.push(`${fields.title} titles`)
       if (fields.phone > 0) parts.push(`${fields.phone} phones`)
       if (fields.avatar_url > 0) parts.push(`${fields.avatar_url} avatars`)
+      if ((result.source_snapshot_updates || 0) > 0) {
+        parts.push(`${result.source_snapshot_updates} metadata snapshots`)
+      }
 
       toast.success(
         `Enriched ${result.enriched} staff records${parts.length > 0 ? ` (${parts.join(', ')})` : ''}`
       )
+      setIsEnrichSettingsOpen(false)
     } catch (err) {
       console.error('Enrich error:', err)
       toast.error('Failed to enrich staff profiles')
@@ -898,9 +980,15 @@ export function GWSStaffMapping() {
           <Badge variant="secondary" className="bg-amber-500/10 text-amber-500">
             {activeSharedUsers.length} shared inboxes
           </Badge>
-          <Badge variant="secondary" className="bg-slate-500/10 text-slate-400">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-auto px-2 py-1 rounded-md bg-slate-500/10 text-slate-300 hover:bg-slate-500/20 hover:text-slate-100"
+            onClick={() => setFilter('skipped')}
+          >
             {skippedCount} skipped
-          </Badge>
+          </Button>
           <Badge variant="secondary" className="bg-indigo-500/10 text-indigo-500">
             {syncStatus?.pending_staff_approvals ?? 0} pending approvals
           </Badge>
@@ -920,23 +1008,14 @@ export function GWSStaffMapping() {
             )}
           </Button>
           <Button
-            onClick={handleEnrichStaff}
-            disabled={isEnriching || mappedCount === 0}
+            onClick={() => setIsEnrichSettingsOpen(true)}
+            disabled={isEnriching}
             variant="outline"
             size="sm"
-            title="Pull title, phone, and avatar from Google Workspace into mapped staff records"
+            title="Choose what data to pull from Google Workspace before enrichment"
           >
-            {isEnriching ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Enriching...
-              </>
-            ) : (
-              <>
-                <Download className="h-4 w-4 mr-2" />
-                Enrich mapped staff
-              </>
-            )}
+            <Download className="h-4 w-4 mr-2" />
+            Enrichment settings
           </Button>
           <Button onClick={handleAutoMatch} disabled={isAutoMatching || isBootstrappingStaff} variant="outline" size="sm">
             {isAutoMatching ? (
@@ -989,7 +1068,6 @@ export function GWSStaffMapping() {
             <SelectItem value="skipped">Skipped</SelectItem>
             <SelectItem value="suspended">Suspended</SelectItem>
             <SelectItem value="shared">Shared Inboxes</SelectItem>
-            <SelectItem value="admin">Admins</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -1004,7 +1082,16 @@ export function GWSStaffMapping() {
             const isClassificationSaving = classificationSavingUserId === user.google_user_id
             const isApprovalSaving = approvalSavingUserId === user.google_user_id
             const isSkipped = ignoredGoogleUserIds.has(user.google_user_id)
-            const selectedId = selectedStaff[user.google_user_id]
+            const selectedId = selectedStaff[user.google_user_id] || user.staff_id || ''
+            const mappedStaffChoice = user.staff_id
+              ? staffMembers.find(s => s.id === user.staff_id)
+              : undefined
+            const rowStaffChoices =
+              mappedStaffChoice && !availableStaffChoices.some(s => s.id === mappedStaffChoice.id)
+                ? [mappedStaffChoice, ...availableStaffChoices]
+                : availableStaffChoices
+            const canMapToPerson = !user.is_suspended && user.account_type !== 'shared_account'
+            const showSaveButton = Boolean(selectedId) && (!user.is_mapped || selectedId !== user.staff_id)
 
             return (
               <motion.div
@@ -1037,11 +1124,6 @@ export function GWSStaffMapping() {
                         {user.title}
                       </span>
                     )}
-                    {user.is_admin && (
-                      <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-600 flex-shrink-0">
-                        Admin
-                      </span>
-                    )}
                     {user.account_type === 'shared_account' && (
                       <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-500 flex-shrink-0">
                         Shared inbox
@@ -1052,6 +1134,16 @@ export function GWSStaffMapping() {
                         Override
                       </span>
                     )}
+                    <span
+                      className={
+                        `text-[10px] font-medium px-1.5 py-0.5 rounded-full flex-shrink-0 ` +
+                        (user.is_mapped
+                          ? 'bg-green-500/10 text-green-600'
+                          : 'bg-orange-500/10 text-orange-500')
+                      }
+                    >
+                      {user.is_mapped ? 'Mapped' : 'Unmapped'}
+                    </span>
                     <span
                       className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground flex-shrink-0"
                       title={
@@ -1076,17 +1168,11 @@ export function GWSStaffMapping() {
                       </span>
                     )}
                   </div>
-                  {user.is_mapped && user.staff_name && (
-                    <p className="text-sm text-muted-foreground ml-6 truncate">
-                      &rarr; {user.staff_name}
-                    </p>
-                  )}
                 </div>
 
                 {/* Actions */}
                 <div className="flex items-center gap-2 flex-shrink-0">
                   <Select
-                    value={user.account_type_override || 'auto'}
                     onValueChange={(v) => {
                       if (v === 'skip') {
                         void handleApprovalStatus(user, 'skip')
@@ -1098,16 +1184,16 @@ export function GWSStaffMapping() {
                       }
                       void handleSetAccountTypeOverride(
                         user.google_user_id,
-                        v as 'auto' | 'person' | 'shared_account'
+                        v as 'person' | 'shared_account'
                       )
                     }}
                     disabled={isClassificationSaving || isApprovalSaving}
+                    key={`${user.google_user_id}-${user.account_type_override || 'auto'}-${isSkipped ? 'skipped' : 'active'}`}
                   >
                     <SelectTrigger className="w-[170px] h-8 text-sm">
-                      <SelectValue placeholder="Mode" />
+                      <SelectValue placeholder="Actions" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="auto">Auto detect</SelectItem>
                       <SelectItem value="person">Force Person</SelectItem>
                       <SelectItem value="shared_account">Force Shared Inbox</SelectItem>
                       <SelectItem value={isSkipped ? 'unskip' : 'skip'}>
@@ -1115,54 +1201,50 @@ export function GWSStaffMapping() {
                       </SelectItem>
                     </SelectContent>
                   </Select>
-                  {user.is_mapped ? (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 text-muted-foreground hover:text-destructive"
-                      onClick={() => handleDeleteMapping(user.google_user_id)}
-                    >
-                      <X className="h-4 w-4 mr-1" />
-                      Remove
-                    </Button>
-                  ) : !user.is_suspended && user.account_type !== 'shared_account' ? (
-                    isSkipped ? (
-                      <span className="text-xs text-muted-foreground">Skipped</span>
-                    ) : (
-                      <>
-                        <Select
-                          value={selectedId || ''}
-                          onValueChange={(v) =>
-                            setSelectedStaff(prev => ({ ...prev, [user.google_user_id]: v }))
-                          }
-                        >
-                          <SelectTrigger className="w-[180px] h-8 text-sm">
-                            <SelectValue placeholder="Select staff..." />
-                          </SelectTrigger>
-                          <SelectContent className="max-h-[300px]">
-                            {staffMembers
-                              .filter(s => !mappedStaffIds.has(s.id) && isStaffEligibleForAutoMapping(s.status))
-                              .map(s => (
-                                <SelectItem key={s.id} value={s.id}>
-                                  {s.full_name}
-                                </SelectItem>
-                              ))}
-                          </SelectContent>
-                        </Select>
+                  {canMapToPerson ? (
+                    <>
+                      <Select
+                        value={selectedId}
+                        onValueChange={(v) =>
+                          setSelectedStaff(prev => ({ ...prev, [user.google_user_id]: v }))
+                        }
+                        disabled={isApprovalSaving}
+                      >
+                        <SelectTrigger className="w-[180px] h-8 text-sm">
+                          <SelectValue placeholder="Select staff..." />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-[300px]">
+                          {rowStaffChoices.map(s => (
+                            <SelectItem key={s.id} value={s.id}>
+                              {s.full_name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        size="sm"
+                        className="h-8"
+                        disabled={!showSaveButton || isSaving || isApprovalSaving}
+                        onClick={() => handleSaveMapping(user.google_user_id)}
+                      >
+                        {isSaving ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Check className="h-4 w-4" />
+                        )}
+                      </Button>
+                      {user.is_mapped && (
                         <Button
+                          variant="ghost"
                           size="sm"
-                          className="h-8"
-                          disabled={!selectedId || isSaving || isApprovalSaving}
-                          onClick={() => handleSaveMapping(user.google_user_id)}
+                          className="h-8 text-muted-foreground hover:text-destructive"
+                          onClick={() => handleDeleteMapping(user.google_user_id)}
                         >
-                          {isSaving ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Check className="h-4 w-4" />
-                          )}
+                          <X className="h-4 w-4 mr-1" />
+                          Remove
                         </Button>
-                      </>
-                    )
+                      )}
+                    </>
                   ) : (
                     <span className="text-xs text-muted-foreground">
                       {user.account_type === 'shared_account' ? 'Shared account' : 'Suspended'}
@@ -1185,11 +1267,97 @@ export function GWSStaffMapping() {
         )}
       </div>
 
+      <Dialog open={isEnrichSettingsOpen} onOpenChange={setIsEnrichSettingsOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Google Workspace enrichment settings</DialogTitle>
+            <DialogDescription>
+              Choose which data points to pull for mapped staff records.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-3 rounded-md border p-3">
+              <div className="rounded-md border border-dashed p-2 text-xs text-muted-foreground">
+                Avatar sync is always enabled for mapped staff. Avatar source priority is managed at staff
+                settings/backend level (Slack first, Google fallback by default).
+              </div>
+              <div className="flex items-start gap-2">
+                <Checkbox
+                  id="enrich-title"
+                  checked={enrichFields.title}
+                  onCheckedChange={(checked) =>
+                    setEnrichFields(prev => ({ ...prev, title: checked === true }))
+                  }
+                />
+                <Label htmlFor="enrich-title" className="cursor-pointer">
+                  Job title
+                  <span className="block text-xs text-muted-foreground">writes to `staff.title` if empty</span>
+                </Label>
+              </div>
+              <div className="flex items-start gap-2">
+                <Checkbox
+                  id="enrich-phone"
+                  checked={enrichFields.phone}
+                  onCheckedChange={(checked) =>
+                    setEnrichFields(prev => ({ ...prev, phone: checked === true }))
+                  }
+                />
+                <Label htmlFor="enrich-phone" className="cursor-pointer">
+                  Phone
+                  <span className="block text-xs text-muted-foreground">writes to `staff.phone` if empty</span>
+                </Label>
+              </div>
+              <div className="flex items-start gap-2">
+                <Checkbox
+                  id="enrich-snapshot"
+                  checked={enrichFields.directory_snapshot}
+                  onCheckedChange={(checked) =>
+                    setEnrichFields(prev => ({ ...prev, directory_snapshot: checked === true }))
+                  }
+                />
+                <Label htmlFor="enrich-snapshot" className="cursor-pointer">
+                  Directory metadata snapshot
+                  <span className="block text-xs text-muted-foreground">
+                    stores all pullable Google fields in `staff.source_data.google_workspace.directory_snapshot`
+                    (including `last_login_time` and `last_seen_at`)
+                  </span>
+                </Label>
+              </div>
+            </div>
+
+            <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
+              Available metadata includes org unit path, Google admin flags, aliases, account lifecycle fields,
+              creation/last login timestamps, department, cost center, location, and manager email.
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEnrichSettingsOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleEnrichStaff}
+              disabled={isEnriching || mappedCount === 0}
+            >
+              {isEnriching ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Enriching...
+                </>
+              ) : (
+                `Run enrichment (${mappedCount} mapped staff)`
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <p className="text-xs text-muted-foreground">
         Map Google Workspace directory users to Sophie Hub staff members. Use auto-match to bulk-match
-        by email address. After mapping, use &ldquo;Enrich mapped staff&rdquo; to pull job titles, phone numbers,
-        and avatar photos into staff records. Use &ldquo;Skip for now&rdquo; for uncertain accounts and revisit
-        them from the Skipped filter.
+        by email address. After mapping, open enrichment settings to choose which profile data should be
+        synced into staff records. Avatar sync is always included. Use &ldquo;Skip for now&rdquo; for uncertain
+        accounts and revisit them from the Skipped filter.
       </p>
     </div>
   )
@@ -1242,6 +1410,10 @@ function DirectoryAvatar({
         alt=""
         className="h-8 w-8 rounded-full flex-shrink-0 object-cover"
         onError={() => setPrimaryBroken(true)}
+        onErrorCapture={() => setPrimaryBroken(true)}
+        loading="lazy"
+        decoding="async"
+        referrerPolicy="no-referrer"
       />
     )
   }
@@ -1255,6 +1427,10 @@ function DirectoryAvatar({
         alt=""
         className="h-8 w-8 rounded-full flex-shrink-0 object-cover"
         onError={() => setFallbackBroken(true)}
+        onErrorCapture={() => setFallbackBroken(true)}
+        loading="lazy"
+        decoding="async"
+        referrerPolicy="no-referrer"
       />
     )
   }

@@ -6,7 +6,7 @@
  * Updates the staff table with enriched data.
  *
  * Enrichment rules (per approved plan):
- * - avatar_url: always update (prefer GWS photo if no Slack avatar)
+ * - avatar_url: always evaluated with Slack-first fallback behavior (only fills if missing)
  * - title: only set if currently empty in DB
  * - phone: only set if currently empty in DB
  */
@@ -16,8 +16,14 @@ import { ROLES } from '@/lib/auth/roles'
 import { apiSuccess, ApiErrors } from '@/lib/api/response'
 import { getAdminClient } from '@/lib/supabase/admin'
 import type { DirectorySnapshotRow } from '@/lib/google-workspace/types'
+import { z } from 'zod'
 
 type JsonRecord = Record<string, unknown>
+type EnrichField = 'avatar_url' | 'title' | 'phone' | 'directory_snapshot'
+
+const EnrichRequestSchema = z.object({
+  fields: z.array(z.enum(['avatar_url', 'title', 'phone', 'directory_snapshot'])).min(1).optional(),
+})
 
 function isObject(value: unknown): value is JsonRecord {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -68,13 +74,37 @@ function buildGoogleWorkspaceSourcePayload(snapshot: DirectorySnapshotRow): Json
   }
 }
 
-export async function POST() {
+async function resolveEnrichConfig(request: Request): Promise<{
+  selectedFields: Set<EnrichField>
+}> {
+  const defaults = new Set<EnrichField>(['title', 'phone', 'directory_snapshot'])
+  const contentType = request.headers.get('content-type') || ''
+  if (!contentType.toLowerCase().includes('application/json')) {
+    return { selectedFields: defaults }
+  }
+
+  try {
+    const raw = await request.json()
+    const parsed = EnrichRequestSchema.safeParse(raw)
+    if (!parsed.success || !parsed.data.fields || parsed.data.fields.length === 0) {
+      return { selectedFields: defaults }
+    }
+    const selected = new Set(parsed.data.fields as EnrichField[])
+    selected.delete('avatar_url')
+    return { selectedFields: selected }
+  } catch {
+    return { selectedFields: defaults }
+  }
+}
+
+export async function POST(request: Request) {
   const auth = await requireRole(ROLES.ADMIN)
   if (!auth.authenticated) {
     return auth.response
   }
 
   try {
+    const { selectedFields } = await resolveEnrichConfig(request)
     const supabase = getAdminClient()
 
     // 1. Fetch all staff ↔ Google Workspace mappings
@@ -95,6 +125,8 @@ export async function POST() {
         skipped: 0,
         total_mappings: 0,
         fields_updated: { title: 0, phone: 0, avatar_url: 0 },
+        source_snapshot_updates: 0,
+        selected_fields: Array.from(selectedFields),
         message: 'No staff-Google Workspace mappings found. Run auto-match first.',
       })
     }
@@ -120,6 +152,7 @@ export async function POST() {
     let enriched = 0
     let skipped = 0
     const fieldsUpdated = { title: 0, phone: 0, avatar_url: 0 }
+    let snapshotUpdates = 0
     const lineageRows: Array<{
       entity_type: 'staff'
       entity_id: string
@@ -157,6 +190,7 @@ export async function POST() {
       }
 
       const dbFields: Record<string, unknown> = {}
+      let sourceSnapshotChanged = false
       const localLineage: Array<{
         field: 'avatar_url' | 'title' | 'phone'
         previous: string | null
@@ -164,7 +198,7 @@ export async function POST() {
         sourceRef: string
       }> = []
 
-      if (!existing.avatar_url && snapshot.thumbnail_photo_url) {
+      if (snapshot.thumbnail_photo_url && !existing.avatar_url) {
         dbFields.avatar_url = snapshot.thumbnail_photo_url
         localLineage.push({
           field: 'avatar_url',
@@ -174,7 +208,7 @@ export async function POST() {
         })
       }
 
-      if (!existing.title && snapshot.title) {
+      if (selectedFields.has('title') && !existing.title && snapshot.title) {
         dbFields.title = snapshot.title
         localLineage.push({
           field: 'title',
@@ -184,7 +218,7 @@ export async function POST() {
         })
       }
 
-      if (!existing.phone && snapshot.phone) {
+      if (selectedFields.has('phone') && !existing.phone && snapshot.phone) {
         dbFields.phone = snapshot.phone
         localLineage.push({
           field: 'phone',
@@ -194,13 +228,16 @@ export async function POST() {
         })
       }
 
-      const existingSourceData = (existing.source_data as JsonRecord | null) || {}
-      const incomingSourceData: JsonRecord = {
-        google_workspace: buildGoogleWorkspaceSourcePayload(snapshot),
-      }
-      const mergedSourceData = deepMergeSourceData(existingSourceData, incomingSourceData)
-      if (JSON.stringify(existingSourceData) !== JSON.stringify(mergedSourceData)) {
-        dbFields.source_data = mergedSourceData
+      if (selectedFields.has('directory_snapshot')) {
+        const existingSourceData = (existing.source_data as JsonRecord | null) || {}
+        const incomingSourceData: JsonRecord = {
+          google_workspace: buildGoogleWorkspaceSourcePayload(snapshot),
+        }
+        const mergedSourceData = deepMergeSourceData(existingSourceData, incomingSourceData)
+        if (JSON.stringify(existingSourceData) !== JSON.stringify(mergedSourceData)) {
+          dbFields.source_data = mergedSourceData
+          sourceSnapshotChanged = true
+        }
       }
 
       if (Object.keys(dbFields).length === 0) {
@@ -220,6 +257,9 @@ export async function POST() {
       }
 
       enriched++
+      if (sourceSnapshotChanged) {
+        snapshotUpdates++
+      }
       for (const change of localLineage) {
         if (change.field === 'avatar_url') fieldsUpdated.avatar_url++
         if (change.field === 'title') fieldsUpdated.title++
@@ -252,6 +292,8 @@ export async function POST() {
       skipped,
       total_mappings: mappings.length,
       fields_updated: fieldsUpdated,
+      source_snapshot_updates: snapshotUpdates,
+      selected_fields: ['avatar_url', ...Array.from(selectedFields)],
     })
   } catch (error) {
     console.error('GWS staff enrichment error:', error)
