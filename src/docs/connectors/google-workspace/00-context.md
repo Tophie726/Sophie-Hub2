@@ -39,6 +39,7 @@
   - `GOOGLE_WORKSPACE_ADMIN_EMAIL=tomas@sophiesociety.com`
   - `GOOGLE_WORKSPACE_DOMAIN=sophiesociety.com`
 - Existing Google OAuth / GSheets vars were intentionally left unchanged.
+- Google Sheets enrichment remains read-only (`drive.readonly` + `spreadsheets.readonly`; no write-back calls in connector code paths).
 - `ADMIN_EMAILS` already contains `tomas@sophiesociety.com`.
 
 ### Current Validation State
@@ -66,3 +67,4 @@
 2. Go to `/admin/data-enrichment` -> Google Workspace -> click **Test Connection**.
 3. If Google returns `Not Authorized`, switch `GOOGLE_WORKSPACE_ADMIN_EMAIL` to a confirmed Google Workspace Super Admin and retest after propagation.
 4. Run remaining smoke flow: `sync` -> `sync/status` -> `users` -> `staff/bootstrap` (if staff is empty) -> `auto-match` -> `enrich-staff`.
+5. Optional CLI runner: `COOKIE_HEADER="<session-cookie>" ./scripts/smoke-google-workspace.sh --with-bootstrap`.

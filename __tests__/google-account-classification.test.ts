@@ -45,6 +45,43 @@ describe('Google account classification', () => {
     })
   })
 
+  it('promotes fallback single-token aliases to person when name convention matches', () => {
+    expect(
+      resolveGoogleAccountType('ana@sophiesociety.com', null, {
+        fullName: 'Ana Maria Gavrilović',
+        orgUnitPath: '/',
+        title: null,
+      })
+    ).toMatchObject({
+      type: 'person',
+      reason: 'human_name_email_match',
+    })
+
+    expect(
+      resolveGoogleAccountType('viki@sophiesociety.com', null, {
+        fullName: 'Viktorija Tuomas',
+        orgUnitPath: '/',
+        title: null,
+      })
+    ).toMatchObject({
+      type: 'person',
+      reason: 'human_name_email_match',
+    })
+  })
+
+  it('keeps fallback aliases shared when shared-name context is present', () => {
+    expect(
+      resolveGoogleAccountType('analytics@sophiesociety.com', null, {
+        fullName: 'Sophie Society',
+        orgUnitPath: '/',
+        title: null,
+      })
+    ).toMatchObject({
+      type: 'shared_account',
+      reason: 'shared_name_hint',
+    })
+  })
+
   it('does not let human full_name override a shared email classification', () => {
     const resolved = resolveGoogleAccountType('brandmanager21@sophiesociety.com', null, {
       fullName: 'Chris Rawlings',

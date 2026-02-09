@@ -150,6 +150,8 @@ const SHARED_TITLE_HINTS = [
 
 function normalizeToken(value: string): string {
   return value
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .replace(/[^a-z]/g, '')
 }
@@ -161,9 +163,16 @@ function extractNameTokens(fullName: string): string[] {
     .filter(token => token.length >= 2)
 }
 
+function sharedPrefixLength(a: string, b: string): number {
+  const max = Math.min(a.length, b.length)
+  let i = 0
+  while (i < max && a[i] === b[i]) i++
+  return i
+}
+
 function emailMatchesHumanName(localPart: string, fullName: string): boolean {
   const nameTokens = extractNameTokens(fullName)
-  if (nameTokens.length < 2) return false
+  if (nameTokens.length === 0) return false
 
   const first = nameTokens[0]
   const last = nameTokens[nameTokens.length - 1]
@@ -178,13 +187,28 @@ function emailMatchesHumanName(localPart: string, fullName: string): boolean {
   // Direct token matches (first-name aliases are common in this workspace).
   if (localCollapsed === first || localCollapsed === last) return true
 
+  // Nickname-style prefixes (e.g. "viki" -> "viktorija").
+  if (
+    localCollapsed.length >= 4 &&
+    (
+      first.startsWith(localCollapsed) ||
+      last.startsWith(localCollapsed) ||
+      sharedPrefixLength(first, localCollapsed) >= 3 ||
+      sharedPrefixLength(last, localCollapsed) >= 3
+    )
+  ) {
+    return true
+  }
+
   // Common generated aliases.
-  const commonAliases = new Set([
-    `${first}${last}`,
-    `${first}${last.charAt(0)}`,
-    `${first.charAt(0)}${last}`,
-  ])
-  if (commonAliases.has(localCollapsed)) return true
+  if (nameTokens.length >= 2) {
+    const commonAliases = new Set([
+      `${first}${last}`,
+      `${first}${last.charAt(0)}`,
+      `${first.charAt(0)}${last}`,
+    ])
+    if (commonAliases.has(localCollapsed)) return true
+  }
 
   // Tokenized aliases: first.last, first_l, f.last, etc.
   if (localTokens.length >= 2) {
@@ -259,11 +283,49 @@ export function resolveGoogleAccountType(
   }
 
   const auto = classifyGoogleAccountEmail(email)
+  const fullName = (context?.fullName || '').trim().toLowerCase()
+  const orgUnitPath = (context?.orgUnitPath || '').trim().toLowerCase()
+  const title = (context?.title || '').trim().toLowerCase()
+
   if (auto.type === 'shared_account') {
-    // Some person aliases are single-token (e.g., "kevin@").
-    // Promote to person only when we have positive human-name evidence.
-    const fullName = (context?.fullName || '').trim().toLowerCase()
-    if (fullName && HUMAN_FULL_NAME_PATTERN.test(fullName) && emailMatchesHumanName(email.split('@')[0] || '', fullName)) {
+    // Keep explicit shared detections as shared; only promote fallback cases.
+    if (auto.reason !== 'default_shared_fallback') {
+      return {
+        type: auto.type,
+        reason: auto.reason,
+        overridden: false,
+      }
+    }
+
+    if (
+      orgUnitPath &&
+      SHARED_ORG_UNIT_HINTS.some(h => orgUnitPath.includes(h))
+    ) {
+      return {
+        type: 'shared_account',
+        reason: 'shared_org_unit_hint',
+        overridden: false,
+      }
+    }
+
+    if (title && SHARED_TITLE_HINTS.some(h => title.includes(h))) {
+      return {
+        type: 'shared_account',
+        reason: 'shared_title_hint',
+        overridden: false,
+      }
+    }
+
+    if (fullName && SHARED_NAME_HINTS.some(h => fullName.includes(h))) {
+      return {
+        type: 'shared_account',
+        reason: 'shared_name_hint',
+        overridden: false,
+      }
+    }
+
+    // Some person aliases are single-token (e.g., "kevin@", "ana@", "viki@").
+    if (fullName && emailMatchesHumanName(email.split('@')[0] || '', fullName)) {
       return {
         type: 'person',
         reason: 'human_name_email_match',
@@ -277,10 +339,6 @@ export function resolveGoogleAccountType(
       overridden: false,
     }
   }
-
-  const fullName = (context?.fullName || '').trim().toLowerCase()
-  const orgUnitPath = (context?.orgUnitPath || '').trim().toLowerCase()
-  const title = (context?.title || '').trim().toLowerCase()
 
   if (orgUnitPath && SHARED_ORG_UNIT_HINTS.some(h => orgUnitPath.includes(h))) {
     return {

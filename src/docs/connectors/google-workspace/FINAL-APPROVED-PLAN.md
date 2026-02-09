@@ -13,10 +13,10 @@ Status:
 
 Implementation Status (2026-02-06):
 - Wave 1 (schema-sync): COMPLETE — types, connector, cache, constants, migration applied
-- Wave 2 (api-integration): COMPLETE — Google client, all 7 API routes, auto-match, enrichment, sync
+- Wave 2 (api-integration): COMPLETE — Google client, all core API routes (10 total), auto-match, enrichment, sync
 - Wave 3 (ui-ops): COMPLETE — connection card, staff mapping, mapping hub, CategoryHub card, page routing
 - Wave docs: COMPLETE — SETUP-GUIDE.md, CONNECTOR-GUIDE.md updated
-- Remaining: Live smoke tests (blocked on env var setup), Phase 3 optional
+- Remaining: Authenticated smoke evidence capture and operator handoff sign-off, Phase 3 optional
 
 ---
 
@@ -123,8 +123,11 @@ Deliverables:
 - API routes:
   - `POST /api/google-workspace/test-connection`
   - `GET /api/google-workspace/users`
+  - `POST /api/google-workspace/users/classification`
   - `GET|POST|DELETE /api/google-workspace/mappings/staff`
   - `POST /api/google-workspace/mappings/staff/auto-match`
+  - `POST /api/google-workspace/staff/bootstrap`
+  - `GET|POST /api/google-workspace/staff-approvals`
   - `POST /api/google-workspace/enrich-staff`
 - UI modules:
   - Connection card
@@ -326,6 +329,9 @@ Implementation should execute from this file only.
 | `src/app/api/google-workspace/sync/status/route.ts` | GET: sync + snapshot stats |
 | `src/app/api/google-workspace/mappings/staff/route.ts` | GET/POST/DELETE: mappings |
 | `src/app/api/google-workspace/mappings/staff/auto-match/route.ts` | POST: email auto-match |
+| `src/app/api/google-workspace/staff/bootstrap/route.ts` | POST: first-run staff seed from snapshot |
+| `src/app/api/google-workspace/staff-approvals/route.ts` | GET/POST: approval queue + skip/unskip |
+| `src/app/api/google-workspace/users/classification/route.ts` | POST: account-type override |
 | `src/app/api/google-workspace/enrich-staff/route.ts` | POST: enrich from snapshot |
 | `src/components/google-workspace/gws-connection-card.tsx` | Connection test UI |
 | `src/components/google-workspace/gws-staff-mapping.tsx` | Staff mapping table |
@@ -343,8 +349,9 @@ Implementation should execute from this file only.
 
 ### Next Steps
 1. Follow `SETUP-GUIDE.md` to configure GCP service account + env vars
-2. Run smoke test sequence: test-connection -> sync -> sync/status -> users -> staff/bootstrap (if staff is empty) -> auto-match -> enrich-staff
-3. Verify UI at `/admin/data-enrichment` -> Google Workspace card
+2. Run smoke test sequence: test-connection -> sync -> sync/status -> users -> staff/bootstrap (if staff is empty) -> auto-match -> enrich-staff -> staff-approvals
+3. Optional CLI helper: `COOKIE_HEADER="<session-cookie>" ./scripts/smoke-google-workspace.sh --with-bootstrap`
+4. Verify UI at `/admin/data-enrichment` -> Google Workspace card
 
 ### Post-Implementation Delta (2026-02-07)
 

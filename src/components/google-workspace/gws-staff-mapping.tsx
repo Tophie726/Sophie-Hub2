@@ -1087,13 +1087,21 @@ export function GWSStaffMapping() {
                 <div className="flex items-center gap-2 flex-shrink-0">
                   <Select
                     value={user.account_type_override || 'auto'}
-                    onValueChange={(v) =>
-                      handleSetAccountTypeOverride(
+                    onValueChange={(v) => {
+                      if (v === 'skip') {
+                        void handleApprovalStatus(user, 'skip')
+                        return
+                      }
+                      if (v === 'unskip') {
+                        void handleApprovalStatus(user, 'unskip')
+                        return
+                      }
+                      void handleSetAccountTypeOverride(
                         user.google_user_id,
                         v as 'auto' | 'person' | 'shared_account'
                       )
-                    }
-                    disabled={isClassificationSaving}
+                    }}
+                    disabled={isClassificationSaving || isApprovalSaving}
                   >
                     <SelectTrigger className="w-[170px] h-8 text-sm">
                       <SelectValue placeholder="Mode" />
@@ -1102,6 +1110,9 @@ export function GWSStaffMapping() {
                       <SelectItem value="auto">Auto detect</SelectItem>
                       <SelectItem value="person">Force Person</SelectItem>
                       <SelectItem value="shared_account">Force Shared Inbox</SelectItem>
+                      <SelectItem value={isSkipped ? 'unskip' : 'skip'}>
+                        {isSkipped ? 'Re-open' : 'Skip for now'}
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                   {user.is_mapped ? (
@@ -1116,21 +1127,7 @@ export function GWSStaffMapping() {
                     </Button>
                   ) : !user.is_suspended && user.account_type !== 'shared_account' ? (
                     isSkipped ? (
-                      <>
-                        <span className="text-xs text-muted-foreground">Skipped</span>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 text-muted-foreground"
-                          disabled={isApprovalSaving}
-                          onClick={() => handleApprovalStatus(user, 'unskip')}
-                        >
-                          {isApprovalSaving ? (
-                            <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                          ) : null}
-                          Re-open
-                        </Button>
-                      </>
+                      <span className="text-xs text-muted-foreground">Skipped</span>
                     ) : (
                       <>
                         <Select
@@ -1163,18 +1160,6 @@ export function GWSStaffMapping() {
                           ) : (
                             <Check className="h-4 w-4" />
                           )}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 text-muted-foreground"
-                          disabled={isApprovalSaving}
-                          onClick={() => handleApprovalStatus(user, 'skip')}
-                        >
-                          {isApprovalSaving ? (
-                            <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                          ) : null}
-                          Skip for now
                         </Button>
                       </>
                     )
