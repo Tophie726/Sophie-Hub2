@@ -3,6 +3,8 @@ const STATIC_ADMIN_EMAILS = [
   'aviana@codesignery.com',
   'josedalida@codesignery.com',
   'mikee@codesignery.com',
+  'mcrogado@codesignery.com',
+  'ac@codesignery.com',
 ]
 
 function normalizeEmail(email: string): string {
