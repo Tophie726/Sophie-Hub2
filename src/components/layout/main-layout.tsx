@@ -1,10 +1,13 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { Menu } from 'lucide-react'
 import { Sidebar } from './sidebar'
 import { MobileMenuProvider, useMobileMenu } from './mobile-menu-context'
 import { ErrorBoundary } from '@/components/error-boundary'
 import { captureError } from '@/lib/posthog'
+import { ViewerContextBadge } from './viewer-context-badge'
+import type { Role } from '@/lib/auth/roles'
 
 interface MainLayoutProps {
   children: React.ReactNode
@@ -34,13 +37,41 @@ function MobileHeader() {
   )
 }
 
+// Module-level cache for user role (mirrors sidebar pattern)
+let cachedLayoutRole: Role | undefined = undefined
+
 function MainLayoutContent({ children }: MainLayoutProps) {
+  const [userRole, setUserRole] = useState<Role | undefined>(cachedLayoutRole)
+
+  useEffect(() => {
+    if (cachedLayoutRole !== undefined) {
+      setUserRole(cachedLayoutRole)
+      return
+    }
+    fetch('/api/auth/me')
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        const role = data?.user?.role as Role | undefined
+        cachedLayoutRole = role
+        setUserRole(role)
+      })
+      .catch(() => {})
+  }, [])
+
   return (
     <div className="min-h-screen bg-background">
       <Sidebar />
       <MobileHeader />
       <main className="pl-0 md:pl-64">
         <div className="min-h-screen pt-14 md:pt-0">
+          {/* Viewer context badge - visible across all pages */}
+          {userRole === 'admin' && (
+            <div className="sticky top-14 md:top-0 z-20 px-4 md:px-8">
+              <div className="flex items-center py-1.5">
+                <ViewerContextBadge userRole={userRole} />
+              </div>
+            </div>
+          )}
           <ErrorBoundary
             onError={(error, errorInfo) => {
               captureError(error, { componentStack: errorInfo.componentStack })

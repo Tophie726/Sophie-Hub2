@@ -10,6 +10,9 @@ import { requireAuth, requireRole } from '@/lib/auth/api-auth'
 import { ROLES } from '@/lib/auth/roles'
 import { apiSuccess, apiError, ApiErrors, apiValidationError } from '@/lib/api/response'
 import { z } from 'zod'
+import { getViewCookie } from '@/lib/auth/viewer-session'
+import { buildActorFromAuth, buildSelfSubject, buildViewResolverInput } from '@/lib/auth/viewer-context'
+import { resolveEffectiveView } from '@/lib/views/resolve-view'
 
 const supabase = getAdminClient()
 
@@ -36,6 +39,26 @@ export async function GET(request: Request) {
       return apiValidationError(validation.error)
     }
 
+    // Resolve effective view from signed cookie (P1.1: server-derived only)
+    const actor = buildActorFromAuth(auth.user)
+    const cookie = getViewCookie()
+    const subject = cookie ? cookie.subject : buildSelfSubject(actor)
+    const resolverInput = buildViewResolverInput(subject, actor)
+    const resolvedView = await resolveEffectiveView(resolverInput)
+
+    // If a view is resolved, get the allowed module IDs for filtering
+    let allowedModuleIds: Set<string> | null = null
+    if (resolvedView) {
+      const { data: viewModules } = await supabase
+        .from('view_profile_modules')
+        .select('module_id')
+        .eq('view_id', resolvedView.id)
+
+      if (viewModules && viewModules.length > 0) {
+        allowedModuleIds = new Set(viewModules.map(vm => vm.module_id))
+      }
+    }
+
     let query = supabase
       .from('dashboards')
       .select('*')
@@ -51,13 +74,23 @@ export async function GET(request: Request) {
       query = query.eq('is_template', validation.data.is_template === 'true')
     }
 
+    // Filter by allowed modules if a view was resolved with module assignments
+    if (allowedModuleIds) {
+      query = query.in('module_id', Array.from(allowedModuleIds))
+    }
+
     const { data: dashboards, error } = await query
 
     if (error) {
       return ApiErrors.database()
     }
 
-    return apiSuccess({ dashboards: dashboards || [] })
+    return apiSuccess({
+      dashboards: dashboards || [],
+      resolved_view: resolvedView
+        ? { id: resolvedView.id, slug: resolvedView.slug, name: resolvedView.name }
+        : null,
+    })
   } catch {
     return ApiErrors.internal()
   }

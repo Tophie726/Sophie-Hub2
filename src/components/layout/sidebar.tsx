@@ -10,6 +10,11 @@ import { cn } from '@/lib/utils'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
+import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -25,6 +30,7 @@ import { useMobileMenu } from './mobile-menu-context'
 import { getNavigationForRole, type NavSection } from '@/lib/navigation/config'
 import type { Role } from '@/lib/auth/roles'
 import { FeedbackButton } from '@/components/feedback'
+import { AdminModeControl } from './admin-mode-control'
 
 // Get initials from name
 function getInitials(name?: string | null): string {
@@ -78,6 +84,7 @@ function SidebarContent({ onNavigate, layoutId = 'activeNav' }: SidebarContentPr
   const { data: session } = useSession()
   const [userRole, setUserRole] = useState<Role | undefined>(cachedUserRole)
   const [filteredNav, setFilteredNav] = useState<NavSection[]>(() => getNavigationForRole(cachedUserRole))
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false)
 
   // Fetch user role on mount
   useEffect(() => {
@@ -88,7 +95,8 @@ function SidebarContent({ onNavigate, layoutId = 'activeNav' }: SidebarContentPr
   }, [])
 
   // Display role label
-  const roleLabel = userRole === 'admin' ? 'Admin' : userRole === 'pod_leader' ? 'Pod Leader' : 'Staff'
+  const roleLabel = userRole === 'admin' ? 'Admin' : userRole === 'pod_leader' ? 'PPC Strategist' : 'Staff'
+  const isAdmin = userRole === 'admin'
 
   return (
     <div className="flex h-full flex-col">
@@ -162,28 +170,69 @@ function SidebarContent({ onNavigate, layoutId = 'activeNav' }: SidebarContentPr
       {/* User Section */}
       <div className="border-t border-border/40 p-3 pb-safe">
         <div className="flex items-center gap-2">
-          {/* Profile - clickable to settings */}
-          <Link
-            href="/settings"
-            onClick={onNavigate}
-            className="flex flex-1 items-center gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-accent min-w-0"
-          >
-            <Avatar className="h-8 w-8 shrink-0">
-              <AvatarImage
-                src={session?.user?.image || undefined}
-                alt={session?.user?.name || 'User'}
-              />
-              <AvatarFallback className="bg-primary/10 text-primary text-xs font-medium">
-                {getInitials(session?.user?.name)}
-              </AvatarFallback>
-            </Avatar>
-            <div className="flex flex-1 flex-col min-w-0">
-              <span className="text-sm font-medium truncate leading-tight">
-                {session?.user?.name || 'Loading...'}
-              </span>
-              <span className="text-xs text-muted-foreground leading-tight">{roleLabel}</span>
-            </div>
-          </Link>
+          {isAdmin ? (
+            <Popover open={profileMenuOpen} onOpenChange={setProfileMenuOpen}>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  className="flex flex-1 items-center gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-accent min-w-0 text-left"
+                >
+                  <Avatar className="h-8 w-8 shrink-0">
+                    <AvatarImage
+                      src={session?.user?.image || undefined}
+                      alt={session?.user?.name || 'User'}
+                    />
+                    <AvatarFallback className="bg-primary/10 text-primary text-xs font-medium">
+                      {getInitials(session?.user?.name)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex flex-1 flex-col min-w-0">
+                    <span className="text-sm font-medium truncate leading-tight">
+                      {session?.user?.name || 'Loading...'}
+                    </span>
+                    <span className="text-xs text-muted-foreground leading-tight">{roleLabel}</span>
+                  </div>
+                </button>
+              </PopoverTrigger>
+              <PopoverContent
+                side="top"
+                align="start"
+                className="w-[340px] max-w-[calc(100vw-2rem)] p-0"
+              >
+                <div className="border-b border-border/60 px-3 py-2">
+                  <p className="text-sm font-medium">Admin Controls</p>
+                  <p className="text-xs text-muted-foreground">Staff and partner visibility preview</p>
+                </div>
+                <AdminModeControl
+                  userRole={userRole}
+                  menuOpen={profileMenuOpen}
+                  onContextApplied={() => setProfileMenuOpen(false)}
+                />
+              </PopoverContent>
+            </Popover>
+          ) : (
+            <Link
+              href="/settings"
+              onClick={onNavigate}
+              className="flex flex-1 items-center gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-accent min-w-0"
+            >
+              <Avatar className="h-8 w-8 shrink-0">
+                <AvatarImage
+                  src={session?.user?.image || undefined}
+                  alt={session?.user?.name || 'User'}
+                />
+                <AvatarFallback className="bg-primary/10 text-primary text-xs font-medium">
+                  {getInitials(session?.user?.name)}
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex flex-1 flex-col min-w-0">
+                <span className="text-sm font-medium truncate leading-tight">
+                  {session?.user?.name || 'Loading...'}
+                </span>
+                <span className="text-xs text-muted-foreground leading-tight">{roleLabel}</span>
+              </div>
+            </Link>
+          )}
 
           {/* Feedback, Settings & Logout */}
           <div className="flex items-center">

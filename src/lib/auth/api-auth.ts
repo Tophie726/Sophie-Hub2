@@ -8,7 +8,7 @@ import { isAdminEmail } from './admin-access'
 // Server-side Supabase client for auth lookups
 const supabase = getAdminClient()
 
-interface AuthUser {
+export interface AuthUser {
   id: string
   email: string
   name: string | null

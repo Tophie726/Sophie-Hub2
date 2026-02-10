@@ -17,6 +17,7 @@ import {
   MessageSquare,
   Lightbulb,
   Blocks,
+  Eye,
   type LucideIcon,
 } from 'lucide-react'
 import { type Role, ROLES, isRoleAtLeast } from '@/lib/auth/roles'
@@ -59,6 +60,7 @@ export const navigation: NavSection[] = [
     title: 'Admin',
     requiredRole: ROLES.ADMIN,
     items: [
+      { name: 'Views', href: '/admin/views', icon: Eye },
       { name: 'Modules', href: '/admin/modules', icon: Blocks },
       { name: 'Feedback Triage', href: '/admin/feedback', icon: MessageSquare },
       { name: 'Data Enrichment', href: '/admin/data-enrichment', icon: Database, highlight: true },
