@@ -30,7 +30,7 @@ export async function GET(): Promise<NextResponse> {
     )
     response.headers.set('Cache-Control', CACHE_HEADERS['Cache-Control'])
     return response
-  } catch (error: unknown) {
+  } catch {
     const response = apiError(
       ErrorCodes.INTERNAL_ERROR,
       'Health check failed',
