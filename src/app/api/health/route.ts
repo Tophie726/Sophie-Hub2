@@ -1,17 +1,10 @@
 import { NextResponse } from 'next/server'
-import { getAdminClient } from '@/lib/supabase/admin'
+import type { HealthStatus } from '@/types/health.types'
+import { getSystemHealth } from '@/lib/services/health.service'
+import { apiSuccess, apiError, ErrorCodes } from '@/lib/api/response'
 
-interface HealthStatus {
-  status: 'healthy' | 'degraded' | 'unhealthy'
-  timestamp: string
-  version: string
-  checks: {
-    database: {
-      status: 'up' | 'down'
-      latencyMs?: number
-      error?: string
-    }
-  }
+const CACHE_HEADERS: Record<string, string> = {
+  'Cache-Control': 'no-cache, no-store, must-revalidate',
 }
 
 /**
@@ -21,64 +14,29 @@ interface HealthStatus {
  * Returns 200 if healthy, 503 if unhealthy
  * No authentication required (needed for external health checks)
  */
-export async function GET() {
-  const health: HealthStatus = {
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-    version: process.env.npm_package_version || '0.0.0',
-    checks: {
-      database: {
-        status: 'down',
-      },
-    },
-  }
-
-  // Check database connectivity
+export async function GET(): Promise<NextResponse> {
   try {
-    const supabase = getAdminClient()
-    const dbStart = Date.now()
+    const health = await getSystemHealth()
 
-    // Simple query to check database is responsive
-    const { error } = await supabase
-      .from('data_sources')
-      .select('id')
-      .limit(1)
-
-    const dbLatency = Date.now() - dbStart
-
-    if (error) {
-      health.checks.database = {
-        status: 'down',
-        latencyMs: dbLatency,
-        error: 'Database check failed',
-      }
-      health.status = 'unhealthy'
-    } else {
-      health.checks.database = {
-        status: 'up',
-        latencyMs: dbLatency,
-      }
+    if (health.status === 'healthy') {
+      return apiSuccess<HealthStatus>(health, 200, CACHE_HEADERS)
     }
-  } catch (error) {
-    console.error('Health check failed:', error)
-    health.checks.database = {
-      status: 'down',
-      error: 'Database check failed',
-    }
-    health.status = 'unhealthy'
+
+    const response = apiError(
+      ErrorCodes.INTERNAL_ERROR,
+      'System health check failed',
+      503,
+      health
+    )
+    response.headers.set('Cache-Control', CACHE_HEADERS['Cache-Control'])
+    return response
+  } catch (error: unknown) {
+    const response = apiError(
+      ErrorCodes.INTERNAL_ERROR,
+      'Health check failed',
+      503
+    )
+    response.headers.set('Cache-Control', CACHE_HEADERS['Cache-Control'])
+    return response
   }
-
-  // Determine overall status
-  const allChecksUp = health.checks.database.status === 'up'
-
-  if (!allChecksUp) {
-    health.status = 'unhealthy'
-  }
-
-  return NextResponse.json(health, {
-    status: health.status === 'healthy' ? 200 : 503,
-    headers: {
-      'Cache-Control': 'no-cache, no-store, must-revalidate',
-    },
-  })
 }
