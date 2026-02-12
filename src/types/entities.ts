@@ -120,11 +120,11 @@ export interface DataSourceWithStats {
   id: string
   name: string
   type: string
-  spreadsheet_id: string
+  spreadsheet_id: string | null
   spreadsheet_url: string | null
   created_at: string
   updated_at: string
-  display_order?: number
+  display_order: number | null
   tabCount: number
   totalColumns: number
   mappedFieldsCount: number
