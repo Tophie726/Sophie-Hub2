@@ -1,12 +1,41 @@
 import { requireAuth } from '@/lib/auth/api-auth'
 import { getAdminClient } from '@/lib/supabase/admin'
-import { apiSuccess, apiError, ApiErrors } from '@/lib/api/response'
+import { apiSuccess, apiError } from '@/lib/api/response'
 import { BUCKET_COLORS, BUCKET_LABELS, STATUS_BUCKETS, type StatusColorBucket } from '@/lib/status-colors'
+
+const PARTNER_PAGE_SIZE = 1000
 
 interface StatusMapping {
   status_pattern: string
   bucket: string
   priority: number
+}
+
+type PartnerHealthRow = {
+  id: string
+  brand_name: string | null
+  status: string | null
+  source_data: Record<string, Record<string, Record<string, unknown>>> | null
+}
+
+async function fetchAllPartnersForHealth(supabase: ReturnType<typeof getAdminClient>): Promise<PartnerHealthRow[]> {
+  const partners: PartnerHealthRow[] = []
+
+  for (let offset = 0; ; offset += PARTNER_PAGE_SIZE) {
+    const { data, error } = await supabase
+      .from('partners')
+      .select('id, brand_name, status, source_data')
+      .range(offset, offset + PARTNER_PAGE_SIZE - 1)
+
+    if (error) throw error
+    if (!data || data.length === 0) break
+
+    partners.push(...(data as PartnerHealthRow[]))
+
+    if (data.length < PARTNER_PAGE_SIZE) break
+  }
+
+  return partners
 }
 
 /**
@@ -138,16 +167,8 @@ export async function GET() {
       mappings = dbMappings || getFallbackMappings()
     }
 
-    // Get all partners with source_data and status
-    // Note: Supabase defaults to 1000 rows, explicitly set higher limit
-    const { data: partners, error: partnersError } = await supabase
-      .from('partners')
-      .select('id, brand_name, status, source_data')
-      .limit(5000)
-
-    if (partnersError) {
-      return ApiErrors.database(partnersError.message)
-    }
+    // Fetch all partners page-by-page to avoid API max row caps (often 1000/request).
+    const partners = await fetchAllPartnersForHealth(supabase)
 
     // Initialize bucket counts
     const distribution: Record<StatusColorBucket, number> = {
@@ -169,7 +190,7 @@ export async function GET() {
 
     let includedCount = 0
 
-    for (const partner of partners || []) {
+    for (const partner of partners) {
       const sourceData = partner.source_data as Record<string, Record<string, Record<string, unknown>>> | null
       const { status: latestStatus, date: statusDate } = getLatestWeeklyStatus(sourceData)
 
@@ -206,8 +227,8 @@ export async function GET() {
       distribution,
       buckets,
       total: includedCount,
-      totalPartners: partners?.length || 0, // Including old churned
-      excludedChurned: (partners?.length || 0) - includedCount,
+      totalPartners: partners.length, // Including old churned
+      excludedChurned: partners.length - includedCount,
       unmappedCount: distribution.unknown,
       unmappedStatuses: unmapped.slice(0, 10), // Top 10 unmapped
       lastCalculated: new Date().toISOString(),
