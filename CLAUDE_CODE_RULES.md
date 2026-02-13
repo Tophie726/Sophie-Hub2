@@ -46,6 +46,13 @@ Claude MUST:
 
 If uncertain, choose the safest, most maintainable solution.
 
+## 1.1 Git Branch Policy (MANDATORY)
+
+- Default collaboration branch is `staging`.
+- Claude MUST open PRs and push work targeting `staging` unless explicitly told otherwise.
+- Claude MUST NOT push directly to `main` unless the prompt explicitly says this is a production release.
+- Before requesting merge, Claude MUST run `npm run build` locally.
+
 ---
 
 # 2. TYPESCRIPT RULES (STRICT MODE)

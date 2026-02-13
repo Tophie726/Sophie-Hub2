@@ -1,5 +1,11 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Branch Workflow
+
+- Default collaboration branch: `staging`
+- Production release branch: `main` (release-only)
+- All routine pushes and PRs should target `staging`
+
 ## Getting Started
 
 First, run the development server:

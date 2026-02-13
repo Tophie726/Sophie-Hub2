@@ -682,9 +682,9 @@ function buildCompositionLayout(): CompositionLayout {
   }
 
   for (const rootId of roots) assignDepth(rootId, 0)
-  for (const id of idsInGraph) {
+  idsInGraph.forEach((id) => {
     if (!depthById.has(id)) assignDepth(id, 0)
-  }
+  })
 
   const maxGraphDepth = depthById.size ? Math.max(...Array.from(depthById.values())) : 0
   const standaloneIds = allProducts.filter((product) => !idsInGraph.has(product.id)).map((product) => product.id)
@@ -708,14 +708,14 @@ function buildCompositionLayout(): CompositionLayout {
   const canvasWidth = 20 + (maxDepth + 1) * NODE_W + maxDepth * NODE_GAP_X
   const nodeLayout: Record<string, { x: number; y: number }> = {}
 
-  for (const [depth, ids] of columns.entries()) {
+  columns.forEach((ids, depth) => {
     const totalHeight = ids.length * NODE_H + (ids.length - 1) * NODE_GAP_Y
     const startY = Math.max(8, Math.round((canvasHeight - totalHeight) / 2))
     const x = 10 + depth * (NODE_W + NODE_GAP_X)
     ids.forEach((id, index) => {
       nodeLayout[id] = { x, y: startY + index * (NODE_H + NODE_GAP_Y) }
     })
-  }
+  })
 
   const standaloneLabel = standaloneIds[0] && nodeLayout[standaloneIds[0]]
     ? {

@@ -838,9 +838,10 @@ import { ErrorBoundary } from '@/components/error-boundary'
 
 To catch compile-time errors before they reach production:
 
-1. **Always run `npm run build`** before pushing to main
-2. **Vercel preview deploys** catch errors before production
-3. **Future: Pre-commit hooks** with husky can enforce lint/build checks
+1. **Always run `npm run build`** before pushing to `staging`
+2. **Staging deploys from `staging`** must pass before any production promotion
+3. **`main` is release-only** (merge to `main` only when explicitly doing a production release)
+4. **Future: Pre-commit hooks** with husky can enforce lint/build checks
 
 ### API Error Handling
 
@@ -1416,11 +1417,15 @@ npm run lint     # Run ESLint
 
 ## Vercel Deployment
 
-Sophie Hub v2 is deployed to Vercel with automatic deploys on push to main.
+Sophie Hub v2 uses a staging-first Vercel workflow.
+
+- **Git default for team changes**: push and merge into `staging`
+- **Production release branch**: `main` (explicit release only)
+- **Vercel branch tracking**: keep the active testing deployment tied to `staging`
 
 ### URLs
 - **Production**: https://sophie-hub-v2.vercel.app
-- **GitHub**: https://github.com/Tophie726/Sophie-Hub2
+- **GitHub**: https://github.com/Sophie-Society-dev/Sophie-Hub2
 
 ### Custom Password Gate
 
@@ -1452,7 +1457,7 @@ All env vars must be set in Vercel dashboard (Settings → Environment Variables
 | `NEXT_PUBLIC_POSTHOG_KEY` | PostHog project API key |
 | `NEXT_PUBLIC_POSTHOG_HOST` | PostHog host (us.i.posthog.com) |
 
-**Important**: When adding env vars via CLI, use `printf '%s' 'value' | vercel env add NAME production` to avoid newline issues.
+**Important**: When adding env vars via CLI, use `printf '%s' 'value' | vercel env add NAME <environment>` to avoid newline issues.
 
 ### Google OAuth Setup
 
