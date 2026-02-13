@@ -28,7 +28,8 @@ import {
 } from 'lucide-react'
 import { useMobileMenu } from './mobile-menu-context'
 import { getNavigationForRole, type NavSection } from '@/lib/navigation/config'
-import type { Role } from '@/lib/auth/roles'
+import { ROLES, type Role } from '@/lib/auth/roles'
+import type { ViewerContext } from '@/lib/auth/viewer-context'
 import { FeedbackButton } from '@/components/feedback'
 import { AdminModeControl } from './admin-mode-control'
 
@@ -74,29 +75,125 @@ function getUserRole(): Promise<Role | undefined> {
   return roleLoadPromise
 }
 
-interface SidebarContentProps {
-  onNavigate?: () => void
-  layoutId?: string
+function deriveNavRole(
+  baseRole: Role | undefined,
+  context: ViewerContext | null,
+): Role | undefined {
+  if (!context) return baseRole
+
+  if (!context.adminModeOn) {
+    return baseRole === ROLES.ADMIN ? ROLES.STAFF : baseRole
+  }
+
+  if (context.isImpersonating && context.subject?.resolvedRole) {
+    return context.subject.resolvedRole
+  }
+
+  return baseRole
 }
 
-function SidebarContent({ onNavigate, layoutId = 'activeNav' }: SidebarContentProps) {
+async function fetchViewerContext(): Promise<ViewerContext | null> {
+  try {
+    const res = await fetch('/api/viewer-context')
+    if (!res.ok) return null
+    const json = await res.json()
+    return (json.data?.viewerContext || null) as ViewerContext | null
+  } catch {
+    return null
+  }
+}
+
+export interface SidebarContentProps {
+  onNavigate?: () => void
+  layoutId?: string
+  /** Override navigation sections (used by preview shell). Bypasses role fetching. */
+  navOverride?: NavSection[]
+  /** Hide profile/admin controls (used by preview shell). */
+  hideUserControls?: boolean
+  /** Optional identity override used by preview shell to mimic target audience profile. */
+  previewIdentity?: {
+    name: string
+    roleLabel: string
+    image?: string | null
+  }
+}
+
+export function SidebarContent({
+  onNavigate,
+  layoutId = 'activeNav',
+  navOverride,
+  hideUserControls,
+  previewIdentity,
+}: SidebarContentProps) {
   const pathname = usePathname()
   const { data: session } = useSession()
   const [userRole, setUserRole] = useState<Role | undefined>(cachedUserRole)
-  const [filteredNav, setFilteredNav] = useState<NavSection[]>(() => getNavigationForRole(cachedUserRole))
+  const [effectiveNavRole, setEffectiveNavRole] = useState<Role | undefined>(cachedUserRole)
+  const [filteredNav, setFilteredNav] = useState<NavSection[]>(() => navOverride ?? getNavigationForRole(cachedUserRole))
   const [profileMenuOpen, setProfileMenuOpen] = useState(false)
 
-  // Fetch user role on mount
+  // When navOverride changes, update immediately
   useEffect(() => {
-    getUserRole().then(role => {
+    if (navOverride) {
+      setFilteredNav(navOverride)
+    }
+  }, [navOverride])
+
+  // Fetch user role on mount (skip if navOverride provided)
+  useEffect(() => {
+    if (navOverride) return
+    let cancelled = false
+
+    async function load() {
+      const [role, context] = await Promise.all([getUserRole(), fetchViewerContext()])
+      if (cancelled) return
       setUserRole(role)
-      setFilteredNav(getNavigationForRole(role))
-    })
-  }, [])
+      setEffectiveNavRole(deriveNavRole(role, context))
+    }
+
+    void load()
+
+    return () => {
+      cancelled = true
+    }
+  }, [navOverride])
+
+  // Listen for viewer context changes (skip if navOverride provided)
+  useEffect(() => {
+    if (navOverride) return
+    let cancelled = false
+
+    async function syncFromContext() {
+      const context = await fetchViewerContext()
+      if (cancelled) return
+      setEffectiveNavRole((currentRole) => deriveNavRole(userRole ?? currentRole, context))
+    }
+
+    function handleContextChange() {
+      void syncFromContext()
+    }
+
+    void syncFromContext()
+    window.addEventListener('viewer-context-changed', handleContextChange)
+
+    return () => {
+      cancelled = true
+      window.removeEventListener('viewer-context-changed', handleContextChange)
+    }
+  }, [userRole, navOverride])
+
+  // Recompute nav when effective role changes (skip if navOverride provided)
+  useEffect(() => {
+    if (navOverride) return
+    setFilteredNav(getNavigationForRole(effectiveNavRole))
+  }, [effectiveNavRole, navOverride])
 
   // Display role label
   const roleLabel = userRole === 'admin' ? 'Admin' : userRole === 'pod_leader' ? 'PPC Strategist' : 'Staff'
-  const isAdmin = userRole === 'admin'
+  const displayName = previewIdentity?.name || session?.user?.name || 'Loading...'
+  const displayRoleLabel = previewIdentity?.roleLabel || roleLabel
+  const avatarImage = previewIdentity?.image || session?.user?.image || undefined
+  const isAdmin = !previewIdentity && userRole === 'admin'
 
   return (
     <div className="flex h-full flex-col">
@@ -167,8 +264,11 @@ function SidebarContent({ onNavigate, layoutId = 'activeNav' }: SidebarContentPr
         </nav>
       </ScrollArea>
 
-      {/* User Section */}
-      <div className="border-t border-border/40 p-3 pb-safe">
+      {/* User Section (hidden in preview mode) */}
+      {!hideUserControls && <div className={cn(
+        'border-t border-border/40 p-3',
+        !previewIdentity && 'pb-safe'
+      )}>
         <div className="flex items-center gap-2">
           {isAdmin ? (
             <Popover open={profileMenuOpen} onOpenChange={setProfileMenuOpen}>
@@ -177,31 +277,30 @@ function SidebarContent({ onNavigate, layoutId = 'activeNav' }: SidebarContentPr
                   type="button"
                   className="flex flex-1 items-center gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-accent min-w-0 text-left"
                 >
-                  <Avatar className="h-8 w-8 shrink-0">
-                    <AvatarImage
-                      src={session?.user?.image || undefined}
-                      alt={session?.user?.name || 'User'}
-                    />
-                    <AvatarFallback className="bg-primary/10 text-primary text-xs font-medium">
-                      {getInitials(session?.user?.name)}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="flex flex-1 flex-col min-w-0">
-                    <span className="text-sm font-medium truncate leading-tight">
-                      {session?.user?.name || 'Loading...'}
-                    </span>
-                    <span className="text-xs text-muted-foreground leading-tight">{roleLabel}</span>
-                  </div>
-                </button>
+                    <Avatar className="h-8 w-8 shrink-0">
+                      <AvatarImage
+                        src={avatarImage}
+                        alt={displayName}
+                      />
+                      <AvatarFallback className="bg-primary/10 text-primary text-xs font-medium">
+                        {getInitials(displayName)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex flex-1 flex-col min-w-0">
+                      <span className="text-sm font-medium truncate leading-tight">
+                        {displayName}
+                      </span>
+                      <span className="text-xs text-muted-foreground leading-tight">{displayRoleLabel}</span>
+                    </div>
+                  </button>
               </PopoverTrigger>
               <PopoverContent
                 side="top"
                 align="start"
                 className="w-[340px] max-w-[calc(100vw-2rem)] p-0"
               >
-                <div className="border-b border-border/60 px-3 py-2">
+                <div className="border-b border-border/60 px-3 py-2.5">
                   <p className="text-sm font-medium">Admin Controls</p>
-                  <p className="text-xs text-muted-foreground">Staff and partner visibility preview</p>
                 </div>
                 <AdminModeControl
                   userRole={userRole}
@@ -218,18 +317,18 @@ function SidebarContent({ onNavigate, layoutId = 'activeNav' }: SidebarContentPr
             >
               <Avatar className="h-8 w-8 shrink-0">
                 <AvatarImage
-                  src={session?.user?.image || undefined}
-                  alt={session?.user?.name || 'User'}
+                  src={avatarImage}
+                  alt={displayName}
                 />
                 <AvatarFallback className="bg-primary/10 text-primary text-xs font-medium">
-                  {getInitials(session?.user?.name)}
+                  {getInitials(displayName)}
                 </AvatarFallback>
               </Avatar>
               <div className="flex flex-1 flex-col min-w-0">
                 <span className="text-sm font-medium truncate leading-tight">
-                  {session?.user?.name || 'Loading...'}
+                  {displayName}
                 </span>
-                <span className="text-xs text-muted-foreground leading-tight">{roleLabel}</span>
+                <span className="text-xs text-muted-foreground leading-tight">{displayRoleLabel}</span>
               </div>
             </Link>
           )}
@@ -277,7 +376,7 @@ function SidebarContent({ onNavigate, layoutId = 'activeNav' }: SidebarContentPr
             </TooltipProvider>
           </div>
         </div>
-      </div>
+      </div>}
     </div>
   )
 }

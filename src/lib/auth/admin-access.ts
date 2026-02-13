@@ -26,3 +26,15 @@ export function isAdminEmail(email: string, rawEnvValue: string | undefined = pr
   return getAdminEmailAllowlist(rawEnvValue).has(normalized)
 }
 
+/**
+ * Check if a user is a "true admin" — full admin (staffRole === 'admin')
+ * or listed in ADMIN_EMAILS.
+ *
+ * operations_admin is explicitly excluded. This matches the See-As policy
+ * and is required for preview impersonation (HR-7).
+ */
+export function isTrueAdmin(staffRole: string | null, email: string): boolean {
+  if (isAdminEmail(email)) return true
+  return staffRole === 'admin'
+}
+

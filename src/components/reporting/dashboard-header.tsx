@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import {
   Save,
@@ -80,38 +80,84 @@ export function DashboardHeader({
   // Partner picker state
   const [partners, setPartners] = useState<PartnerOption[]>([])
   const [partnersLoading, setPartnersLoading] = useState(false)
+  const [partnersError, setPartnersError] = useState<string | null>(null)
+  const [partnersReloadToken, setPartnersReloadToken] = useState(0)
   const [partnerSearch, setPartnerSearch] = useState('')
   const [partnerOpen, setPartnerOpen] = useState(false)
   const [selectedPartnerName, setSelectedPartnerName] = useState<string | null>(null)
+  const partnerPickerEnabled = Boolean(onPartnerChange)
 
   // Fetch BigQuery-connected partners
   useEffect(() => {
-    if (!onPartnerChange) return
+    if (!partnerPickerEnabled) return
+
     let cancelled = false
+    const controller = new AbortController()
+    const timeout = window.setTimeout(() => controller.abort(), 12000)
+
     setPartnersLoading(true)
-    fetch('/api/bigquery/mapped-partners')
+    setPartnersError(null)
+
+    fetch('/api/bigquery/partner-mappings', { signal: controller.signal })
       .then(res => {
         if (!res.ok) throw new Error(`Mapped partners API: ${res.status}`)
         return res.json()
       })
       .then(json => {
         if (cancelled) return
-        const bqPartners = (json.data?.partners || []) as PartnerOption[]
-        setPartners(bqPartners)
-        // If we already have a selectedPartnerId, set the name
-        if (selectedPartnerId) {
-          const match = bqPartners.find((p: PartnerOption) => p.id === selectedPartnerId)
-          if (match) setSelectedPartnerName(match.brand_name)
-        }
+        const rawMappings = (json.data?.mappings || []) as Array<{
+          entity_id: string
+          external_id: string
+          partner_name?: string | null
+        }>
+        const bqPartners: PartnerOption[] = rawMappings.map((mapping) => ({
+          id: mapping.entity_id,
+          brand_name: mapping.partner_name || mapping.external_id,
+          bigquery_client_name: mapping.external_id,
+        }))
+        const deduped = Array.from(new Map(bqPartners.map(p => [p.id, p])).values())
+        setPartners(deduped)
       })
       .catch((err) => {
+        if (cancelled) return
         console.error('[partner-picker] Error fetching partners:', err)
+        setPartnersError(
+          err?.name === 'AbortError'
+            ? 'Loading partners timed out. Try again.'
+            : 'Failed to load BigQuery-connected partners.'
+        )
       })
       .finally(() => {
+        window.clearTimeout(timeout)
         if (!cancelled) setPartnersLoading(false)
       })
-    return () => { cancelled = true }
-  }, [onPartnerChange]) // eslint-disable-line react-hooks/exhaustive-deps
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timeout)
+      controller.abort()
+    }
+  }, [partnerPickerEnabled, partnersReloadToken])
+
+  useEffect(() => {
+    if (!selectedPartnerId) {
+      setSelectedPartnerName(null)
+      return
+    }
+
+    const match = partners.find((partner) => partner.id === selectedPartnerId)
+    setSelectedPartnerName(match?.brand_name || null)
+  }, [selectedPartnerId, partners])
+
+  const filteredPartners = useMemo(() => {
+    const query = partnerSearch.trim().toLowerCase()
+    if (!query) return partners
+
+    return partners.filter(partner =>
+      partner.brand_name.toLowerCase().includes(query) ||
+      (partner.bigquery_client_name || '').toLowerCase().includes(query)
+    )
+  }, [partners, partnerSearch])
 
   useEffect(() => {
     if (isEditingTitle && inputRef.current) {
@@ -207,17 +253,30 @@ export function DashboardHeader({
                     <div className="flex items-center justify-center py-4">
                       <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                     </div>
+                  ) : partnersError ? (
+                    <div className="py-4 px-2 text-center space-y-2">
+                      <p className="text-sm text-muted-foreground">
+                        {partnersError}
+                      </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8"
+                        onClick={() => setPartnersReloadToken((prev) => prev + 1)}
+                      >
+                        Retry
+                      </Button>
+                    </div>
                   ) : partners.length === 0 ? (
                     <p className="text-sm text-muted-foreground text-center py-4 px-2">
                       No BigQuery-connected partners found
                     </p>
+                  ) : filteredPartners.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-4 px-2">
+                      No partners match &quot;{partnerSearch}&quot;
+                    </p>
                   ) : (
-                    partners
-                      .filter(p =>
-                        p.brand_name.toLowerCase().includes(partnerSearch.toLowerCase()) ||
-                        (p.bigquery_client_name || '').toLowerCase().includes(partnerSearch.toLowerCase())
-                      )
-                      .map((p) => (
+                    filteredPartners.map((p) => (
                         <button
                           key={p.id}
                           onClick={() => {

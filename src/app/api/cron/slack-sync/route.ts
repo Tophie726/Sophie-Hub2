@@ -19,9 +19,15 @@ import { getAdminClient } from '@/lib/supabase/admin'
 import { processChunk } from '@/lib/slack/sync'
 
 export async function POST(request: NextRequest) {
+  const cronSecret = process.env.CRON_SECRET
+  if (!cronSecret) {
+    console.error('Slack sync cron: CRON_SECRET is not configured')
+    return apiError('INTERNAL_ERROR', 'Cron secret is not configured', 500)
+  }
+
   // Verify cron secret
   const authHeader = request.headers.get('authorization')
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (authHeader !== `Bearer ${cronSecret}`) {
     return apiError('UNAUTHORIZED', 'Invalid cron secret', 401)
   }
 

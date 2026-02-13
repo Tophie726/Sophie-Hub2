@@ -11,8 +11,8 @@
 // Widget Types
 // =============================================================================
 
-/** The five widget types supported by the dashboard system */
-export type WidgetType = 'metric' | 'chart' | 'table' | 'text' | 'ai_text'
+/** The widget types supported by the dashboard system */
+export type WidgetType = 'metric' | 'chart' | 'table' | 'text' | 'ai_text' | 'smart_text'
 
 /** Widget data source mode in the template builder */
 export type WidgetDataMode = 'snapshot' | 'live'
@@ -86,6 +86,14 @@ export interface AiTextWidgetConfig {
   format: 'summary' | 'bullets' | 'comparison'
 }
 
+/** Config for a dynamic smart text widget */
+export interface SmartTextWidgetConfig {
+  template: string
+  variables: string[]
+  alignment: 'left' | 'center' | 'right'
+  style: 'heading' | 'body' | 'callout'
+}
+
 /** Union of all widget config types */
 export type WidgetConfig =
   | MetricWidgetConfig
@@ -93,6 +101,7 @@ export type WidgetConfig =
   | TableWidgetConfig
   | TextWidgetConfig
   | AiTextWidgetConfig
+  | SmartTextWidgetConfig
 
 // =============================================================================
 // Date Range

@@ -19,6 +19,11 @@ import { checkRateLimit, RATE_LIMITS, rateLimitHeaders } from '@/lib/rate-limit'
 import { BIGQUERY } from '@/lib/constants'
 import { VIEW_ALIASES } from '@/types/modules'
 import { COLUMN_METADATA } from '@/lib/bigquery/column-metadata'
+import {
+  inferMarketplaceCodeFromText,
+  normalizeMarketplaceCode,
+  normalizeMarketplaceCodes,
+} from '@/lib/amazon/marketplaces'
 import { z } from 'zod'
 
 const supabase = getAdminClient()
@@ -86,6 +91,7 @@ const QuerySchema = z.object({
   sort_direction: z.enum(VALID_SORT_DIRECTIONS).optional().default('asc'),
   limit: z.number().int().min(1).max(1000).optional().default(100),
   data_mode: z.enum(['snapshot', 'live']).optional(),
+  marketplaces: z.array(z.string().min(2).max(64)).max(25).optional(),
   force_refresh: z.boolean().optional().default(false),
 })
 
@@ -152,7 +158,28 @@ function sanitizeIdentifier(name: string): string {
 function getPartnerFilterCondition(partnerField: string): string {
   // Normalize comparisons to STRING so mixed identifier types (INT64 client_id vs
   // string mapping values) don't throw BigQuery signature errors.
-  return `CAST(${partnerField} AS STRING) = @clientId`
+  return `CAST(${partnerField} AS STRING) IN UNNEST(@clientIds)`
+}
+
+function extractMarketplaceCodeFromMapping(mapping: {
+  external_id: string
+  metadata: Record<string, unknown> | null
+}): string | null {
+  const root = mapping.metadata
+  const fromRoot = typeof root?.marketplace_code === 'string'
+    ? normalizeMarketplaceCode(root.marketplace_code)
+    : null
+  if (fromRoot) return fromRoot
+
+  const referenceSheet = root?.reference_sheet
+  if (referenceSheet && typeof referenceSheet === 'object') {
+    const fromSheet = typeof (referenceSheet as Record<string, unknown>).marketplace_code === 'string'
+      ? normalizeMarketplaceCode((referenceSheet as Record<string, unknown>).marketplace_code as string)
+      : null
+    if (fromSheet) return fromSheet
+  }
+
+  return inferMarketplaceCodeFromText(mapping.external_id)
 }
 
 // =============================================================================
@@ -181,6 +208,7 @@ export async function POST(request: NextRequest) {
       sort_by,
       sort_direction,
       limit,
+      marketplaces,
       force_refresh,
     } = validation.data
 
@@ -231,28 +259,65 @@ export async function POST(request: NextRequest) {
       return apiError('VALIDATION_ERROR', `Column "${sort_by}" is not allowed for sort_by`, 400)
     }
 
-    // Look up partner's client_id from entity_external_ids
-    const { data: mapping, error: mappingError } = await supabase
+    // Look up partner's BigQuery client identifiers (multi-marketplace aware)
+    const { data: mappings, error: mappingError } = await supabase
       .from('entity_external_ids')
-      .select('external_id')
+      .select('external_id, metadata')
       .eq('entity_type', 'partners')
       .eq('entity_id', partner_id)
       .eq('source', 'bigquery')
-      .maybeSingle()
+      .order('updated_at', { ascending: false })
 
     if (mappingError) return ApiErrors.database()
-    if (!mapping) {
+    if (!mappings || mappings.length === 0) {
       return apiSuccess({
         mapped: false,
-        message: 'This partner is not mapped to a BigQuery client',
+        message: 'This partner is not mapped to a BigQuery client identifier',
         data: null,
       })
     }
 
-    const clientId = mapping.external_id
+    const requestedMarketplaceCodes = normalizeMarketplaceCodes(marketplaces || [])
+    const filteredMappings = requestedMarketplaceCodes.length > 0
+      ? mappings.filter((mapping) => {
+          const mappedCode = extractMarketplaceCodeFromMapping(mapping as {
+            external_id: string
+            metadata: Record<string, unknown> | null
+          })
+          return !!mappedCode && requestedMarketplaceCodes.includes(mappedCode)
+        })
+      : mappings
+
+    const clientIds = Array.from(
+      new Set(
+        filteredMappings
+          .map(mapping => String(mapping.external_id || '').trim())
+          .filter(value => value.length > 0)
+      )
+    )
+
+    if (clientIds.length === 0) {
+      return apiSuccess({
+        mapped: true,
+        message: 'No mapped client identifiers found for the selected marketplaces',
+        data: null,
+      })
+    }
 
     // Check server-side cache before building/executing query
-    const cacheKey = JSON.stringify({ clientId, view, metrics, aggregation, mode, date_range, group_by, sort_by, sort_direction, limit })
+    const cacheKey = JSON.stringify({
+      clientIds: clientIds.slice().sort(),
+      marketplaces: requestedMarketplaceCodes.slice().sort(),
+      view,
+      metrics,
+      aggregation,
+      mode,
+      date_range,
+      group_by,
+      sort_by,
+      sort_direction,
+      limit,
+    })
     const cached = serverCache.get(cacheKey)
     if (!force_refresh && cached && Date.now() - cached.timestamp < SERVER_CACHE_TTL) {
       return apiSuccess(cached.data as Record<string, unknown>, 200, rateLimitHeaders(rateLimit))
@@ -262,7 +327,7 @@ export async function POST(request: NextRequest) {
     const partnerField = PARTNER_FIELD_PER_VIEW[viewName] || 'client_id'
 
     // Build query
-    const params: Record<string, string | number> = { clientId: String(clientId) }
+    const params: Record<string, string | number | string[]> = { clientIds }
     const conditions: string[] = [getPartnerFilterCondition(partnerField)]
 
     // Date filtering
@@ -343,7 +408,7 @@ export async function POST(request: NextRequest) {
         supabase.from('bigquery_query_logs').insert({
           user_id: auth.user.id,
           partner_id,
-          partner_name: clientId,
+          partner_name: clientIds[0] || null,
           view_alias: view,
           view_name: viewName,
           bytes_processed: bytesProcessed,
@@ -377,7 +442,9 @@ export async function POST(request: NextRequest) {
 
       responseData = {
         mapped: true,
-        clientId,
+        clientId: clientIds[0] || null,
+        clientIds,
+        marketplaces: requestedMarketplaceCodes,
         type: 'table',
         data: { headers, rows: tableRows, total_rows: tableRows.length },
       }
@@ -396,7 +463,9 @@ export async function POST(request: NextRequest) {
 
       responseData = {
         mapped: true,
-        clientId,
+        clientId: clientIds[0] || null,
+        clientIds,
+        marketplaces: requestedMarketplaceCodes,
         type: 'chart',
         data: { labels, datasets },
         rowCount: rows.length,
@@ -407,7 +476,9 @@ export async function POST(request: NextRequest) {
 
       responseData = {
         mapped: true,
-        clientId,
+        clientId: clientIds[0] || null,
+        clientIds,
+        marketplaces: requestedMarketplaceCodes,
         type: 'metric',
         data: { value },
       }
@@ -422,7 +493,9 @@ export async function POST(request: NextRequest) {
 
       responseData = {
         mapped: true,
-        clientId,
+        clientId: clientIds[0] || null,
+        clientIds,
+        marketplaces: requestedMarketplaceCodes,
         type: 'metrics',
         data,
       }

@@ -12,6 +12,7 @@ import type {
   TableWidgetConfig,
   TextWidgetConfig,
   AiTextWidgetConfig,
+  SmartTextWidgetConfig,
   WidgetDataMode,
 } from '@/types/modules'
 
@@ -49,6 +50,10 @@ export interface TextWidgetProps extends BaseWidgetProps {
 
 export interface AiTextWidgetProps extends BaseWidgetProps {
   config: AiTextWidgetConfig
+}
+
+export interface SmartTextWidgetProps extends BaseWidgetProps {
+  config: SmartTextWidgetConfig
 }
 
 // =============================================================================

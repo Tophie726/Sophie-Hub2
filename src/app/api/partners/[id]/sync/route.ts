@@ -7,6 +7,7 @@ import { getConnector, hasConnector, type GoogleSheetConnectorConfig, type Conne
 import { buildPartnerTypePersistenceFields } from '@/lib/partners/computed-partner-type'
 import { applyTransform } from '@/lib/sync/transforms'
 import type { TransformType } from '@/lib/sync/types'
+import { mapSheetsAuthError, resolveSheetsAccessToken } from '@/lib/google/sheets-auth'
 
 const supabase = getAdminClient()
 
@@ -46,8 +47,20 @@ export async function POST(
 
   // Get session for access token (needed for OAuth-based connectors)
   const session = await getServerSession(authOptions)
-  if (!session?.accessToken) {
-    return ApiErrors.unauthorized('No access token available. Please re-authenticate.')
+  if (!session?.user?.email) {
+    return ApiErrors.unauthorized('Not authenticated')
+  }
+
+  let accessToken: string
+  try {
+    const resolved = await resolveSheetsAccessToken(session.accessToken)
+    accessToken = resolved.accessToken
+  } catch (authError) {
+    const mapped = mapSheetsAuthError(authError)
+    if (mapped.status === 401) {
+      return ApiErrors.unauthorized(mapped.message)
+    }
+    return ApiErrors.internal(mapped.message)
   }
 
   try {
@@ -175,7 +188,7 @@ export async function POST(
         // Fetch source data using the appropriate connector
         const connector = getConnector<GoogleSheetConnectorConfig>(connectorType)
         const sourceData = await connector.getData(
-          session.accessToken,
+          accessToken,
           dataSource.connection_config as unknown as GoogleSheetConnectorConfig,
           tabMapping.tab_name,
           tabMapping.header_row

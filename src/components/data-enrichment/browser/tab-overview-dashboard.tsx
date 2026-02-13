@@ -15,6 +15,7 @@ import {
   CheckCircle2,
   AlertCircle,
   Sparkles,
+  UserCheck,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -87,6 +88,9 @@ interface TabOverviewDashboardProps {
   isSyncing?: boolean
   syncProgress?: SyncProgress
   syncStatus?: SyncStatus
+  // Staff email auto-match action
+  onAutoMatchStaffByEmail?: () => Promise<void>
+  isAutoMatchingStaffByEmail?: boolean
   // Preview loading state — suppresses progress flash while tabs are still being discovered
   isLoadingPreview?: boolean
 }
@@ -141,6 +145,8 @@ export function TabOverviewDashboard({
   isSyncing = false,
   syncProgress,
   syncStatus,
+  onAutoMatchStaffByEmail,
+  isAutoMatchingStaffByEmail = false,
   isLoadingPreview = false,
 }: TabOverviewDashboardProps) {
   const [showHidden, setShowHidden] = useState(false)
@@ -247,6 +253,37 @@ export function TabOverviewDashboard({
           )}
 
           {/* Sync button with inline progress */}
+          {onAutoMatchStaffByEmail && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={onAutoMatchStaffByEmail}
+                    disabled={isAutoMatchingStaffByEmail || isSyncing || syncProgress?.isRunning}
+                    className="gap-1.5"
+                  >
+                    {isAutoMatchingStaffByEmail ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        <span className="hidden sm:inline">Matching...</span>
+                      </>
+                    ) : (
+                      <>
+                        <UserCheck className="h-3.5 w-3.5" />
+                        <span className="hidden sm:inline">Auto-match Staff</span>
+                      </>
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  <span className="text-xs">Match existing staff by email on staff tabs</span>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+
           {onSync && (
             <div className="flex items-center gap-2">
               {/* Background sync progress indicator */}
@@ -266,7 +303,7 @@ export function TabOverviewDashboard({
                       variant="outline"
                       size="sm"
                       onClick={onSync}
-                      disabled={isSyncing || syncProgress?.isRunning}
+                      disabled={isSyncing || isAutoMatchingStaffByEmail || syncProgress?.isRunning}
                       className="gap-1.5"
                     >
                       {isSyncing ? (

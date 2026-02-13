@@ -6,6 +6,7 @@ import Link from 'next/link'
 import {
   BarChart3,
   Blocks,
+  Calendar,
   FileText,
   Package,
   ShoppingCart,
@@ -20,6 +21,7 @@ import type { Module } from '@/types/modules'
 const ICON_MAP: Record<string, LucideIcon> = {
   BarChart3,
   Blocks,
+  Calendar,
   FileText,
   Package,
   ShoppingCart,
@@ -62,15 +64,15 @@ export function ModuleCard({ module }: ModuleCardProps) {
     <Link
       href={`/admin/modules/${module.slug}`}
       onClick={() => setIsNavigating(true)}
-      className="block"
+      className="block h-full"
     >
       <motion.div
-        whileHover={{ y: -4, scale: 1.01 }}
+        whileHover={{ y: -2 }}
         whileTap={{ scale: 0.97 }}
         transition={{ duration: duration.ui, ease: easeOut }}
         className={cn(
-          'group relative bg-card rounded-xl p-4 md:p-6 cursor-pointer transition-shadow hover:shadow-lg',
-          isNavigating && 'shadow-lg'
+          'group relative bg-card rounded-xl p-5 cursor-pointer transition-shadow hover:shadow-md h-full flex flex-col',
+          isNavigating && 'shadow-md'
         )}
         style={{ boxShadow: '0 0 0 1px rgba(0,0,0,0.08)' }}
       >
@@ -82,39 +84,37 @@ export function ModuleCard({ module }: ModuleCardProps) {
             </div>
           </>
         )}
-        <div className="flex items-start gap-3 md:gap-4">
+        <div className="flex items-center justify-between mb-3">
           <div
-            className={`flex h-10 w-10 md:h-12 md:w-12 items-center justify-center rounded-xl transition-transform group-hover:scale-110 shrink-0 ${bgClass}`}
+            className={cn(
+              'flex h-10 w-10 items-center justify-center rounded-xl transition-transform duration-150 group-hover:scale-110 shrink-0',
+              bgClass
+            )}
           >
-            <Icon className={`h-5 w-5 md:h-6 md:w-6 ${textClass}`} />
+            <Icon className={cn('h-5 w-5', textClass)} />
           </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-start justify-between gap-2">
-              <h3 className="font-semibold leading-snug text-[15px] line-clamp-2">
-                {module.name}
-              </h3>
-              {module.enabled ? (
-                <span className="px-2 py-0.5 text-[10px] font-medium rounded-full bg-green-500/10 text-green-600 shrink-0">
-                  Enabled
-                </span>
-              ) : (
-                <span className="px-2 py-0.5 text-[10px] font-medium rounded-full bg-muted text-muted-foreground shrink-0">
-                  Disabled
-                </span>
-              )}
-            </div>
-            {module.description && (
-              <p className="text-xs md:text-sm text-muted-foreground mt-1 line-clamp-2">
-                {module.description}
-              </p>
-            )}
-            {isNavigating && (
-              <p className="text-[11px] text-primary mt-2">
-                Opening module...
-              </p>
-            )}
-          </div>
+          {module.enabled ? (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium rounded-full bg-green-500/10 text-green-600">
+              <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
+              Enabled
+            </span>
+          ) : (
+            <span className="px-2 py-0.5 text-[10px] font-medium rounded-full bg-muted text-muted-foreground">
+              Disabled
+            </span>
+          )}
         </div>
+        <h3 className="font-semibold text-[15px] leading-snug">
+          {module.name}
+        </h3>
+        <p className="text-xs text-muted-foreground mt-1 line-clamp-2 flex-1">
+          {module.description || 'No description'}
+        </p>
+        {isNavigating && (
+          <p className="text-[11px] text-primary mt-2">
+            Opening module…
+          </p>
+        )}
       </motion.div>
     </Link>
   )

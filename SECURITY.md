@@ -1,5 +1,10 @@
 # Security Documentation
 
+For the current security baseline, risk register, and rollout roadmap, start here:
+- `src/docs/SECURITY-INDEX.md`
+- `src/docs/SECURITY-FOUNDATION-ANALYSIS.md`
+- `docs/SECURITY-STATUS-SHARE-2026-02-11.md`
+
 ## Current Security Measures
 
 ### Authentication & Authorization
@@ -40,13 +45,16 @@
 - **React's default escaping** prevents XSS
 - **Environment variables** for all secrets (not hardcoded)
 
-### Recent Security Hardening (2026-02-06)
+### Recent Security Hardening (2026-02 to 2026-02-11)
 - **Admin auth bypass fixed** in BigQuery admin routes (`requireRole` result handling corrected)
 - **Feedback XSS vector removed** (`document.write` screenshot path replaced with safe DOM API)
 - **Attachment URL validation centralized** in `src/lib/security/attachment-url.ts`
 - **Attachment allowlist enforced**: `http`, `https`, `data:image/*`, `data:application/pdf`
 - **API error detail leakage reduced**: `ApiErrors.internal/database` now return generic client messages
 - **CSP tightened in production**: removed `unsafe-eval` from production `script-src`
+- **Slack sync race condition fixed**: partial unique index + atomic `create_sync_run_atomic()` RPC for single active run
+- **BigQuery hardening expanded**: strict rate limits, capped `partner_ids`, and widget config size/depth validation
+- **Cron auth hardened**: cron endpoints fail closed when `CRON_SECRET` is missing
 
 ### Sensitive Files Protection
 | File/Path | Status | Notes |
@@ -69,9 +77,9 @@
 ### HTTPS & Transport Security
 | Item | Status | Notes |
 |------|--------|-------|
-| HTTPS enforcement | ⏳ Production | Enable HSTS header |
+| HTTPS enforcement | ✅ Done (on Vercel) | Platform edge enforces HTTPS for deployed app |
 | SSL certificate validity | ⏳ Production | Use auto-renewing certs (Vercel/Let's Encrypt) |
-| Secure cookies | ⏳ Production | Set `secure: true` in NextAuth |
+| Secure cookies | ⚠️ Verify in deploy env | NextAuth uses secure cookie defaults on HTTPS deployments |
 
 ### Security Headers
 | Item | Status | Notes |
@@ -80,8 +88,8 @@
 | X-Content-Type-Options | ✅ Done | nosniff |
 | Referrer-Policy | ✅ Done | strict-origin-when-cross-origin |
 | Permissions-Policy | ✅ Done | Disabled camera/mic/geo |
-| HSTS | ⏳ Production | Requires HTTPS |
-| CSP (Content-Security-Policy) | ⏳ Production | See CSP section below |
+| HSTS | ✅ Done (Vercel deploys) | Set conditionally in `next.config.mjs` when `VERCEL` is present |
+| CSP (Content-Security-Policy) | ✅ Done | Implemented with accepted-risk note for `unsafe-inline` |
 
 ### Server/Info Disclosure
 | Item | Status | Notes |
@@ -95,7 +103,7 @@
 | Item | Status | Notes |
 |------|--------|-------|
 | Strong session secret | ✅ Done | 32-byte random |
-| Session timeout | ⏳ Production | Add `maxAge` to session config |
+| Session timeout | ✅ Done | NextAuth `session.maxAge` configured (7 days) |
 | Secure cookie flags | ⏳ Production | httpOnly, secure, sameSite |
 | Domain restriction | ✅ Done | `ALLOWED_EMAIL_DOMAINS` configurable |
 
@@ -104,8 +112,8 @@
 |------|--------|-------|
 | All routes authenticated | ✅ Done | `requireAuth()` on all routes |
 | Permission-based access | ✅ Done | `requirePermission()` on admin routes |
-| Rate limiting | ⏳ Production | Add Vercel/Upstash rate limiter |
-| Input validation | ⏳ Recommended | Add Zod schemas |
+| Rate limiting | ⚠️ Partial | In-memory limiter active; distributed limiter still planned |
+| Input validation | ⚠️ Partial | Zod is implemented on many critical routes; expand coverage |
 | CORS configuration | ✅ OK | Next.js defaults are secure |
 
 ### Sensitive File Exposure
@@ -120,7 +128,7 @@
 | Item | Status | Notes |
 |------|--------|-------|
 | SQL injection | ✅ Protected | Supabase parameterized queries |
-| Row Level Security | ⏳ Production | Enable RLS policies |
+| Row Level Security | ⚠️ Partial | Enabled on multiple security-critical tables; full coverage review pending |
 | Connection encryption | ✅ Done | Supabase uses SSL |
 | Service key protection | ✅ Done | Server-side only |
 
@@ -161,7 +169,7 @@ Before deploying to production, complete these items:
 - [ ] **Rotate any exposed secrets** - If ever committed to git
 
 #### HTTPS & Cookies
-- [ ] **Enable HSTS header** - Uncomment in next.config.mjs
+- [ ] **Verify HSTS header on deployed environment** - Already configured conditionally for Vercel
 - [ ] **Set secure cookie options** in NextAuth:
   ```typescript
   cookies: {
@@ -179,7 +187,7 @@ Before deploying to production, complete these items:
 - [ ] **Force HTTPS redirects** - Configure in hosting (Vercel does this)
 
 #### Access Control
-- [ ] **Enable Supabase RLS** - Row-level security policies on all tables
+- [ ] **Complete RLS coverage review** - Confirm all production tables have intended policies
 - [ ] **Test permission checks** - Verify non-admins can't access admin routes
 - [ ] **Remove test accounts** - Clean up any dev users
 
@@ -191,18 +199,18 @@ Before deploying to production, complete these items:
 ### 🟡 Important (Should Do)
 
 #### Security Headers
-- [ ] **Add CSP header** - See CSP section below
-- [ ] **Test CSP thoroughly** - Can break functionality if too strict
+- [ ] **Validate CSP policy against current UI behavior** - Keep accepted-risk docs current
+- [ ] **Re-test CSP after major frontend changes** - Especially around script execution
 
 #### API Security
-- [ ] **Add rate limiting** - Vercel Edge or Upstash Redis
-- [ ] **Add input validation** - Zod schemas on all API routes
+- [ ] **Migrate heavy-route rate limits to distributed backend** - Redis/DB-backed implementation
+- [ ] **Expand input validation coverage** - Ensure all mutable/expensive routes have Zod
 - [ ] **Add request size limits** - Prevent large payload attacks
-- [ ] **Add session timeout** - `maxAge: 24 * 60 * 60` (24 hours)
+- [ ] **Review session timeout policy target** - Current config is 7 days; align with agreed risk posture
 
 #### Monitoring
 - [ ] **Set up error monitoring** - Sentry (sanitize PII in reports)
-- [ ] **Enable audit logging** - Track admin actions to DB
+- [ ] **Expand audit logging coverage** - Ensure all sensitive admin flows are logged
 - [ ] **Set up uptime monitoring** - Get alerts if app goes down
 
 #### Dependencies
@@ -521,18 +529,20 @@ At this stage (foundation building), these are the active security measures:
 - ✅ Security headers in place
 - ✅ Role system implemented and in use
 - ✅ User role lookup from staff table
+- ✅ Audit logging infrastructure for core admin/config flows
+- ✅ Rate limiting exists for key expensive routes
 
 ### What's Deferred (Build When Needed)
 - ⏳ Frontend role-based UI components (`<RequireRole>`, `useUserRole`)
 - ⏳ Admin UI for role management
 - ⏳ Supabase RLS policies (enable when multi-tenant features built)
 - ⏳ Partner portal authentication
-- ⏳ Audit logging for sensitive actions
+- ⏳ Distributed rate limiting (multi-instance safe)
 
 ### Development-Only Risks (OK for now)
 - `allowedDevOrigins` in next.config.mjs - for Tailscale testing
 - HTTP access - using Tailscale, not public HTTPS yet
-- No rate limiting - internal tool, trusted users
+- In-memory rate limiting is process-local (partial protection)
 
 ---
 
@@ -542,7 +552,10 @@ At this stage (foundation building), these are the active security measures:
 |------|-------|----------|--------|
 | 2025-01-24 | Full audit | Auth bypass, weak secret, unprotected APIs, missing headers | Fixed |
 | 2025-01-24 | RBAC implementation | Added role-based permissions, protected admin routes | Done |
-| 2025-01-24 | Deep code audit | Open redirect, query injection, ReDoS risk, IDOR | Fixed |
+| 2025-01-24 | Deep code audit | Open redirect, query injection, ReDoS risk, IDOR | Core fixes shipped; low-risk notes tracked |
+| 2026-02-07 | Reactor security sweep (baseline) | P1/P2/P3 reliability + security issues identified | Completed |
+| 2026-02-08 | Reactor security sweep (remediation) | Search hardening, Slack race fix, payload minimization, rate-limit hardening | Completed |
+| 2026-02-11 | Security status consolidation | Unified status-share + roadmap + checklist refresh | Completed |
 
 **Next Review:** Before production deployment
 

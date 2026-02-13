@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { requireAuth } from '@/lib/auth/api-auth'
-import { isAdminEmail } from '@/lib/auth/admin-access'
+import { isTrueAdmin } from '@/lib/auth/admin-access'
 import { ROLES } from '@/lib/auth/roles'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { apiSuccess, apiValidationError, ApiErrors } from '@/lib/api/response'
@@ -27,6 +27,7 @@ const VALID_ROLES = Object.values(ROLES)
 const PostBodySchema = z.object({
   type: z.enum(['self', 'staff', 'partner', 'role', 'partner_type']),
   targetId: z.string().nullable(),
+  adminModeOn: z.boolean().optional(),
 })
 
 // ---------------------------------------------------------------------------
@@ -34,15 +35,6 @@ const PostBodySchema = z.object({
 // ---------------------------------------------------------------------------
 
 const supabase = getAdminClient()
-
-/**
- * Gate: only true admins (staffRole === 'admin') or ADMIN_EMAILS can
- * set/clear the view context. operations_admin is excluded per W0.4.
- */
-function isTrueAdmin(staffRole: string | null, email: string): boolean {
-  if (isAdminEmail(email)) return true
-  return staffRole === 'admin'
-}
 
 // ---------------------------------------------------------------------------
 // GET /api/viewer-context
@@ -58,8 +50,9 @@ export async function GET() {
   const cookie = getViewCookie()
 
   if (!cookie) {
+    // Default state for admins: admin mode ON, viewing as self
     const subject = buildSelfSubject(actor)
-    const ctx = buildViewerContext(actor, subject, false)
+    const ctx = buildViewerContext(actor, subject, true)
     return apiSuccess({ viewerContext: ctx })
   }
 
@@ -84,15 +77,25 @@ export async function POST(request: Request) {
   const validation = PostBodySchema.safeParse(body)
   if (!validation.success) return apiValidationError(validation.error)
 
-  const { type, targetId } = validation.data
+  const { type, targetId, adminModeOn } = validation.data
   const actor = buildActorFromAuth(auth.user)
 
-  // type=self: clear cookie and return self context
+  // type=self: toggle admin mode only (no impersonation)
   if (type === 'self') {
-    clearViewCookie()
+    const wantAdminOn = adminModeOn ?? true
+
+    if (wantAdminOn) {
+      // Admin mode ON + self = default state → clear cookie
+      clearViewCookie()
+    } else {
+      // Admin mode OFF + self = persist the "off" state in cookie
+      const subject = buildSelfSubject(actor)
+      setViewCookie(subject, false)
+    }
+
     logContextClear(auth.user.id, auth.user.email)
     const subject = buildSelfSubject(actor)
-    const ctx = buildViewerContext(actor, subject, false)
+    const ctx = buildViewerContext(actor, subject, wantAdminOn)
     return apiSuccess({ viewerContext: ctx })
   }
 
@@ -166,9 +169,11 @@ export async function POST(request: Request) {
     }
   }
 
-  setViewCookie(subject, false)
+  // Impersonation keeps admin mode ON (admin needs admin UI while previewing)
+  const effectiveAdminMode = adminModeOn ?? true
+  setViewCookie(subject, effectiveAdminMode)
   logContextSwitch(auth.user.id, auth.user.email, subject.type, subject.targetId, subject.targetLabel)
-  const ctx = buildViewerContext(actor, subject, false)
+  const ctx = buildViewerContext(actor, subject, effectiveAdminMode)
   return apiSuccess({ viewerContext: ctx })
 }
 

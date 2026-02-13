@@ -147,6 +147,12 @@ export interface GWSEnrichmentSummary {
     phone: number
     avatar_url: number
   }
+  /** Number of staff rows where directory snapshot metadata was refreshed */
+  source_snapshot_updates: number
+  /** Fields selected for this enrichment run */
+  selected_fields: Array<'avatar_url' | 'title' | 'phone' | 'directory_snapshot'>
+  /** Avatar source strategy used during this enrichment run */
+  avatar_source?: 'slack_then_google' | 'google_workspace'
 }
 
 // =============================================================================

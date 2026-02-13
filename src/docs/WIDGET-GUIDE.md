@@ -438,7 +438,7 @@ This is a critical detail: the field used to identify which partner's data to qu
 | Products | `products` | `client_id` |
 | Match Analysis | `match` | `client_name` |
 
-The query API resolves this automatically using `entity_external_ids`, which maps a partner UUID to their BigQuery `client_name` or `client_id`. You do not need to handle this manually when creating widgets -- the API handles the translation.
+The query API resolves this automatically using `entity_external_ids`, which can map one partner UUID to multiple BigQuery identifiers (`client_name` and/or `client_id`) across marketplaces. By default, widget queries aggregate across all mapped identifiers for that partner.
 
 ---
 
@@ -539,9 +539,10 @@ The date filter is applied as `WHERE date >= @startDate AND date <= @endDate` on
 Partner filtering is handled automatically by the query API:
 
 1. The widget provides a `partner_id` (UUID)
-2. The API looks up `entity_external_ids` for that partner's BigQuery identifier
-3. The query filters by `client_id` or `client_name` depending on the view (see Partner Field Summary above)
-4. If the partner has no BigQuery mapping, the API returns `{ mapped: false }` instead of an error
+2. The API looks up `entity_external_ids` for that partner's BigQuery identifiers
+3. The query filters by `client_id` or `client_name` depending on the view (see Partner Field Summary above), using all mapped identifiers by default
+4. Optional marketplace filtering can be applied by passing `marketplaces` (ISO country-style codes like `US`, `UK`, `DE`) to `/api/bigquery/query` and `/api/bigquery/ai-summary`
+5. If the partner has no BigQuery mapping, the API returns `{ mapped: false }` instead of an error
 
 ### Computed vs Raw Metrics
 

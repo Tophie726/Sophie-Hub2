@@ -1,4 +1,3 @@
-import { describe, it, expect } from 'vitest'
 import { escapePostgrestValue } from '../search-utils'
 
 describe('escapePostgrestValue', () => {

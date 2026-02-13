@@ -5,6 +5,7 @@ import { getAdminClient } from '@/lib/supabase/admin'
 import { getSheetRawRows } from '@/lib/google/sheets'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth/config'
+import { mapSheetsAuthError, resolveSheetsAccessToken } from '@/lib/google/sheets-auth'
 
 const supabase = getAdminClient()
 
@@ -35,12 +36,23 @@ export async function POST() {
   }
 
   try {
-    // Get the user's Google access token
+    // Resolve Google Sheets token (shared connector token when configured,
+    // otherwise falls back to the current viewer token).
     const session = await getServerSession(authOptions)
-    const accessToken = session?.accessToken as string | undefined
+    if (!session?.user?.email) {
+      return ApiErrors.unauthorized('Not authenticated')
+    }
 
-    if (!accessToken) {
-      return ApiErrors.unauthorized('Google access token required - please sign in again')
+    let accessToken: string
+    try {
+      const resolved = await resolveSheetsAccessToken(session.accessToken)
+      accessToken = resolved.accessToken
+    } catch (authError) {
+      const mapped = mapSheetsAuthError(authError)
+      if (mapped.status === 401) {
+        return ApiErrors.unauthorized(mapped.message)
+      }
+      return ApiErrors.internal(mapped.message)
     }
 
     // Find all column_mappings with empty or null source_column

@@ -1,6 +1,8 @@
+import Image from 'next/image'
+
 /**
- * Close.io-style icon for placeholder connector card.
- * Self-contained SVG for reliable local rendering.
+ * Official Close logo atom for connector card usage.
+ * Uses a local static asset copied from Close brand resources.
  */
 
 interface CloseIconProps {
@@ -9,23 +11,14 @@ interface CloseIconProps {
 
 export function CloseIcon({ className }: CloseIconProps) {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      className={className}
+    <Image
+      src="/brand-icons/close-logo-color-atom.svg"
+      alt=""
       aria-hidden="true"
-      fill="none"
-    >
-      <rect x="1.5" y="1.5" width="21" height="21" rx="6" fill="#0B1020" />
-      <path
-        d="M15.8 8.2a5 5 0 1 0 0 7.6"
-        stroke="#60A5FA"
-        strokeWidth="2.3"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <circle cx="16.7" cy="12" r="1.35" fill="#93C5FD" />
-      <rect x="1.5" y="1.5" width="21" height="21" rx="6" stroke="#1F2937" strokeWidth="1.2" />
-    </svg>
+      width={32}
+      height={32}
+      className={className}
+      draggable={false}
+    />
   )
 }
-

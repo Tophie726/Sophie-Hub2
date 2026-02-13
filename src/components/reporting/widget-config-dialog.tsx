@@ -35,6 +35,7 @@ import { ChartConfig } from '@/components/reporting/config/chart-config'
 import { TableConfig } from '@/components/reporting/config/table-config'
 import { TextConfig } from '@/components/reporting/config/text-config'
 import { AiTextConfig } from '@/components/reporting/config/ai-text-config'
+import { SmartTextConfig } from '@/components/reporting/config/smart-text-config'
 import { easeOut } from '@/lib/animations'
 import type {
   DashboardWidget,
@@ -45,6 +46,7 @@ import type {
   TableWidgetConfig,
   TextWidgetConfig,
   AiTextWidgetConfig,
+  SmartTextWidgetConfig,
 } from '@/types/modules'
 
 export interface ConfigChildProps {
@@ -113,6 +115,14 @@ const WIDGET_TYPES: {
     defaultColSpan: 4,
     defaultRowSpan: 1,
   },
+  {
+    type: 'smart_text',
+    label: 'Smart Text',
+    description: 'Dynamic text with viewer variables',
+    icon: <FileText className="h-5 w-5" />,
+    defaultColSpan: 4,
+    defaultRowSpan: 1,
+  },
 ]
 
 const DEFAULT_CONFIGS: Record<WidgetType, WidgetConfig> = {
@@ -121,6 +131,7 @@ const DEFAULT_CONFIGS: Record<WidgetType, WidgetConfig> = {
   table: { view: 'sales', columns: [], sort_by: '', sort_direction: 'desc', limit: 20 } as TableWidgetConfig,
   text: { content: '', alignment: 'left' } as TextWidgetConfig,
   ai_text: { prompt: '', view: 'sales', metrics: [], format: 'summary' } as AiTextWidgetConfig,
+  smart_text: { template: '', variables: [], alignment: 'left', style: 'body' } as SmartTextWidgetConfig,
 }
 
 const COL_SPAN_OPTIONS = [
@@ -376,6 +387,14 @@ export function WidgetConfigDialog({
                 onTitleChange={setTitle}
                 titleTouched={titleTouched}
                 onTitleTouched={() => setTitleTouched(true)}
+              />
+            )}
+            {selectedType === 'smart_text' && (
+              <SmartTextConfig
+                config={config as SmartTextWidgetConfig}
+                title={title}
+                onConfigChange={setConfig}
+                onTitleChange={setTitle}
               />
             )}
 

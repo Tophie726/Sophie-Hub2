@@ -1,7 +1,7 @@
 /**
- * Shared BigQuery Cache
+ * Shared BigQuery Identifier Cache
  *
- * Module-level cache for BigQuery client names.
+ * Module-level cache for BigQuery client identifiers.
  * Shared between the client-names and partner-mappings API routes
  * so that mapping changes can invalidate the cached data.
  *
@@ -16,7 +16,7 @@ let cachedClientNames: string[] | null = null
 let cacheTimestamp = 0
 
 /**
- * Get cached client names if still valid
+ * Get cached client identifiers if still valid
  */
 export function getCachedClientNames(): string[] | null {
   if (!cachedClientNames) return null
@@ -29,7 +29,7 @@ export function getCachedClientNames(): string[] | null {
 }
 
 /**
- * Store client names in cache
+ * Store client identifiers in cache
  */
 export function setCachedClientNames(names: string[]): void {
   cachedClientNames = names

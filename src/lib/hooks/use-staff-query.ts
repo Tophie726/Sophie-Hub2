@@ -3,8 +3,10 @@ import { useQuery } from '@tanstack/react-query'
 interface UseStaffQueryParams {
   search?: string
   status?: string[]
+  role?: string[]
   sort?: string
   order?: 'asc' | 'desc'
+  inactiveDays?: number
   limit?: number
   offset?: number
 }
@@ -23,16 +25,18 @@ export function useStaffDetailQuery(id: string) {
 }
 
 export function useStaffQuery(params: UseStaffQueryParams = {}) {
-  const { search, status, sort, order, limit, offset } = params
+  const { search, status, role, sort, order, inactiveDays, limit, offset } = params
 
   return useQuery({
-    queryKey: ['staff', { search, status, sort, order, limit, offset }],
+    queryKey: ['staff', { search, status, role, sort, order, inactiveDays, limit, offset }],
     queryFn: async () => {
       const sp = new URLSearchParams()
       if (search) sp.set('search', search)
       if (status?.length) sp.set('status', status.join(','))
+      if (role?.length) sp.set('role', role.join(','))
       if (sort) sp.set('sort', sort)
       if (order) sp.set('order', order)
+      if (inactiveDays !== undefined) sp.set('inactive_days', String(inactiveDays))
       if (limit !== undefined) sp.set('limit', String(limit))
       if (offset !== undefined) sp.set('offset', String(offset))
 

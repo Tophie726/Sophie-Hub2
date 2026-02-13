@@ -2,9 +2,11 @@
 const config = {
   preset: 'ts-jest',
   testEnvironment: 'node',
-  roots: ['<rootDir>/__tests__'],
+  // Include colocated tests under src/**/__tests__ as well as top-level __tests__.
+  roots: ['<rootDir>/__tests__', '<rootDir>/src'],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
+    '^server-only$': '<rootDir>/__tests__/__mocks__/server-only.js',
   },
   setupFiles: ['<rootDir>/jest.setup.ts'],
   transform: {

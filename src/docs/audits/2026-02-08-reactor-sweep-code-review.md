@@ -30,6 +30,7 @@ Each section below corresponds to one agent's work scope. Review independently a
 | `src/lib/api/__tests__/search-utils.test.ts` | **New** — 9 unit tests |
 | `src/app/api/staff/route.ts` | Line 67 — `search` param now quoted |
 | `src/app/api/partners/route.ts` | Line 77 — `search` param now quoted |
+| `src/lib/partners/partner-type-reconciliation.ts` | Search path must follow same escaping contract |
 
 **Review checklist:**
 - [ ] PostgREST double-quoting used (not backslash-escaping — `.or()` does not support `\` escaping)
@@ -38,12 +39,14 @@ Each section below corresponds to one agent's work scope. Review independently a
 - [ ] Result format: `"%value%"` (quotes and ILIKE wildcards wrapped together)
 - [ ] Callers do NOT add their own `%` wildcards (function includes them)
 - [ ] Empty/whitespace input returns empty string
+- [ ] Callers skip `.or()` when escaped pattern is empty (`''`) to avoid invalid `ilike.` fragments
 - [ ] Normal search terms (`John Smith`) → `"%John Smith%"`
 - [ ] Apostrophe handling (`o'hara`) — no parser break (guardrail #3)
 - [ ] Grammar injection payload (`test,status.eq.admin`) → `"%test,status.eq.admin%"` (Codex delta #3)
 - [ ] `.or()` filter strings remain syntactically valid after quoting
 - [ ] Import added correctly in both route files
 - [ ] 9 unit tests passing (grammar, wildcards, parens, apostrophe, double-quote, empty, backslash)
+- [ ] API smoke tests include whitespace-only payload and assert no parser error
 - [ ] No other search paths missed (check: are there other `.or()` with user input?)
 
 ---
@@ -93,7 +96,7 @@ Each section below corresponds to one agent's work scope. Review independently a
 - [ ] `REVOKE ALL ... FROM PUBLIC` (guardrail final #1)
 - [ ] `GRANT EXECUTE ... TO service_role` (guardrail final #1)
 - [ ] Stale-run recovery: handles both lease-expired AND never-started pending runs
-- [ ] Stale threshold: `now() - interval '15 minutes'` matches `LEASE_DURATION_MINUTES`
+- [ ] Stale threshold is consistent with `LEASE_DURATION_MINUTES` (or explicitly justified if intentionally larger)
 - [ ] Recovery + insert in same transaction (atomic — guardrail #1)
 - [ ] Returns UUID of new run
 

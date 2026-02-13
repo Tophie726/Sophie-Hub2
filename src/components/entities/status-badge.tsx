@@ -18,9 +18,15 @@ const partnerStatusStyles: Record<string, string> = {
 
 const staffStatusStyles: Record<string, string> = {
   active: 'bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20',
+  trial: 'bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20',
   onboarding: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20',
+  probation: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20',
+  onboarded: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20',
   on_leave: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20',
   offboarding: 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20',
+  inactive: 'bg-zinc-500/10 text-zinc-600 dark:text-zinc-400 border-zinc-500/20',
+  inactive_30d: 'bg-zinc-500/10 text-zinc-600 dark:text-zinc-400 border-zinc-500/20',
+  not_active: 'bg-zinc-500/10 text-zinc-600 dark:text-zinc-400 border-zinc-500/20',
   departed: 'bg-gray-500/10 text-gray-500 border-gray-500/20',
 }
 

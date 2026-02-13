@@ -83,7 +83,10 @@ CREATE TABLE staff (
 
   -- Status
   status TEXT DEFAULT 'active',
-    -- onboarding, active, on_leave, offboarding, departed
+    -- primary lifecycle status: trial, onboarding, probation, onboarded,
+    -- active, on_leave, offboarding, not_active, departed
+  status_tags TEXT[] DEFAULT '{}',
+    -- optional secondary lifecycle tags (multi-select), e.g. ['probation', 'inactive_30d']
 
   -- Capacity (for pod leaders / managers)
   max_clients INT,
@@ -109,6 +112,7 @@ CREATE TABLE staff (
 
 -- Indexes
 CREATE INDEX idx_staff_status ON staff(status);
+CREATE INDEX idx_staff_status_tags ON staff USING GIN(status_tags);
 CREATE INDEX idx_staff_role ON staff(role);
 CREATE INDEX idx_staff_email ON staff(email);
 ```

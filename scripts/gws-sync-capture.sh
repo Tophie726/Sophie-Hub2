@@ -108,6 +108,24 @@ request() {
     -o "${body_file}" > "${metrics_file}"
 }
 
+assert_json() {
+  local name="$1"
+  local expr="$2"
+  local message="$3"
+  local body_file="${OUT_DIR}/${name}.json"
+
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "Warning: jq not installed; skipping semantic assertion for ${name}" >&2
+    return 0
+  fi
+
+  if ! jq -e "${expr}" "${body_file}" >/dev/null 2>&1; then
+    echo "Semantic assertion failed for ${name}: ${message}" >&2
+    jq . "${body_file}" >&2 || cat "${body_file}" >&2
+    exit 1
+  fi
+}
+
 request "01-test-connection" "POST" "${BASE_URL}/api/google-workspace/test-connection"
 if [[ "${RUN_SYNC}" -eq 1 ]]; then
   request "02-sync" "POST" "${BASE_URL}/api/google-workspace/sync"
@@ -118,6 +136,24 @@ EOF
 fi
 request "03-sync-status" "GET" "${BASE_URL}/api/google-workspace/sync/status"
 request "04-users" "GET" "${BASE_URL}/api/google-workspace/users"
+
+assert_json "01-test-connection" \
+  '.success == true and (.data.connected == true)' \
+  "test-connection must report connected=true"
+
+if [[ "${RUN_SYNC}" -eq 1 ]]; then
+  assert_json "02-sync" \
+    '.success == true and (.data.success == true)' \
+    "sync must report data.success=true"
+fi
+
+assert_json "03-sync-status" \
+  '.success == true and (.data.snapshot_stats | type == "object") and ((.data.has_snapshot // false) == true or (.data.setup_required // false) == true)' \
+  "sync/status must return snapshot stats and a valid snapshot/setup state"
+
+assert_json "04-users" \
+  '.success == true and (.data.users | type == "array") and (.data.total | type == "number")' \
+  "users endpoint must return users array and numeric total"
 
 status_code() {
   local headers_file="$1"
@@ -150,7 +186,7 @@ if command -v jq >/dev/null 2>&1; then
   snapshot_total="$(jq -r '.data.snapshot_stats.total // "-"' "${OUT_DIR}/03-sync-status.json" 2>/dev/null || echo "-")"
   snapshot_people="$(jq -r '.data.snapshot_stats.active_people // "-"' "${OUT_DIR}/03-sync-status.json" 2>/dev/null || echo "-")"
   snapshot_shared="$(jq -r '.data.snapshot_stats.active_shared // "-"' "${OUT_DIR}/03-sync-status.json" 2>/dev/null || echo "-")"
-  users_count="$(jq -r '.data | if type=="array" then length else "-" end' "${OUT_DIR}/04-users.json" 2>/dev/null || echo "-")"
+  users_count="$(jq -r '.data.users | if type=="array" then length else "-" end' "${OUT_DIR}/04-users.json" 2>/dev/null || echo "-")"
 fi
 users_payload_bytes="$(wc -c < "${OUT_DIR}/04-users.json" | tr -d ' ')"
 

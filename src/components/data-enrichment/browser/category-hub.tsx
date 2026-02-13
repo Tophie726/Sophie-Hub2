@@ -2,13 +2,24 @@
 
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { FileSpreadsheet, FileText, FileQuestion, Database, Building2 } from 'lucide-react'
 import { CategoryCard } from './category-card'
 import { SlackIcon } from '@/components/icons/slack-icon'
 import { RoamIcon } from '@/components/icons/roam-icon'
 import { SupTaskIcon } from '@/components/icons/suptask-icon'
 import { CloseIcon } from '@/components/icons/close-icon'
 import { NotionIcon } from '@/components/icons/notion-icon'
+import { BigQueryIcon } from '@/components/icons/bigquery-icon'
+import { GoogleSheetsIcon } from '@/components/icons/google-sheets-icon'
+import { GoogleFormsIcon } from '@/components/icons/google-forms-icon'
+import { GoogleDocsIcon } from '@/components/icons/google-docs-icon'
+import { GoogleWorkspaceIcon } from '@/components/icons/google-workspace-icon'
+import { XeroIcon } from '@/components/icons/xero-icon'
+import { ZohoIcon } from '@/components/icons/zoho-icon'
+import { SignWellIcon } from '@/components/icons/signwell-icon'
+import { DocuSignIcon } from '@/components/icons/docusign-icon'
+import { TikTokShopIcon } from '@/components/icons/tiktok-shop-icon'
+import { CanvaIcon } from '@/components/icons/canva-icon'
+import { TeamtailorIcon } from '@/components/icons/teamtailor-icon'
 
 interface DataSourceStats {
   sources: number
@@ -17,7 +28,7 @@ interface DataSourceStats {
 }
 
 interface CategoryHubProps {
-  onSelectCategory: (category: 'sheets' | 'forms' | 'docs' | 'bigquery' | 'slack' | 'google_workspace') => void
+  onSelectCategory: (category: 'sheets' | 'forms' | 'docs' | 'bigquery' | 'slack' | 'google_workspace' | 'suptask') => void
 }
 
 const easeOut: [number, number, number, number] = [0.22, 1, 0.36, 1]
@@ -63,7 +74,7 @@ export function CategoryHub({ onSelectCategory }: CategoryHubProps) {
 
         {/* Card grid skeleton — matches real 3-col layout */}
         <div className="grid gap-4 md:gap-6 md:grid-cols-2 lg:grid-cols-3 max-w-4xl mx-auto px-4 md:px-0">
-          {Array.from({ length: 7 }, (_, i) => (
+          {Array.from({ length: 17 }, (_, i) => (
             <div
               key={i}
               className="p-5 md:p-8 rounded-2xl border border-border/40 bg-card"
@@ -125,8 +136,8 @@ export function CategoryHub({ onSelectCategory }: CategoryHubProps) {
         <CategoryCard
           title="Google Sheets"
           description="Connect spreadsheets and map columns to your database tables"
-          icon={FileSpreadsheet}
-          iconColor="text-green-600"
+          icon={GoogleSheetsIcon}
+          iconColor=""
           bgColor="bg-green-500/10"
           stats={sheetsStats || undefined}
           onClick={() => onSelectCategory('sheets')}
@@ -135,8 +146,8 @@ export function CategoryHub({ onSelectCategory }: CategoryHubProps) {
         <CategoryCard
           title="BigQuery"
           description="Amazon advertising and sales data from BigQuery"
-          icon={Database}
-          iconColor="text-blue-600"
+          icon={BigQueryIcon}
+          iconColor=""
           bgColor="bg-blue-500/10"
           onClick={() => onSelectCategory('bigquery')}
         />
@@ -145,7 +156,7 @@ export function CategoryHub({ onSelectCategory }: CategoryHubProps) {
           title="Slack"
           description="Map staff and channels, track response times"
           icon={SlackIcon}
-          iconColor="text-[#611f69]"
+          iconColor=""
           bgColor="bg-[#611f69]/10"
           onClick={() => onSelectCategory('slack')}
         />
@@ -153,8 +164,8 @@ export function CategoryHub({ onSelectCategory }: CategoryHubProps) {
         <CategoryCard
           title="Google Workspace"
           description="Sync directory users and enrich staff profiles"
-          icon={Building2}
-          iconColor="text-indigo-600"
+          icon={GoogleWorkspaceIcon}
+          iconColor=""
           bgColor="bg-indigo-500/10"
           onClick={() => onSelectCategory('google_workspace')}
         />
@@ -170,11 +181,11 @@ export function CategoryHub({ onSelectCategory }: CategoryHubProps) {
 
         <CategoryCard
           title="SupTask"
-          description="Task signals and operational workload context"
+          description="Ticket workload and support operations data"
           icon={SupTaskIcon}
           iconColor=""
           bgColor="bg-cyan-500/10"
-          comingSoon
+          onClick={() => onSelectCategory('suptask')}
         />
 
         <CategoryCard
@@ -198,8 +209,8 @@ export function CategoryHub({ onSelectCategory }: CategoryHubProps) {
         <CategoryCard
           title="Google Forms"
           description="Import form responses and map them to entities"
-          icon={FileText}
-          iconColor="text-purple-600"
+          icon={GoogleFormsIcon}
+          iconColor=""
           bgColor="bg-purple-500/10"
           comingSoon
         />
@@ -207,9 +218,72 @@ export function CategoryHub({ onSelectCategory }: CategoryHubProps) {
         <CategoryCard
           title="Documents"
           description="Extract structured data from Google Docs"
-          icon={FileQuestion}
-          iconColor="text-blue-600"
+          icon={GoogleDocsIcon}
+          iconColor=""
           bgColor="bg-blue-500/10"
+          comingSoon
+        />
+
+        <CategoryCard
+          title="Xero"
+          description="Accounting and bookkeeping activity enrichment"
+          icon={XeroIcon}
+          iconColor=""
+          bgColor="bg-sky-500/10"
+          comingSoon
+        />
+
+        <CategoryCard
+          title="Zoho"
+          description="CRM and back-office records enrichment"
+          icon={ZohoIcon}
+          iconColor=""
+          bgColor="bg-orange-500/10"
+          comingSoon
+        />
+
+        <CategoryCard
+          title="SignWell"
+          description="eSignature workflow and document status signals"
+          icon={SignWellIcon}
+          iconColor=""
+          bgColor="bg-emerald-500/10"
+          comingSoon
+        />
+
+        <CategoryCard
+          title="DocuSign"
+          description="Contract signatures and envelope status signals"
+          icon={DocuSignIcon}
+          iconColor=""
+          bgColor="bg-blue-500/10"
+          comingSoon
+        />
+
+        <CategoryCard
+          title="TikTok Shop"
+          description="Storefront orders and creator commerce signals"
+          icon={TikTokShopIcon}
+          iconColor=""
+          bgColor="bg-neutral-500/10"
+          comingSoon
+        />
+
+        <CategoryCard
+          title="Canva"
+          description="Design publishing and creative asset workflow signals"
+          icon={CanvaIcon}
+          iconColor=""
+          bgColor="bg-cyan-500/10"
+          comingSoon
+        />
+
+        <CategoryCard
+          title="Teamtailor"
+          description="Hiring pipeline, applicants, and recruiting operations signals"
+          icon={TeamtailorIcon}
+          iconColor=""
+          bgColor="bg-pink-500/10"
           comingSoon
         />
       </div>

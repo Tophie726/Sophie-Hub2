@@ -23,9 +23,22 @@ type SnapshotRow = {
   google_user_id: string
   primary_email: string
   full_name: string | null
+  given_name: string | null
+  family_name: string | null
   title: string | null
+  phone: string | null
   org_unit_path: string | null
   thumbnail_photo_url: string | null
+  aliases: string[] | null
+  non_editable_aliases: string[] | null
+  creation_time: string | null
+  last_login_time: string | null
+  department: string | null
+  cost_center: string | null
+  location: string | null
+  manager_email: string | null
+  is_delegated_admin: boolean
+  last_seen_at: string
   account_type_override: 'person' | 'shared_account' | null
   is_suspended: boolean
   is_deleted: boolean
@@ -146,12 +159,26 @@ export async function POST() {
                   google_user_id: user.google_user_id,
                   primary_email: user.primary_email,
                   full_name: user.full_name,
+                  given_name: user.given_name,
+                  family_name: user.family_name,
                   title: user.title,
+                  phone: user.phone,
                   org_unit_path: user.org_unit_path,
                   is_admin: user.is_admin,
+                  is_delegated_admin: user.is_delegated_admin,
                   is_suspended: user.is_suspended,
                   is_deleted: user.is_deleted,
                   thumbnail_photo_url: user.thumbnail_photo_url,
+                  aliases: user.aliases || [],
+                  non_editable_aliases: user.non_editable_aliases || [],
+                  creation_time: user.creation_time,
+                  last_login_time: user.last_login_time,
+                  department: user.department,
+                  cost_center: user.cost_center,
+                  location: user.location,
+                  manager_email: user.manager_email,
+                  last_seen_at: user.last_seen_at,
+                  synced_at: new Date().toISOString(),
                 },
               },
             },

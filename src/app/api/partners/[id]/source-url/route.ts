@@ -4,6 +4,7 @@ import { requireAuth, canAccessPartner } from '@/lib/auth/api-auth'
 import { apiSuccess, ApiErrors } from '@/lib/api/response'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { google } from 'googleapis'
+import { mapSheetsAuthError, resolveSheetsAccessToken } from '@/lib/google/sheets-auth'
 
 const supabase = getAdminClient()
 
@@ -74,6 +75,22 @@ export async function GET(
   }
 
   const session = await getServerSession(authOptions)
+  if (!session?.user?.email) {
+    return ApiErrors.unauthorized('Not authenticated')
+  }
+
+  let accessToken: string | null = null
+  try {
+    const resolved = await resolveSheetsAccessToken(session.accessToken)
+    accessToken = resolved.accessToken
+  } catch (authError) {
+    const mapped = mapSheetsAuthError(authError)
+    // Source URL can still return a non-cell deep link when auth is unavailable.
+    // Only hard-fail auth errors that indicate an unauthenticated user.
+    if (mapped.status === 401) {
+      return ApiErrors.unauthorized(mapped.message)
+    }
+  }
 
   try {
     // 1. Get the partner
@@ -175,12 +192,12 @@ export async function GET(
     let cellReference: string | null = null
     let tabGid: number | null = null
 
-    console.log(`[source-url] Looking up: ${partner.brand_name}, keyColumn: ${sourceKeyColumn}, hasToken: ${!!session?.accessToken}`)
+    console.log(`[source-url] Looking up: ${partner.brand_name}, keyColumn: ${sourceKeyColumn}, hasToken: ${!!accessToken}`)
 
-    if (session?.accessToken && keyValue) {
+    if (accessToken && keyValue) {
       try {
         const googleAuth = new google.auth.OAuth2()
-        googleAuth.setCredentials({ access_token: session.accessToken })
+        googleAuth.setCredentials({ access_token: accessToken })
         const sheets = google.sheets({ version: 'v4', auth: googleAuth })
 
         // Get spreadsheet metadata for GID

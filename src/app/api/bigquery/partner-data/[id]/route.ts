@@ -2,8 +2,8 @@
  * GET /api/bigquery/partner-data/[id]
  *
  * Fetches BigQuery advertising/sales data for a specific partner.
- * Looks up the partner's mapped client_name from entity_external_ids,
- * then queries the unified views for that client's data.
+ * Looks up the partner's mapped BigQuery identifiers from entity_external_ids,
+ * then queries the unified views using all mapped identifiers.
  *
  * Query params:
  *   view - specific view to query (default: sales)
@@ -13,10 +13,17 @@
  */
 
 import { NextRequest } from 'next/server'
+import { BigQuery } from '@google-cloud/bigquery'
 import { requireAuth, canAccessPartner } from '@/lib/auth/api-auth'
 import { apiSuccess, ApiErrors } from '@/lib/api/response'
-import { bigQueryConnector, UNIFIED_VIEWS } from '@/lib/connectors/bigquery'
+import { UNIFIED_VIEWS } from '@/lib/connectors/bigquery'
 import { getAdminClient } from '@/lib/supabase/admin'
+import { BIGQUERY } from '@/lib/constants'
+import {
+  inferMarketplaceCodeFromText,
+  normalizeMarketplaceCode,
+  normalizeMarketplaceCodes,
+} from '@/lib/amazon/marketplaces'
 
 const supabase = getAdminClient()
 
@@ -29,6 +36,41 @@ const VIEW_ALIASES: Record<string, string> = {
   sb: 'pbi_sb_str_unified_latest',
   products: 'pbi_dim_products_unified_latest',
   match: 'pbi_match_unified_latest',
+}
+
+const PARTNER_FIELD_PER_VIEW: Record<string, string> = {
+  pbi_sellingpartner_sales_unified_latest: 'client_id',
+  pbi_sellingpartner_refunds_unified_latest: 'client_id',
+  pbi_sp_par_unified_latest: 'client_name',
+  pbi_sd_par_unified_latest: 'client_name',
+  pbi_sb_str_unified_latest: 'client_id',
+  pbi_dim_products_unified_latest: 'client_id',
+  pbi_match_unified_latest: 'client_name',
+}
+
+function getPartnerFilterCondition(partnerField: string): string {
+  return `CAST(${partnerField} AS STRING) IN UNNEST(@clientIds)`
+}
+
+function extractMarketplaceCodeFromMapping(mapping: {
+  external_id: string
+  metadata: Record<string, unknown> | null
+}): string | null {
+  const root = mapping.metadata
+  const fromRoot = typeof root?.marketplace_code === 'string'
+    ? normalizeMarketplaceCode(root.marketplace_code)
+    : null
+  if (fromRoot) return fromRoot
+
+  const referenceSheet = root?.reference_sheet
+  if (referenceSheet && typeof referenceSheet === 'object') {
+    const fromSheet = typeof (referenceSheet as Record<string, unknown>).marketplace_code === 'string'
+      ? normalizeMarketplaceCode((referenceSheet as Record<string, unknown>).marketplace_code as string)
+      : null
+    if (fromSheet) return fromSheet
+  }
+
+  return inferMarketplaceCodeFromText(mapping.external_id)
 }
 
 export async function GET(
@@ -49,30 +91,29 @@ export async function GET(
       return ApiErrors.forbidden('You do not have access to this partner')
     }
 
-    // Look up the partner's mapped client_name
-    const { data: mapping, error: mappingError } = await supabase
+    // Look up the partner's mapped client identifiers (supports many per partner).
+    const { data: mappings, error: mappingError } = await supabase
       .from('entity_external_ids')
-      .select('external_id')
+      .select('external_id, metadata')
       .eq('entity_type', 'partners')
       .eq('entity_id', partnerId)
       .eq('source', 'bigquery')
-      .maybeSingle()
+      .order('updated_at', { ascending: false })
 
     if (mappingError) {
       console.error('Error looking up BigQuery mapping:', mappingError)
       return ApiErrors.database()
     }
 
-    if (!mapping) {
+    if (!mappings || mappings.length === 0) {
       return apiSuccess({
         mapped: false,
         clientName: null,
+        clientNames: [],
         data: null,
         message: 'This partner is not mapped to a BigQuery client'
       })
     }
-
-    const clientName = mapping.external_id
 
     // Parse query parameters
     const { searchParams } = new URL(request.url)
@@ -80,6 +121,42 @@ export async function GET(
     const startDate = searchParams.get('startDate') || undefined
     const endDate = searchParams.get('endDate') || undefined
     const limit = Math.min(parseInt(searchParams.get('limit') || '100', 10), 1000)
+    const marketplaceValues = [
+      ...searchParams.getAll('marketplace'),
+      ...(searchParams.get('marketplaces') || '')
+        .split(',')
+        .map(value => value.trim())
+        .filter(Boolean),
+    ]
+    const requestedMarketplaceCodes = normalizeMarketplaceCodes(marketplaceValues)
+
+    const filteredMappings = requestedMarketplaceCodes.length > 0
+      ? mappings.filter((mapping) => {
+          const mappedCode = extractMarketplaceCodeFromMapping(mapping as {
+            external_id: string
+            metadata: Record<string, unknown> | null
+          })
+          return !!mappedCode && requestedMarketplaceCodes.includes(mappedCode)
+        })
+      : mappings
+
+    const clientIds = Array.from(
+      new Set(
+        filteredMappings
+          .map(mapping => String(mapping.external_id || '').trim())
+          .filter(value => value.length > 0)
+      )
+    )
+
+    if (clientIds.length === 0) {
+      return apiSuccess({
+        mapped: true,
+        clientName: null,
+        clientNames: [],
+        data: null,
+        message: 'No mapped BigQuery identifiers found for the selected marketplaces',
+      })
+    }
 
     // Resolve view name from alias or direct name
     const viewName = VIEW_ALIASES[viewParam] || viewParam
@@ -89,27 +166,46 @@ export async function GET(
       return ApiErrors.notFound(`View "${viewParam}"`)
     }
 
-    const config = {
-      type: 'bigquery' as const,
-      project_id: 'sophie-society-reporting',
-      dataset_id: 'pbi',
-      partner_field: 'client_id',
+    const partnerField = PARTNER_FIELD_PER_VIEW[viewName] || 'client_id'
+    const fullTable = `\`${BIGQUERY.PROJECT_ID}.${BIGQUERY.DATASET}.${viewName}\``
+    const queryParams: Record<string, string | string[]> = { clientIds }
+    const conditions: string[] = [getPartnerFilterCondition(partnerField)]
+
+    if (startDate) {
+      conditions.push('date >= @startDate')
+      queryParams.startDate = startDate
+    }
+    if (endDate) {
+      conditions.push('date <= @endDate')
+      queryParams.endDate = endDate
     }
 
-    const data = await bigQueryConnector.getPartnerData(config, viewName, clientName, {
-      limit,
-      startDate,
-      endDate,
+    const whereClause = conditions.join(' AND ')
+    const query = `SELECT * FROM ${fullTable} WHERE ${whereClause} LIMIT ${limit}`
+
+    const bq = new BigQuery({ projectId: BIGQUERY.PROJECT_ID })
+    const [job] = await bq.createQueryJob({
+      query,
+      params: queryParams,
+      labels: { source: 'sophie-hub', feature: 'partner-data' },
     })
+    const [rows] = await job.getQueryResults()
+
+    const headers = rows.length > 0 ? Object.keys(rows[0]) : []
+    const normalizedRows = rows.map(row =>
+      headers.map((header) => String(row[header] ?? ''))
+    )
 
     return apiSuccess({
       mapped: true,
-      clientName,
+      clientName: clientIds[0] || null,
+      clientNames: clientIds,
+      marketplaces: requestedMarketplaceCodes,
       view: viewParam,
       viewName,
-      rowCount: data.rows.length,
-      headers: data.headers,
-      rows: data.rows,
+      rowCount: normalizedRows.length,
+      headers,
+      rows: normalizedRows,
     })
   } catch (error) {
     console.error('BigQuery partner-data error:', error)

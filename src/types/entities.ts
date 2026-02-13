@@ -206,12 +206,16 @@ export interface StaffListItem {
   department: string | null
   title: string | null
   status: string | null
+  status_tags?: string[] | null
   max_clients: number | null
   current_client_count: number | null
   services: string[] | null
   hire_date: string | null
   avatar_url: string | null
   timezone: string | null
+  google_last_login_at?: string | null
+  google_last_seen_at?: string | null
+  source_data?: Record<string, unknown> | null
   created_at: string
 }
 
@@ -279,6 +283,7 @@ export interface StaffDetail {
   department: string | null
   title: string | null
   status: string | null
+  status_tags?: string[] | null
   max_clients: number | null
   current_client_count: number | null
   services: string[] | null

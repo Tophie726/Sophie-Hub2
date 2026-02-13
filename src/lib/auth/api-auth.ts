@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { authOptions } from './config'
 import { Role, Permission, ROLES, hasPermission } from './roles'
 import { getAdminClient } from '@/lib/supabase/admin'
-import { isAdminEmail } from './admin-access'
+import { isAdminEmail, isTrueAdmin } from './admin-access'
 
 // Server-side Supabase client for auth lookups
 const supabase = getAdminClient()
@@ -142,6 +142,33 @@ export async function requireRole(...roles: Role[]): Promise<AuthResult> {
       authenticated: false,
       response: NextResponse.json(
         { error: 'Forbidden', message: `Required role: ${roles.join(' or ')}` },
+        { status: 403 }
+      ),
+    }
+  }
+
+  return auth
+}
+
+/**
+ * Check if the request is authenticated AND the user is a "true admin".
+ *
+ * True admin = staffRole === 'admin' OR email in ADMIN_EMAILS.
+ * Excludes operations_admin. Used for view-builder control-plane mutations
+ * (preview impersonation, fork-on-edit, section/widget composition).
+ */
+export async function requireTrueAdmin(): Promise<AuthResult> {
+  const auth = await requireAuth()
+
+  if (!auth.authenticated) {
+    return auth
+  }
+
+  if (!isTrueAdmin(auth.user.staffRole, auth.user.email)) {
+    return {
+      authenticated: false,
+      response: NextResponse.json(
+        { error: 'Forbidden', message: 'Requires true admin access' },
         { status: 403 }
       ),
     }

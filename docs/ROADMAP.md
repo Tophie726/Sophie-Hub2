@@ -3,6 +3,10 @@
 > This document outlines what we're building, in what order, and why.
 > Last updated: 2026-01-27
 
+Operational posture snapshots:
+- `docs/SECURITY-STATUS-SHARE-2026-02-11.md`
+- `docs/STABILITY-SCALABILITY-STATUS-SHARE-2026-02-11.md`
+
 ---
 
 ## Vision

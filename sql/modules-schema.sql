@@ -86,15 +86,15 @@ CREATE TABLE IF NOT EXISTS dashboard_widgets (
 
   -- Only valid widget types
   CONSTRAINT dashboard_widgets_type_check
-    CHECK (widget_type IN ('metric', 'chart', 'table', 'text')),
+    CHECK (widget_type IN ('metric', 'chart', 'table', 'text', 'ai_text', 'smart_text')),
 
   -- Grid constraints
-  CONSTRAINT dashboard_widgets_col_span_check CHECK (col_span >= 1 AND col_span <= 4),
+  CONSTRAINT dashboard_widgets_col_span_check CHECK (col_span >= 1 AND col_span <= 8),
   CONSTRAINT dashboard_widgets_row_span_check CHECK (row_span >= 1 AND row_span <= 4)
 );
 
 COMMENT ON TABLE dashboard_widgets IS 'Individual data widgets within a dashboard section';
-COMMENT ON COLUMN dashboard_widgets.widget_type IS 'Widget type: metric, chart, table, or text';
+COMMENT ON COLUMN dashboard_widgets.widget_type IS 'Widget type: metric, chart, table, text, ai_text, or smart_text';
 COMMENT ON COLUMN dashboard_widgets.config IS 'Widget-specific configuration as JSONB (see WidgetConfig types)';
 
 -- =============================================================================
@@ -269,6 +269,30 @@ VALUES (
   'BarChart3',
   'orange',
   1
+)
+ON CONFLICT (slug) DO NOTHING;
+
+INSERT INTO modules (id, slug, name, description, icon, color, sort_order)
+VALUES (
+  gen_random_uuid(),
+  'work-calendar',
+  'Work Calendar',
+  'Team schedules, task timelines, and partner activity calendar.',
+  'Calendar',
+  'blue',
+  2
+)
+ON CONFLICT (slug) DO NOTHING;
+
+INSERT INTO modules (id, slug, name, description, icon, color, sort_order)
+VALUES (
+  gen_random_uuid(),
+  'smart-text',
+  'Smart Text',
+  'Dynamic text blocks with personalized content.',
+  'FileText',
+  'violet',
+  3
 )
 ON CONFLICT (slug) DO NOTHING;
 

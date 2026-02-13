@@ -31,7 +31,7 @@ function maxDepth(obj: unknown, depth = 0): number {
   return Math.max(...values.map(v => maxDepth(v, depth + 1)))
 }
 
-const VALID_WIDGET_TYPES = ['metric', 'chart', 'table', 'text', 'ai_text'] as const
+const VALID_WIDGET_TYPES = ['metric', 'chart', 'table', 'text', 'ai_text', 'smart_text'] as const
 
 const CreateWidgetSchema = z.object({
   section_id: z.string().uuid(),

@@ -30,6 +30,22 @@ export type AdminAuditAction =
   | 'rule.create'
   | 'rule.update'
   | 'rule.delete'
+  // Preview session (VB21)
+  | 'preview.create'
+  // Module composition (VB21)
+  | 'module.assign'
+  | 'module.remove'
+  | 'module.reorder'
+  // Dashboard composition (VB30 — Wave 4)
+  | 'dashboard.fork'
+  | 'section.create'
+  | 'section.delete'
+  | 'section.reorder'
+  | 'widget.create'
+  | 'widget.update'
+  | 'widget.delete'
+  // Staff lifecycle operations
+  | 'staff.bulk_update'
 
 export interface AdminAuditEntry {
   action: AdminAuditAction
@@ -139,5 +155,215 @@ export function logRuleChange(
       view_id: viewId,
       ...extra,
     },
+  })
+}
+
+export function logStaffBulkUpdate(
+  actorId: string,
+  actorEmail: string,
+  details: Record<string, unknown>,
+): Promise<void> {
+  return logAdminAudit({
+    action: 'staff.bulk_update',
+    actorId,
+    actorEmail,
+    details,
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Preview + Module composition helpers (VB21)
+// ---------------------------------------------------------------------------
+
+export function logPreviewCreate(
+  actorId: string,
+  actorEmail: string,
+  viewId: string,
+  sessionId: string,
+  subjectType: string,
+  subjectTargetId: string | null,
+  dataMode: string,
+): Promise<void> {
+  return logAdminAudit({
+    action: 'preview.create',
+    actorId,
+    actorEmail,
+    details: {
+      view_id: viewId,
+      session_id: sessionId,
+      subject_type: subjectType,
+      target_id: subjectTargetId,
+      data_mode: dataMode,
+    },
+  })
+}
+
+export function logModuleAssign(
+  actorId: string,
+  actorEmail: string,
+  viewId: string,
+  viewSlug: string,
+  moduleId: string,
+): Promise<void> {
+  return logAdminAudit({
+    action: 'module.assign',
+    actorId,
+    actorEmail,
+    details: {
+      view_id: viewId,
+      view_slug: viewSlug,
+      module_id: moduleId,
+    },
+  })
+}
+
+export function logModuleRemove(
+  actorId: string,
+  actorEmail: string,
+  viewId: string,
+  viewSlug: string,
+  moduleId: string,
+): Promise<void> {
+  return logAdminAudit({
+    action: 'module.remove',
+    actorId,
+    actorEmail,
+    details: {
+      view_id: viewId,
+      view_slug: viewSlug,
+      module_id: moduleId,
+    },
+  })
+}
+
+export function logModuleReorder(
+  actorId: string,
+  actorEmail: string,
+  viewId: string,
+  viewSlug: string,
+  order: Array<{ module_id: string; sort_order: number }>,
+): Promise<void> {
+  return logAdminAudit({
+    action: 'module.reorder',
+    actorId,
+    actorEmail,
+    details: {
+      view_id: viewId,
+      view_slug: viewSlug,
+      module_reorder: order,
+    },
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Dashboard composition helpers (VB30 — Wave 4)
+// ---------------------------------------------------------------------------
+
+export function logDashboardFork(
+  actorId: string,
+  actorEmail: string,
+  viewId: string,
+  forkedDashboardId: string,
+  templateDashboardId: string,
+): Promise<void> {
+  return logAdminAudit({
+    action: 'dashboard.fork',
+    actorId,
+    actorEmail,
+    details: {
+      view_id: viewId,
+      forked_dashboard_id: forkedDashboardId,
+      template_dashboard_id: templateDashboardId,
+    },
+  })
+}
+
+export function logSectionCreate(
+  actorId: string,
+  actorEmail: string,
+  viewId: string,
+  dashboardId: string,
+  sectionId: string,
+): Promise<void> {
+  return logAdminAudit({
+    action: 'section.create',
+    actorId,
+    actorEmail,
+    details: { view_id: viewId, dashboard_id: dashboardId, section_id: sectionId },
+  })
+}
+
+export function logSectionDelete(
+  actorId: string,
+  actorEmail: string,
+  viewId: string,
+  dashboardId: string,
+  sectionId: string,
+): Promise<void> {
+  return logAdminAudit({
+    action: 'section.delete',
+    actorId,
+    actorEmail,
+    details: { view_id: viewId, dashboard_id: dashboardId, section_id: sectionId },
+  })
+}
+
+export function logSectionReorder(
+  actorId: string,
+  actorEmail: string,
+  viewId: string,
+  dashboardId: string,
+  order: Array<{ id: string; sort_order: number }>,
+): Promise<void> {
+  return logAdminAudit({
+    action: 'section.reorder',
+    actorId,
+    actorEmail,
+    details: { view_id: viewId, dashboard_id: dashboardId, section_reorder: order },
+  })
+}
+
+export function logWidgetCreate(
+  actorId: string,
+  actorEmail: string,
+  viewId: string,
+  dashboardId: string,
+  widgetId: string,
+): Promise<void> {
+  return logAdminAudit({
+    action: 'widget.create',
+    actorId,
+    actorEmail,
+    details: { view_id: viewId, dashboard_id: dashboardId, widget_id: widgetId },
+  })
+}
+
+export function logWidgetUpdate(
+  actorId: string,
+  actorEmail: string,
+  viewId: string,
+  dashboardId: string,
+  widgetId: string,
+): Promise<void> {
+  return logAdminAudit({
+    action: 'widget.update',
+    actorId,
+    actorEmail,
+    details: { view_id: viewId, dashboard_id: dashboardId, widget_id: widgetId },
+  })
+}
+
+export function logWidgetDelete(
+  actorId: string,
+  actorEmail: string,
+  viewId: string,
+  dashboardId: string,
+  widgetId: string,
+): Promise<void> {
+  return logAdminAudit({
+    action: 'widget.delete',
+    actorId,
+    actorEmail,
+    details: { view_id: viewId, dashboard_id: dashboardId, widget_id: widgetId },
   })
 }

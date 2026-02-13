@@ -13,8 +13,14 @@ import { apiError, apiSuccess } from '@/lib/api/response'
 import { runPartnerTypeReconciliation } from '@/lib/partners/partner-type-reconciliation'
 
 export async function POST(request: NextRequest) {
+  const cronSecret = process.env.CRON_SECRET
+  if (!cronSecret) {
+    console.error('Partner type reconciliation cron: CRON_SECRET is not configured')
+    return apiError('INTERNAL_ERROR', 'Cron secret is not configured', 500)
+  }
+
   const authHeader = request.headers.get('authorization')
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (authHeader !== `Bearer ${cronSecret}`) {
     return apiError('UNAUTHORIZED', 'Invalid cron secret', 401)
   }
 

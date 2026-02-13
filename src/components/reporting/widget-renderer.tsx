@@ -8,6 +8,7 @@ import type {
   TableWidgetConfig,
   TextWidgetConfig,
   AiTextWidgetConfig,
+  SmartTextWidgetConfig,
   WidgetDataMode,
 } from '@/types/modules'
 import { MetricWidget } from '@/components/reporting/widgets/metric-widget'
@@ -15,6 +16,7 @@ import { ChartWidget } from '@/components/reporting/widgets/chart-widget'
 import { TableWidget } from '@/components/reporting/widgets/table-widget'
 import { TextWidget } from '@/components/reporting/widgets/text-widget'
 import { AiTextWidget } from '@/components/reporting/widgets/ai-text-widget'
+import { SmartTextWidget } from '@/components/reporting/widgets/smart-text-widget'
 
 interface WidgetRendererProps {
   widget: DashboardWidget
@@ -88,6 +90,18 @@ export function WidgetRenderer({ widget, dateRange, partnerId, dataMode, refresh
       return (
         <AiTextWidget
           config={widget.config as AiTextWidgetConfig}
+          dateRange={dateRange}
+          partnerId={resolvedPartnerId}
+          dataMode={dataMode}
+          refreshTick={refreshTick}
+          forceRefreshToken={forceRefreshToken}
+        />
+      )
+    case 'smart_text':
+      return (
+        <SmartTextWidget
+          config={widget.config as SmartTextWidgetConfig}
+          title={widget.title}
           dateRange={dateRange}
           partnerId={resolvedPartnerId}
           dataMode={dataMode}

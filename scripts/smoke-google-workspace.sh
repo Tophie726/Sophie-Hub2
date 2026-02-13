@@ -74,6 +74,8 @@ call_api() {
   local method="$1"
   local path="$2"
   local payload="${3:-}"
+  local jq_assert="${4:-}"
+  local jq_message="${5:-Semantic assertion failed}"
   local response
   local http_status
   local body
@@ -111,22 +113,52 @@ call_api() {
     echo "Request failed: ${method} ${path}" >&2
     exit 1
   fi
+
+  if [[ -n "$jq_assert" ]]; then
+    if command -v jq >/dev/null 2>&1; then
+      if ! echo "$body" | jq -e "$jq_assert" >/dev/null; then
+        echo "Semantic check failed for ${method} ${path}: ${jq_message}" >&2
+        echo "$body" | jq . >&2 || true
+        exit 1
+      fi
+    else
+      echo "Warning: jq not installed; skipping semantic assertion for ${method} ${path}" >&2
+    fi
+  fi
 }
 
 echo "Running Google Workspace smoke flow against ${BASE_URL}"
-call_api POST /api/google-workspace/test-connection
-call_api POST /api/google-workspace/sync
-call_api GET /api/google-workspace/sync/status
-call_api GET /api/google-workspace/users
+call_api POST /api/google-workspace/test-connection "" \
+  '.success == true and (.data.connected == true)' \
+  'test-connection must report connected=true'
+call_api POST /api/google-workspace/sync "" \
+  '.success == true and (.data.success == true)' \
+  'sync must report data.success=true'
+call_api GET /api/google-workspace/sync/status "" \
+  '.success == true and (.data.snapshot_stats | type == "object") and ((.data.has_snapshot // false) == true or (.data.setup_required // false) == true)' \
+  'sync status must return snapshot stats and a valid snapshot/setup state'
+call_api GET /api/google-workspace/users "" \
+  '.success == true and (.data.users | type == "array") and (.data.total | type == "number")' \
+  'users endpoint must return users array and numeric total'
 
 if [[ "$WITH_BOOTSTRAP" -eq 1 ]]; then
-  call_api POST /api/google-workspace/staff/bootstrap
+  call_api POST /api/google-workspace/staff/bootstrap "" \
+    '.success == true and (.data.created_staff | type == "number") and (.data.mapped_existing_staff | type == "number")' \
+    'staff bootstrap must return created/mapped counts'
 fi
 
-call_api POST /api/google-workspace/mappings/staff/auto-match
-call_api POST /api/google-workspace/enrich-staff
-call_api GET /api/google-workspace/mappings/staff
-call_api GET /api/google-workspace/staff-approvals
+call_api POST /api/google-workspace/mappings/staff/auto-match "" \
+  '.success == true and (.data.matched | type == "number")' \
+  'auto-match must return matched count'
+call_api POST /api/google-workspace/enrich-staff "" \
+  '.success == true and (.data.enriched | type == "number") and (.data.skipped | type == "number")' \
+  'enrich-staff must return enriched/skipped counts'
+call_api GET /api/google-workspace/mappings/staff "" \
+  '.success == true and (.data.mappings | type == "array")' \
+  'mappings endpoint must return mappings array'
+call_api GET /api/google-workspace/staff-approvals "" \
+  '.success == true and (.data.approvals | type == "array") and (.data.counts | type == "object")' \
+  'staff-approvals endpoint must return approvals and counts'
 
 echo
 echo "Smoke flow complete."

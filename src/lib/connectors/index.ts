@@ -39,6 +39,7 @@ export type {
   GoogleWorkspaceConnectorConfig,
   ApiConnectorConfig,
   CsvConnectorConfig,
+  SupTaskConnectorConfig,
   // Metadata
   ConnectorMetadata,
   ConnectorCapabilities,
@@ -63,6 +64,7 @@ export {
   isGoogleWorkspaceConfig,
   isApiConfig,
   isCsvConfig,
+  isSupTaskConfig,
 } from './types'
 
 // =============================================================================
@@ -92,6 +94,7 @@ export { GoogleSheetsConnector, googleSheetsConnector } from './google-sheets'
 export { BigQueryConnector, bigQueryConnector, UNIFIED_VIEWS } from './bigquery'
 export { SlackConnector, slackConnector } from './slack'
 export { GoogleWorkspaceConnector, googleWorkspaceConnector } from './google-workspace'
+export { SupTaskConnector, supTaskConnector } from './suptask'
 
 // =============================================================================
 // Auto-Register Connectors
@@ -102,6 +105,7 @@ import { googleSheetsConnector } from './google-sheets'
 import { bigQueryConnector } from './bigquery'
 import { slackConnector } from './slack'
 import { googleWorkspaceConnector } from './google-workspace'
+import { supTaskConnector } from './suptask'
 
 // Register connectors on module load
 // This ensures they're available immediately when the module is imported
@@ -125,6 +129,12 @@ try {
 
 try {
   registerConnector(googleWorkspaceConnector)
+} catch {
+  // Already registered (module was imported multiple times)
+}
+
+try {
+  registerConnector(supTaskConnector)
 } catch {
   // Already registered (module was imported multiple times)
 }

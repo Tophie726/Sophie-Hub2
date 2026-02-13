@@ -2,16 +2,29 @@ import { getServerSession } from 'next-auth'
 import { NextRequest, NextResponse } from 'next/server'
 import { authOptions } from '@/lib/auth/config'
 import { getSheetData } from '@/lib/google/sheets'
+import { mapSheetsAuthError, resolveSheetsAccessToken } from '@/lib/google/sheets-auth'
 import { checkSheetsRateLimit, rateLimitHeaders } from '@/lib/rate-limit'
 
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
 
-    if (!session?.accessToken) {
+    if (!session?.user?.email) {
       return NextResponse.json(
         { error: 'Not authenticated' },
         { status: 401 }
+      )
+    }
+
+    let accessToken: string
+    try {
+      const resolved = await resolveSheetsAccessToken(session.accessToken)
+      accessToken = resolved.accessToken
+    } catch (authError) {
+      const mapped = mapSheetsAuthError(authError)
+      return NextResponse.json(
+        { error: mapped.message },
+        { status: mapped.status }
       )
     }
 
@@ -38,7 +51,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const data = await getSheetData(session.accessToken, spreadsheetId, tabName, headerRow)
+    const data = await getSheetData(accessToken, spreadsheetId, tabName, headerRow)
 
     return NextResponse.json(data)
   } catch (error) {

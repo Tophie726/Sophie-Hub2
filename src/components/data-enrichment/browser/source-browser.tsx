@@ -100,6 +100,7 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
 
   // Sync state
   const [isSyncing, setIsSyncing] = useState(false)
+  const [isAutoMatchingStaffByEmail, setIsAutoMatchingStaffByEmail] = useState(false)
   const [syncStatus, setSyncStatus] = useState<{
     lastSyncAt?: string | null
     lastSyncStatus?: 'completed' | 'failed' | null
@@ -433,7 +434,7 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
 
   // Handle sync: directly sync to database (no dry run preview)
   const handleSync = useCallback(async () => {
-    if (!activeSource?.id || isSyncing || syncProgress.isRunning) return
+    if (!activeSource?.id || isSyncing || syncProgress.isRunning || isAutoMatchingStaffByEmail) return
 
     // Only sync tabs that have column mappings (columnCount > 0 means they have saved mappings)
     const syncableTabs = activeSource.tabs?.filter(
@@ -518,7 +519,70 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
         description: `${totalCreated} created, ${totalUpdated} updated`,
       })
     }
-  }, [activeSource, isSyncing, syncProgress.isRunning])
+  }, [activeSource, isSyncing, syncProgress.isRunning, isAutoMatchingStaffByEmail])
+
+  const handleAutoMatchStaffByEmail = useCallback(async () => {
+    if (!activeSource?.id || isAutoMatchingStaffByEmail || isSyncing || syncProgress.isRunning) return
+
+    setIsAutoMatchingStaffByEmail(true)
+    try {
+      const response = await fetch(`/api/sync/source/${activeSource.id}/staff-auto-match`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ create_unmatched_contractors: true }),
+      })
+
+      const json = await response.json().catch(() => null) as {
+        success?: boolean
+        data?: {
+          matched?: number
+          skipped?: number
+          tabs_synced?: number
+          tabs_with_email_key?: number
+          contractors_created?: number
+          message?: string
+        }
+        error?: { message?: string }
+      } | null
+
+      if (!response.ok || !json?.success || !json.data) {
+        toast.error('Staff auto-match failed', {
+          description: json?.error?.message || 'Unable to auto-match staff for this source.',
+        })
+        return
+      }
+
+      const matched = json.data.matched || 0
+      const skipped = json.data.skipped || 0
+      const tabsSynced = json.data.tabs_synced || 0
+      const tabsWithEmailKey = json.data.tabs_with_email_key || 0
+      const contractorsCreated = json.data.contractors_created || 0
+
+      if (matched > 0 || contractorsCreated > 0) {
+        toast.success('Staff auto-match complete', {
+          description: `${matched} matched · ${contractorsCreated} contractors created · ${skipped} skipped · ${tabsSynced}/${tabsWithEmailKey} tabs processed`,
+        })
+      } else {
+        toast.info('Auto-match complete', {
+          description: json.data.message || `No existing staff emails matched. ${skipped} rows skipped.`,
+        })
+      }
+
+      // Refresh sources after auto-match so overview cards and sync metadata stay fresh.
+      const sourcesResponse = await fetch('/api/data-sources', { cache: 'no-store' })
+      if (sourcesResponse.ok) {
+        const payload = await sourcesResponse.json()
+        const freshSources = payload.data?.sources || payload.sources || []
+        setSources(freshSources)
+        setCachedSources(freshSources as CachedDataSource[])
+      }
+    } catch (error) {
+      console.error('Error running staff auto-match:', error)
+      toast.error('Staff auto-match failed')
+    } finally {
+      setIsAutoMatchingStaffByEmail(false)
+    }
+  }, [activeSource?.id, isAutoMatchingStaffByEmail, isSyncing, syncProgress.isRunning])
 
   // Auto-trigger sync preview after mapping save completes and sources refresh
   useEffect(() => {
@@ -1200,6 +1264,8 @@ export function SourceBrowser({ onBack, initialSourceId, initialTabId, onSourceC
               isSyncing={isSyncing}
               syncProgress={syncProgress}
               syncStatus={syncStatus}
+              onAutoMatchStaffByEmail={handleAutoMatchStaffByEmail}
+              isAutoMatchingStaffByEmail={isAutoMatchingStaffByEmail}
               isLoadingPreview={isLoadingPreview}
             />
           </motion.div>

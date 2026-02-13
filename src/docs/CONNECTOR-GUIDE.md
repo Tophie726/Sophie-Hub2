@@ -193,16 +193,17 @@ CREATE TABLE entity_external_ids (
 -- One-to-one semantics for selected sources
 CREATE UNIQUE INDEX idx_entity_external_ids_one_to_one_sources
   ON entity_external_ids(entity_type, entity_id, source)
-  WHERE source IN ('bigquery', 'slack_user', 'google_workspace_user');
+  WHERE source IN ('slack_user', 'google_workspace_user');
 ```
 
-**Migrations:** `supabase/migrations/20260205_entity_external_ids.sql`, `supabase/migrations/20260207_relax_entity_source_constraint.sql`
+**Migrations:** `supabase/migrations/20260205_entity_external_ids.sql`, `supabase/migrations/20260207_relax_entity_source_constraint.sql`, `supabase/migrations/20260220_bigquery_multi_marketplace_mappings.sql`
 
 **Constraints explained:**
 
 - `UNIQUE(entity_type, entity_id, source, external_id)` -- Allows one-to-many mappings (for example, one partner mapped to multiple Slack channels).
-- `UNIQUE(source, external_id)` -- A BigQuery client_name can only be mapped to one partner. Prevents duplicate mappings.
-- `idx_entity_external_ids_one_to_one_sources` (partial unique index) -- Keeps one-to-one behavior for `bigquery`, `slack_user`, and `google_workspace_user`.
+- `UNIQUE(source, external_id)` -- A BigQuery client identifier can only be mapped to one partner. Prevents duplicate ownership across partners.
+- `idx_entity_external_ids_one_to_one_sources` (partial unique index) -- Keeps one-to-one behavior for `slack_user` and `google_workspace_user`.
+- BigQuery is intentionally one-to-many per partner to support multiple marketplaces (for example, `BRAND US`, `BRAND UK`, `BRAND DE`).
 
 **Usage patterns:**
 
@@ -237,13 +238,17 @@ const { data } = await supabase
 
 | Source value | Entity type | External ID contains |
 |-------------|-------------|---------------------|
-| `bigquery` | partners | BigQuery `client_name` |
+| `bigquery` | partners | BigQuery client identifier (`client_id` or `client_name`, marketplace-aware) |
 | `slack_user` | staff | Slack user ID (e.g., `U06ABCDEF`) |
 | `slack_channel` | partners | Slack channel ID (e.g., `C06ABCDEF`) |
 | `google_workspace_user` | staff | Immutable Google user ID |
 | `google_workspace_alias` | staff | Google alias email address |
 | `closeio` | partners | Close.io lead ID |
 | `zoho` | partners | Zoho contact ID |
+
+**BigQuery mapping note:** store optional marketplace metadata (for example `marketplace_code: 'US'`) in `metadata` so query paths can filter or aggregate by marketplace set without schema changes.
+
+**Marketplace normalization:** use `src/lib/amazon/marketplaces.ts` as the canonical marketplace registry. It currently covers Amazon marketplaces `US, CA, MX, BR, UK, DE, FR, IT, ES, NL, SE, PL, BE, IE, TR, JP, AU, SG, IN, AE, SA, EG, ZA` and accepts alias-based normalization so new marketplace codes can be added without API contract changes.
 
 **API reference:** `src/app/api/bigquery/partner-mappings/route.ts` shows the full CRUD pattern for BigQuery mappings.
 

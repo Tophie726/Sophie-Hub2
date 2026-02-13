@@ -106,6 +106,35 @@ Use this baseline to compare against post-sweep.
 
 ---
 
+## Next Sweep Addendum (2026-02-10)
+
+Use this as mandatory carry-forward guidance when rerunning the security sweep.
+
+### A. Search hardening contract checks (mandatory)
+- Validate `escapePostgrestValue()` caller contract everywhere:
+  - Caller MUST use `ilike.${escaped}` directly.
+  - Caller MUST NOT wrap with extra `%...%`.
+  - Caller MUST skip `.or()` when escaped value is empty (`''`) after trim.
+- Expand search-path inventory beyond `/api/staff` and `/api/partners`:
+  - Include `src/lib/partners/partner-type-reconciliation.ts` and any future `.or()` search paths.
+- Add explicit API smoke cases:
+  - whitespace-only payload (`"   "`)
+  - grammar payload (`test,status.eq.admin`)
+  - wildcard payload (`%`, `_`)
+  - punctuation payload (`foo(bar)`, `a.b.c`, `x,y`)
+  - apostrophe payload (`o'hara`)
+
+### B. Slack stale-run recovery consistency checks (mandatory)
+- Stale-run recovery threshold must be consistent with runtime lease duration.
+- If lease duration changes, migration/RPC threshold must be updated in the same PR.
+- Reviewer should reject static threshold values that materially exceed lease duration unless a reasoned SRE note is added.
+
+### C. Review execution hygiene (mandatory)
+- Review should target a fixed committed snapshot (`git show <sha>:<file>` or clean checkout), not a dirty working tree.
+- Evidence in results docs must reference commit SHA and test date for reproducibility.
+
+---
+
 ## Claude Agent Team Plan (Up to 10 Agents)
 
 ## Wave 1 (Blockers first)

@@ -1,7 +1,8 @@
 /**
  * GET /api/bigquery/client-names
  *
- * Fetches distinct client_name values from BigQuery unified views.
+ * Fetches distinct BigQuery client identifiers and unions them with
+ * currently saved partner mappings.
  * Used for partner mapping UI.
  *
  * Server-side cache: BigQuery queries are slow (~15s), so we cache for 10 min.
@@ -14,6 +15,9 @@ import {
   getCachedClientNames,
   setCachedClientNames,
 } from '@/lib/connectors/bigquery-cache'
+import { getAdminClient } from '@/lib/supabase/admin'
+
+const supabase = getAdminClient()
 
 export async function GET() {
   try {
@@ -43,16 +47,36 @@ export async function GET() {
       dataset_id: 'pbi',
     }
 
-    const clientNames = await bigQueryConnector.getClientNames(config)
+    const [clientNames, existingMappingsResult] = await Promise.all([
+      bigQueryConnector.getClientNames(config),
+      supabase
+        .from('entity_external_ids')
+        .select('external_id')
+        .eq('entity_type', 'partners')
+        .eq('source', 'bigquery'),
+    ])
+
+    if (existingMappingsResult.error) {
+      console.error('BigQuery client-names mapping fetch error:', existingMappingsResult.error)
+      return ApiErrors.database()
+    }
+
+    const mappedExternalIds = (existingMappingsResult.data || [])
+      .map(row => row.external_id)
+      .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+
+    const mergedIdentifiers = Array.from(
+      new Set([...clientNames, ...mappedExternalIds])
+    ).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }))
 
     // Update shared cache
-    setCachedClientNames(clientNames)
-    console.log(`[BigQuery client-names] Cached ${clientNames.length} names`)
+    setCachedClientNames(mergedIdentifiers)
+    console.log(`[BigQuery client-names] Cached ${mergedIdentifiers.length} identifiers`)
 
     // Add Cache-Control header for browser caching too
     const response = apiSuccess({
-      clientNames,
-      count: clientNames.length,
+      clientNames: mergedIdentifiers,
+      count: mergedIdentifiers.length,
       cached: false
     })
     response.headers.set('Cache-Control', 'private, max-age=300') // 5 min browser cache

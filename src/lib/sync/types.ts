@@ -18,6 +18,16 @@ export interface SyncOptions {
   dryRun?: boolean
   /** Ignore authority rules and overwrite all fields (admin only) */
   forceOverwrite?: boolean
+  /**
+   * Update only records that already exist in the target table.
+   * If true, rows with unmatched key values are skipped instead of created.
+   */
+  matchOnlyExisting?: boolean
+  /**
+   * When creating new staff rows, apply contractor-safe defaults for required fields.
+   * Used for unmatched contractor onboarding from staff tabs.
+   */
+  createMissingAsContractor?: boolean
   /** Limit number of rows to process (for testing) */
   rowLimit?: number
   /** User ID triggering the sync (null for scheduled) */

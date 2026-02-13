@@ -1,7 +1,7 @@
 /**
  * GET/POST/DELETE /api/bigquery/partner-mappings
  *
- * Manages BigQuery client_name → partner mappings in entity_external_ids table.
+ * Manages BigQuery client identifier → partner mappings in entity_external_ids table.
  */
 
 import { NextRequest } from 'next/server'
@@ -10,13 +10,19 @@ import { requireRole } from '@/lib/auth/api-auth'
 import { apiSuccess, apiError, apiValidationError, ApiErrors } from '@/lib/api/response'
 import { invalidateClientNamesCache } from '@/lib/connectors/bigquery-cache'
 import { getAdminClient } from '@/lib/supabase/admin'
+import {
+  inferMarketplaceCodeFromText,
+  normalizeMarketplaceCode,
+} from '@/lib/amazon/marketplaces'
 
 const supabase = getAdminClient()
 
 // Zod schema for creating/updating mappings
+// `client_name` kept for backward compatibility; value can be client_name or client_id.
 const CreateMappingSchema = z.object({
   partner_id: z.string().uuid('partner_id must be a valid UUID'),
-  client_name: z.string().min(1, 'client_name is required').max(255)
+  client_name: z.string().min(1, 'client_name is required').max(255),
+  marketplace: z.string().min(2).max(64).optional(),
 })
 
 /**
@@ -112,7 +118,7 @@ export async function POST(request: NextRequest) {
       return apiValidationError(validation.error)
     }
 
-    const { partner_id, client_name } = validation.data
+    const { partner_id, client_name, marketplace } = validation.data
 
     // Check if partner exists
     const { data: partner, error: partnerError } = await supabase
@@ -125,20 +131,34 @@ export async function POST(request: NextRequest) {
       return ApiErrors.notFound('Partner')
     }
 
-    // BigQuery is one-to-one per partner. Update existing mapping row if present,
-    // otherwise insert a new row. This avoids delete-then-insert race windows.
-    const { data: existingRows, error: existingError } = await supabase
+    // BigQuery mappings are one-to-many per partner (multiple marketplaces/client IDs).
+    // We only update when the exact partner+client identifier pair already exists.
+    const { data: existingMapping, error: existingError } = await supabase
       .from('entity_external_ids')
-      .select('id')
+      .select('id, metadata')
       .eq('entity_type', 'partners')
       .eq('entity_id', partner_id)
       .eq('source', 'bigquery')
-      .order('updated_at', { ascending: false })
-      .limit(1)
+      .eq('external_id', client_name)
+      .maybeSingle()
 
     if (existingError) {
       console.error('Error fetching existing BigQuery mapping:', existingError)
       return ApiErrors.database()
+    }
+
+    const inferredMarketplaceCode =
+      normalizeMarketplaceCode(marketplace) ||
+      inferMarketplaceCodeFromText(client_name)
+
+    const existingMetadata =
+      existingMapping?.metadata && typeof existingMapping.metadata === 'object'
+        ? { ...(existingMapping.metadata as Record<string, unknown>) }
+        : {}
+
+    if (inferredMarketplaceCode) {
+      existingMetadata.marketplace_code = inferredMarketplaceCode
+      existingMetadata.marketplace_source = marketplace ? 'manual' : 'inferred_client_identifier'
     }
 
     const payload = {
@@ -146,17 +166,18 @@ export async function POST(request: NextRequest) {
       entity_id: partner_id,
       source: 'bigquery' as const,
       external_id: client_name,
+      metadata: existingMetadata,
       updated_at: new Date().toISOString(),
     }
 
     let mapping: Record<string, unknown> | null = null
     let error: { code?: string; message: string } | null = null
 
-    if (existingRows && existingRows.length > 0) {
+    if (existingMapping?.id) {
       const { data: updated, error: updateError } = await supabase
         .from('entity_external_ids')
         .update(payload)
-        .eq('id', existingRows[0].id)
+        .eq('id', existingMapping.id)
         .select()
         .single()
       mapping = updated as Record<string, unknown>
@@ -175,7 +196,7 @@ export async function POST(request: NextRequest) {
       if (error.code === '23505') {
         return apiError(
           'CONFLICT',
-          `Client name "${client_name}" is already mapped to another partner`,
+          `Client identifier "${client_name}" is already mapped to another partner`,
           409
         )
       }

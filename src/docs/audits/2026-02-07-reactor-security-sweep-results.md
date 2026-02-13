@@ -54,7 +54,7 @@
 | **Files changed** | `src/lib/api/search-utils.ts` (new), `src/lib/api/__tests__/search-utils.test.ts` (new), `src/app/api/staff/route.ts`, `src/app/api/partners/route.ts` |
 | **Tests** | 9 unit tests passing (grammar injection, wildcards, apostrophes, double-quotes, normal, empty, backslash) |
 | **Approach** | PostgREST double-quoting (not backslash-escaping — PostgREST does not support `\` in `.or()` values). ILIKE wildcards (`%`, `_`) escaped with `\` inside the double-quoted value. |
-| **Residual risk** | None — all PostgREST grammar characters neutralized by double-quoting |
+| **Residual risk** | Low — callers must follow helper contract (`ilike.${escaped}` with no extra `%` wrapping, and skip `.or()` when escaped value is empty). |
 
 ### Fix 2: GWS Users Payload (P1)
 
@@ -71,7 +71,7 @@
 | **Files changed** | `supabase/migrations/20260213_slack_sync_run_exclusivity.sql` (new), `src/lib/slack/sync.ts` |
 | **Migration** | Deterministic duplicate cleanup (newest by `created_at DESC, id DESC`), partial unique index, `create_sync_run_atomic()` RPC with `SECURITY INVOKER`, `REVOKE PUBLIC`, `GRANT service_role` |
 | **Tests** | Concurrent POST calls: exactly one succeeds, other gets 409 |
-| **Residual risk** | None — DB-level enforcement + atomic stale-run recovery |
+| **Residual risk** | Low — stale recovery threshold should stay aligned with runtime lease duration to avoid delayed recovery after worker crashes. |
 
 ### Fix 4: Raw Profile Retention Policy (P2)
 
@@ -182,3 +182,18 @@ Authenticated smoke tests run against localhost:3000 with programmatically gener
 |---------|------|---------|
 | 1 (sequential) | **201** | Sync run created |
 | 2 (sequential) | **409** | Blocked by DB-level unique index |
+
+---
+
+## Post-Review Addendum (2026-02-10)
+
+Independent committed-snapshot review identified one carry-forward gap to include in the next sweep:
+
+| Area | Severity | Detail | Required next-sweep check |
+|------|----------|--------|---------------------------|
+| Search caller guard | P2 | Whitespace-only search can pass route-level truthy checks, produce empty escaped pattern, and build invalid `.or()` filters (`ilike.` fragments). | In every caller, apply `.or()` only when escaped pattern is non-empty; include whitespace-only API smoke test. |
+
+Additional carry-forward validation:
+
+- Search helper contract must be verified across all callers, including non-route libraries.
+- Stale-run recovery threshold in SQL/RPC should remain consistent with runtime lease duration constant in app code.

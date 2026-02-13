@@ -8,10 +8,11 @@ import { DataFlowMap } from '@/components/data-enrichment/lineage'
 import { PartnerMapping } from '@/components/data-enrichment/bigquery'
 import { SlackMappingHub } from '@/components/slack/slack-mapping-hub'
 import { GWSMappingHub } from '@/components/google-workspace/gws-mapping-hub'
+import { SupTaskPanel } from '@/components/suptask/suptask-panel'
 import { Button } from '@/components/ui/button'
 import { Network, ArrowLeft } from 'lucide-react'
 
-type DataBrowserView = 'hub' | 'sheets-overview' | 'sheets-browser' | 'bigquery' | 'slack' | 'google_workspace' | 'forms' | 'docs' | 'flow-map'
+type DataBrowserView = 'hub' | 'sheets-overview' | 'sheets-browser' | 'bigquery' | 'slack' | 'google_workspace' | 'suptask' | 'forms' | 'docs' | 'flow-map'
 
 // Wrap in Suspense so useSearchParams() works on direct URL navigation
 export default function DataEnrichmentPage() {
@@ -101,7 +102,7 @@ function DataEnrichmentContent() {
   }, [browserView, selectedSourceId, selectedTabId, updateURL])
 
   // Handle category selection from the hub
-  const handleSelectCategory = (category: 'sheets' | 'forms' | 'docs' | 'bigquery' | 'slack' | 'google_workspace') => {
+  const handleSelectCategory = (category: 'sheets' | 'forms' | 'docs' | 'bigquery' | 'slack' | 'google_workspace' | 'suptask') => {
     if (category === 'sheets') {
       // Go directly to SourceBrowser - it has its own modal and handles everything
       setSelectedSourceId(null)
@@ -112,6 +113,8 @@ function DataEnrichmentContent() {
       setBrowserView('slack')
     } else if (category === 'google_workspace') {
       setBrowserView('google_workspace')
+    } else if (category === 'suptask') {
+      setBrowserView('suptask')
     } else {
       setBrowserView(category)
     }
@@ -206,6 +209,15 @@ function DataEnrichmentContent() {
           <div className="p-4 md:p-8">
             <div className="max-w-4xl mx-auto">
               <GWSMappingHub onBack={() => setBrowserView('hub')} />
+            </div>
+          </div>
+        )}
+
+        {/* SupTask View */}
+        {browserView === 'suptask' && (
+          <div className="p-4 md:p-8">
+            <div className="max-w-4xl mx-auto">
+              <SupTaskPanel onBack={() => setBrowserView('hub')} />
             </div>
           </div>
         )}

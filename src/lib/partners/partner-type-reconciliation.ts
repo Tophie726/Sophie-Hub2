@@ -164,7 +164,9 @@ async function fetchPartners(limit: number, search?: string): Promise<PartnerRow
 
   if (search) {
     const escaped = escapePostgrestValue(search)
-    query = query.or(`brand_name.ilike.${escaped},client_name.ilike.${escaped},partner_code.ilike.${escaped}`)
+    if (escaped) {
+      query = query.or(`brand_name.ilike.${escaped},client_name.ilike.${escaped},partner_code.ilike.${escaped}`)
+    }
   }
 
   const { data, error } = await query
@@ -188,9 +190,9 @@ export async function listPartnerTypeReconciliation(input: PartnerTypeReconcilia
   const total = filtered.length
   const paginated = filtered.slice(input.offset, input.offset + input.limit)
   const responseRows = paginated.map((row) => {
-    const clone = { ...row }
-    delete clone.update_fields
-    return clone
+    const { update_fields, ...rest } = row
+    void update_fields
+    return rest
   })
 
   return {

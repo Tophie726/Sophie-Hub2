@@ -22,9 +22,11 @@ import {
   Users,
   BookOpen,
   Boxes,
+  Search,
   ExternalLink,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { SophieMarketplaceConceptCard } from '@/components/marketplace/sophie-marketplace-concept'
 
 const easeOut: [number, number, number, number] = [0.22, 1, 0.36, 1]
 
@@ -126,7 +128,44 @@ const allProducts: ProductDef[] = [
     isModule: true,
     landingPageUrl: 'https://sophiesociety.com/services/inventory-management',
   },
+  {
+    id: 'product_research',
+    name: 'Product Research',
+    description: 'Placeholder module for product discovery, validation, and market insights.',
+    icon: Search,
+    color: 'violet',
+    services: ['Product Research'],
+    isModule: true,
+  },
+  {
+    id: 'dsp_vendor',
+    name: 'DSP/Vendor',
+    description: 'Placeholder module for Amazon DSP strategy and Vendor Central growth support.',
+    icon: Store,
+    color: 'orange',
+    services: ['DSP/Vendor'],
+    isModule: true,
+  },
 ]
+
+const productsById = new Map<string, ProductDef>(allProducts.map((product) => [product.id, product]))
+const productOrder = new Map<string, number>(allProducts.map((product, index) => [product.id, index]))
+
+const compositionChildrenByParent = new Map<string, string[]>()
+const compositionParentsByChild = new Map<string, string[]>()
+
+for (const product of allProducts) {
+  if (!product.composedOf) continue
+  for (const childId of product.composedOf) {
+    if (!productsById.has(childId)) continue
+    compositionChildrenByParent.set(product.id, [...(compositionChildrenByParent.get(product.id) ?? []), childId])
+    compositionParentsByChild.set(childId, [...(compositionParentsByChild.get(childId) ?? []), product.id])
+  }
+}
+
+const compositionEdges: Array<{ from: string; to: string }> = Array.from(compositionChildrenByParent.entries()).flatMap(
+  ([from, children]) => children.map((to) => ({ from, to }))
+)
 
 const customerProducts = allProducts.filter((p) => !p.isModule)
 const serviceModules = allProducts.filter((p) => p.isModule)
@@ -137,6 +176,7 @@ const ideation: Array<{ name: string; icon: React.ComponentType<{ className?: st
   { name: 'Meta', icon: MonitorPlay },
   { name: 'Walmart', icon: Store },
 ]
+
 
 // =============================================================================
 // Color utilities
@@ -160,15 +200,17 @@ const colors: Record<string, { bg: string; text: string; border: string; accent:
 function getDescendants(id: string, cache: Map<string, Set<string>> = new Map()): Set<string> {
   if (cache.has(id)) return cache.get(id)!
   const result = new Set<string>([id])
-  const product = allProducts.find((p) => p.id === id)
-  if (product?.composedOf) {
-    for (const childId of product.composedOf) {
-      const descendants = getDescendants(childId, cache)
-      Array.from(descendants).forEach((d) => result.add(d))
-    }
+  for (const childId of compositionChildrenByParent.get(id) ?? []) {
+    const descendants = getDescendants(childId, cache)
+    Array.from(descendants).forEach((d) => result.add(d))
   }
   cache.set(id, result)
   return result
+}
+
+function getConnectedProducts(id: string): Set<string> {
+  // Top-down tracing only: selected product and everything it includes.
+  return getDescendants(id)
 }
 
 // =============================================================================
@@ -187,7 +229,29 @@ const views: Array<{ id: ViewType; label: string; icon: React.ComponentType<{ cl
 // Cards View
 // =============================================================================
 
+
 function CardsView() {
+  const [hoveredProductId, setHoveredProductId] = useState<string | null>(null)
+  const [lockedProductId, setLockedProductId] = useState<string | null>(null)
+
+  const activeProductId = lockedProductId ?? hoveredProductId
+
+  const highlightedProducts = useMemo(() => {
+    if (!activeProductId) return new Set<string>()
+    return getConnectedProducts(activeProductId)
+  }, [activeProductId])
+
+  const isHighlightActive = activeProductId !== null
+  const isProductHighlighted = (id: string) => !isHighlightActive || highlightedProducts.has(id)
+  const setHovered = (id: string | null) => {
+    if (lockedProductId) return
+    setHoveredProductId(id)
+  }
+  const toggleLocked = (id: string) => {
+    setLockedProductId((prev) => (prev === id ? null : id))
+    setHoveredProductId(null)
+  }
+
   return (
     <motion.div
       key="cards"
@@ -199,14 +263,30 @@ function CardsView() {
     >
       {/* Product cards */}
       <div>
-        <div className="flex items-center gap-2 mb-5">
+        <div className="flex items-center gap-2 mb-2">
           <h2 className="text-sm font-semibold text-foreground">Products</h2>
           <Badge variant="secondary" className="text-[10px]">{customerProducts.length}</Badge>
+        </div>
+        <div className="flex items-center justify-between gap-3 mb-5">
+          <p className="text-[11px] text-muted-foreground">
+            Hover or click a package (or include chip) to trace connected products.
+          </p>
+          {lockedProductId && (
+            <button
+              type="button"
+              onClick={() => setLockedProductId(null)}
+              className="shrink-0 rounded-md border border-border/60 px-2 py-1 text-[10px] font-medium text-foreground hover:bg-muted/60 transition-colors"
+            >
+              Clear focus
+            </button>
+          )}
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {customerProducts.map((product, i) => {
             const c = colors[product.color]
             const Icon = product.icon
+            const highlighted = isProductHighlighted(product.id)
+            const active = activeProductId === product.id
             return (
               <motion.div
                 key={product.id}
@@ -214,9 +294,22 @@ function CardsView() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.25, ease: easeOut, delay: i * 0.04 }}
                 whileHover={{ y: -4 }}
+                onMouseEnter={() => setHovered(product.id)}
+                onMouseLeave={() => setHovered(null)}
+                onClick={() => toggleLocked(product.id)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault()
+                    toggleLocked(product.id)
+                  }
+                }}
+                role="button"
+                tabIndex={0}
                 className={cn(
-                  'group relative overflow-hidden rounded-xl border bg-card transition-shadow hover:shadow-lg',
-                  c.border
+                  'group relative overflow-hidden rounded-xl border bg-card transition-all hover:shadow-lg',
+                  highlighted
+                    ? cn(c.border, active && 'ring-2 ring-foreground/10 shadow-xl')
+                    : 'border-border/20 opacity-20 saturate-0 grayscale'
                 )}
               >
                 {/* Gradient accent top */}
@@ -268,9 +361,37 @@ function CardsView() {
 
                   {/* Composed of */}
                   {product.composedOf && (
-                    <div className="text-[10px] text-muted-foreground mb-3">
-                      <span className="font-medium">Includes:</span>{' '}
-                      {product.composedOf.map((cid) => allProducts.find((p) => p.id === cid)?.name).filter(Boolean).join(', ')}
+                    <div className="mb-3">
+                      <span className="text-[10px] font-medium text-muted-foreground">Includes:</span>
+                      <div className="flex flex-wrap gap-1.5 mt-1.5">
+                        {product.composedOf.map((childId) => {
+                          const child = productsById.get(childId)
+                          if (!child) return null
+                          const childHighlighted = isProductHighlighted(childId)
+                          return (
+                            <button
+                              key={childId}
+                              type="button"
+                              onMouseEnter={() => setHovered(childId)}
+                              onMouseLeave={() => setHovered(null)}
+                              onFocus={() => setHovered(childId)}
+                              onBlur={() => setHovered(null)}
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                toggleLocked(childId)
+                              }}
+                              className={cn(
+                                'rounded-md border px-2 py-0.5 text-[10px] transition-colors',
+                                childHighlighted
+                                  ? 'border-border/60 bg-muted/40 text-foreground'
+                                  : 'border-border/30 text-muted-foreground'
+                              )}
+                            >
+                              {child.shortName ?? child.name}
+                            </button>
+                          )
+                        })}
+                      </div>
                     </div>
                   )}
 
@@ -296,8 +417,18 @@ function CardsView() {
           {serviceModules.map((mod) => {
             const c = colors[mod.color]
             const Icon = mod.icon
+            const highlighted = isProductHighlighted(mod.id)
             return (
-              <div key={mod.id} className={cn('flex items-center gap-3 rounded-lg border px-4 py-3', c.border)}>
+              <div
+                key={mod.id}
+                onMouseEnter={() => setHovered(mod.id)}
+                onMouseLeave={() => setHovered(null)}
+                onClick={() => toggleLocked(mod.id)}
+                className={cn(
+                  'flex items-center gap-3 rounded-lg border px-4 py-3 transition-all cursor-pointer',
+                  highlighted ? c.border : 'border-border/20 opacity-20 saturate-0 grayscale'
+                )}
+              >
                 <div className={cn('flex h-8 w-8 items-center justify-center rounded-lg shrink-0', c.bg)}>
                   <Icon className={cn('h-4 w-4', c.text)} />
                 </div>
@@ -308,6 +439,17 @@ function CardsView() {
               </div>
             )
           })}
+        </div>
+      </div>
+
+      {/* Concept Products */}
+      <div>
+        <div className="flex items-center gap-2 mb-3">
+          <h2 className="text-sm font-medium text-muted-foreground">Concept Products</h2>
+          <span className="text-[10px] text-muted-foreground">(in design exploration)</span>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <SophieMarketplaceConceptCard />
         </div>
       </div>
 
@@ -341,6 +483,24 @@ function CardsView() {
 // =============================================================================
 
 function RowsView() {
+  const [hoveredProductId, setHoveredProductId] = useState<string | null>(null)
+  const [lockedProductId, setLockedProductId] = useState<string | null>(null)
+  const activeProductId = lockedProductId ?? hoveredProductId
+  const highlightedProducts = useMemo(() => {
+    if (!activeProductId) return new Set<string>()
+    return getConnectedProducts(activeProductId)
+  }, [activeProductId])
+
+  const isHighlightActive = activeProductId !== null
+  const isProductHighlighted = (id: string) => !isHighlightActive || highlightedProducts.has(id)
+  const setHovered = (id: string | null) => {
+    if (lockedProductId) return
+    setHoveredProductId(id)
+  }
+  const toggleLocked = (id: string) => {
+    setLockedProductId((prev) => (prev === id ? null : id))
+    setHoveredProductId(null)
+  }
   const all = [...customerProducts, ...serviceModules]
   return (
     <motion.div
@@ -350,12 +510,39 @@ function RowsView() {
       exit={{ opacity: 0, y: -8 }}
       transition={{ duration: 0.2, ease: easeOut }}
     >
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <p className="text-[11px] text-muted-foreground">
+          Hover or click a row (or include chip) to trace connected products.
+        </p>
+        {lockedProductId && (
+          <button
+            type="button"
+            onClick={() => setLockedProductId(null)}
+            className="shrink-0 rounded-md border border-border/60 px-2 py-1 text-[10px] font-medium text-foreground hover:bg-muted/60 transition-colors"
+          >
+            Clear focus
+          </button>
+        )}
+      </div>
       <div className="rounded-xl border bg-card divide-y divide-border/60">
         {all.map((product) => {
           const c = colors[product.color]
           const Icon = product.icon
+          const highlighted = isProductHighlighted(product.id)
+          const active = activeProductId === product.id
           return (
-            <div key={product.id} className="flex items-center gap-3 md:gap-4 px-4 md:px-5 py-4 md:py-3.5 hover:bg-muted/30 transition-colors">
+            <div
+              key={product.id}
+              onMouseEnter={() => setHovered(product.id)}
+              onMouseLeave={() => setHovered(null)}
+              onClick={() => toggleLocked(product.id)}
+              className={cn(
+                'flex items-center gap-3 md:gap-4 px-4 md:px-5 py-4 md:py-3.5 transition-all cursor-pointer',
+                highlighted
+                  ? cn('hover:bg-muted/30 opacity-100', active && 'bg-muted/20')
+                  : 'opacity-20 saturate-0 grayscale'
+              )}
+            >
               <div className={cn('flex h-9 w-9 items-center justify-center rounded-lg shrink-0', c.bg)}>
                 <Icon className={cn('h-4 w-4', c.text)} />
               </div>
@@ -371,6 +558,37 @@ function RowsView() {
                     <span className="text-[10px] text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded">module</span>
                   )}
                 </div>
+                {product.composedOf && (
+                  <div className="flex flex-wrap gap-1.5 mt-1.5">
+                    {product.composedOf.map((childId) => {
+                      const child = productsById.get(childId)
+                      if (!child) return null
+                      const childHighlighted = isProductHighlighted(childId)
+                      return (
+                        <button
+                          key={childId}
+                          type="button"
+                          onMouseEnter={() => setHovered(childId)}
+                          onMouseLeave={() => setHovered(null)}
+                          onFocus={() => setHovered(childId)}
+                          onBlur={() => setHovered(null)}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            toggleLocked(childId)
+                          }}
+                          className={cn(
+                            'rounded-md border px-1.5 py-0.5 text-[10px] transition-colors',
+                            childHighlighted
+                              ? 'border-border/60 bg-muted/40 text-foreground'
+                              : 'border-border/30 text-muted-foreground'
+                          )}
+                        >
+                          {child.shortName ?? child.name}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
               <div className="hidden md:flex gap-1.5 flex-wrap justify-end">
                 {product.services.map((s) => (
@@ -425,27 +643,89 @@ function RowsView() {
 
 const NODE_W = 256
 const NODE_H = 58
-const CANVAS_W = 920
-const CANVAS_H = 430
+const NODE_GAP_X = 64
+const NODE_GAP_Y = 18
 
-const nodeLayout: Record<string, { x: number; y: number }> = {
-  fam:        { x: 10,  y: 165 },
-  sophie_ppc: { x: 326, y: 45 },
-  catalogue:  { x: 326, y: 215 },
-  inventory:  { x: 326, y: 315 },
-  ppc_basic:  { x: 646, y: 15 },
-  cc:         { x: 646, y: 105 },
-  tiktok:     { x: 646, y: 250 },
-  pli:        { x: 646, y: 340 },
+interface CompositionLayout {
+  nodeLayout: Record<string, { x: number; y: number }>
+  canvasWidth: number
+  canvasHeight: number
+  roots: string[]
+  standaloneIds: string[]
+  standaloneLabel?: { x: number; y: number }
 }
 
-const compositionEdges: Array<{ from: string; to: string }> = [
-  { from: 'fam', to: 'sophie_ppc' },
-  { from: 'fam', to: 'catalogue' },
-  { from: 'fam', to: 'inventory' },
-  { from: 'sophie_ppc', to: 'ppc_basic' },
-  { from: 'sophie_ppc', to: 'cc' },
-]
+function buildCompositionLayout(): CompositionLayout {
+  const idsInGraph = new Set<string>()
+  const incomingCount = new Map<string, number>()
+
+  for (const edge of compositionEdges) {
+    idsInGraph.add(edge.from)
+    idsInGraph.add(edge.to)
+    incomingCount.set(edge.from, incomingCount.get(edge.from) ?? 0)
+    incomingCount.set(edge.to, (incomingCount.get(edge.to) ?? 0) + 1)
+  }
+
+  const roots = Array.from(idsInGraph)
+    .filter((id) => (incomingCount.get(id) ?? 0) === 0)
+    .sort((a, b) => (productOrder.get(a) ?? 0) - (productOrder.get(b) ?? 0))
+
+  const depthById = new Map<string, number>()
+  const assignDepth = (id: string, depth: number) => {
+    const existing = depthById.get(id)
+    if (existing !== undefined && existing >= depth) return
+    depthById.set(id, depth)
+    for (const childId of compositionChildrenByParent.get(id) ?? []) {
+      if (childId === id) continue
+      assignDepth(childId, depth + 1)
+    }
+  }
+
+  for (const rootId of roots) assignDepth(rootId, 0)
+  for (const id of idsInGraph) {
+    if (!depthById.has(id)) assignDepth(id, 0)
+  }
+
+  const maxGraphDepth = depthById.size ? Math.max(...Array.from(depthById.values())) : 0
+  const standaloneIds = allProducts.filter((product) => !idsInGraph.has(product.id)).map((product) => product.id)
+
+  let maxDepth = maxGraphDepth
+  if (standaloneIds.length > 0) {
+    const standaloneDepth = maxGraphDepth + 1
+    for (const id of standaloneIds) depthById.set(id, standaloneDepth)
+    maxDepth = standaloneDepth
+  }
+
+  const columns = new Map<number, string[]>()
+  for (const product of allProducts) {
+    const depth = depthById.get(product.id)
+    if (depth === undefined) continue
+    columns.set(depth, [...(columns.get(depth) ?? []), product.id])
+  }
+
+  const maxNodesInColumn = Math.max(1, ...Array.from(columns.values()).map((ids) => ids.length))
+  const canvasHeight = Math.max(430, maxNodesInColumn * NODE_H + (maxNodesInColumn - 1) * NODE_GAP_Y + 28)
+  const canvasWidth = 20 + (maxDepth + 1) * NODE_W + maxDepth * NODE_GAP_X
+  const nodeLayout: Record<string, { x: number; y: number }> = {}
+
+  for (const [depth, ids] of columns.entries()) {
+    const totalHeight = ids.length * NODE_H + (ids.length - 1) * NODE_GAP_Y
+    const startY = Math.max(8, Math.round((canvasHeight - totalHeight) / 2))
+    const x = 10 + depth * (NODE_W + NODE_GAP_X)
+    ids.forEach((id, index) => {
+      nodeLayout[id] = { x, y: startY + index * (NODE_H + NODE_GAP_Y) }
+    })
+  }
+
+  const standaloneLabel = standaloneIds[0] && nodeLayout[standaloneIds[0]]
+    ? {
+        x: nodeLayout[standaloneIds[0]].x,
+        y: Math.max(8, nodeLayout[standaloneIds[0]].y - 20),
+      }
+    : undefined
+
+  return { nodeLayout, canvasWidth, canvasHeight, roots, standaloneIds, standaloneLabel }
+}
 
 function bezierPath(x1: number, y1: number, x2: number, y2: number): string {
   const mx = (x1 + x2) / 2
@@ -454,15 +734,17 @@ function bezierPath(x1: number, y1: number, x2: number, y2: number): string {
 
 function CompositionView() {
   const [hoveredId, setHoveredId] = useState<string | null>(null)
+  const layout = useMemo(() => buildCompositionLayout(), [])
 
   const highlighted = useMemo(() => {
     if (!hoveredId) return new Set<string>()
-    return getDescendants(hoveredId)
+    return getConnectedProducts(hoveredId)
   }, [hoveredId])
 
   const isActive = hoveredId !== null
   const isNodeHighlighted = (id: string) => !isActive || highlighted.has(id)
   const isEdgeHighlighted = (from: string, to: string) => !isActive || (highlighted.has(from) && highlighted.has(to))
+  const mobileRoots = [...layout.roots, ...layout.standaloneIds]
 
   return (
     <motion.div
@@ -475,19 +757,20 @@ function CompositionView() {
       {/* Desktop SVG map */}
       <div className="hidden md:block">
         <div className="rounded-xl border bg-card p-6 overflow-x-auto">
-          <div className="relative" style={{ width: CANVAS_W, height: CANVAS_H }}>
+          <div className="relative" style={{ width: layout.canvasWidth, height: layout.canvasHeight }}>
             {/* SVG edges — exact pixel match with node positions */}
             <svg
               className="absolute inset-0 pointer-events-none"
-              width={CANVAS_W}
-              height={CANVAS_H}
-              viewBox={`0 0 ${CANVAS_W} ${CANVAS_H}`}
+              width={layout.canvasWidth}
+              height={layout.canvasHeight}
+              viewBox={`0 0 ${layout.canvasWidth} ${layout.canvasHeight}`}
               fill="none"
             >
               {compositionEdges.map((edge) => {
-                const fromNode = nodeLayout[edge.from]
-                const toNode = nodeLayout[edge.to]
-                const fromProduct = allProducts.find((p) => p.id === edge.from)
+                const fromNode = layout.nodeLayout[edge.from]
+                const toNode = layout.nodeLayout[edge.to]
+                if (!fromNode || !toNode) return null
+                const fromProduct = productsById.get(edge.from)
                 const fillColor = fromProduct ? colors[fromProduct.color].fill : '#9ca3af'
                 const x1 = fromNode.x + NODE_W
                 const y1 = fromNode.y + NODE_H / 2
@@ -514,8 +797,8 @@ function CompositionView() {
             </svg>
 
             {/* Nodes */}
-            {allProducts.filter((p) => nodeLayout[p.id]).map((product) => {
-              const pos = nodeLayout[product.id]
+            {allProducts.filter((p) => layout.nodeLayout[p.id]).map((product) => {
+              const pos = layout.nodeLayout[product.id]
               const c = colors[product.color]
               const Icon = product.icon
               const hl = isNodeHighlighted(product.id)
@@ -554,12 +837,14 @@ function CompositionView() {
             })}
 
             {/* Standalone label */}
-            <div
-              className="absolute text-[10px] text-muted-foreground/40 font-medium uppercase tracking-wider"
-              style={{ left: 646, top: 228 }}
-            >
-              Standalone
-            </div>
+            {layout.standaloneLabel && (
+              <div
+                className="absolute text-[10px] text-muted-foreground/40 font-medium uppercase tracking-wider"
+                style={{ left: layout.standaloneLabel.x, top: layout.standaloneLabel.y }}
+              >
+                Standalone
+              </div>
+            )}
           </div>
 
           {/* Legend */}
@@ -574,9 +859,9 @@ function CompositionView() {
 
       {/* Mobile tree */}
       <div className="md:hidden space-y-1.5">
-        <MobileTreeNode productId="fam" depth={0} highlighted={highlighted} isActive={isActive} />
-        <MobileTreeNode productId="tiktok" depth={0} highlighted={highlighted} isActive={isActive} />
-        <MobileTreeNode productId="pli" depth={0} highlighted={highlighted} isActive={isActive} />
+        {mobileRoots.map((rootId) => (
+          <MobileTreeNode key={rootId} productId={rootId} depth={0} highlighted={highlighted} isActive={isActive} />
+        ))}
       </div>
 
       {/* Ideation */}

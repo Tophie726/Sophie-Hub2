@@ -26,6 +26,8 @@ Status: IMPLEMENTATION COMPLETE (all 3 waves delivered, 6/6 smoke tests passed a
 - `src/docs/features/views/03-codex-review.md`
 - `src/docs/features/views/04-claude-revision.md`
 - `src/docs/features/views/05-rollout-partner-type.md`
+- `src/docs/features/views/06-rollout-staff-grid-parity.md`
+- `src/docs/features/views/07-rollout-staff-bulk-lifecycle.md`
 
 ## Acceptance Decision
 

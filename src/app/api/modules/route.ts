@@ -23,7 +23,26 @@ export async function GET() {
       .order('sort_order', { ascending: true })
 
     if (error) {
-      return ApiErrors.database()
+      // Backward-compatibility fallback for older schemas that don't yet
+      // include the `enabled` column.
+      const isMissingEnabled =
+        error.message?.toLowerCase().includes('enabled') ||
+        error.details?.toLowerCase().includes('enabled')
+
+      if (!isMissingEnabled) {
+        return ApiErrors.database()
+      }
+
+      const { data: fallbackModules, error: fallbackError } = await supabase
+        .from('modules')
+        .select('id, slug, name, description, icon, color, sort_order')
+        .order('sort_order', { ascending: true })
+
+      if (fallbackError) {
+        return ApiErrors.database()
+      }
+
+      return apiSuccess({ modules: fallbackModules || [] })
     }
 
     return apiSuccess({ modules: modules || [] })

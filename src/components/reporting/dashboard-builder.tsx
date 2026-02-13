@@ -101,10 +101,10 @@ export function DashboardBuilder({ dashboard: initial, moduleSlug }: DashboardBu
   }
 
   // Partner selection
-  function handlePartnerChange(partnerId: string, partnerName: string) {
+  const handlePartnerChange = useCallback((partnerId: string, partnerName: string) => {
     setSelectedPartnerId(partnerId)
     setSelectedPartnerName(partnerName)
-  }
+  }, [])
 
   // Title
   function handleTitleChange(title: string) {

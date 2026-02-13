@@ -4,6 +4,8 @@ import { requirePermission } from '@/lib/auth/api-auth'
 import { apiSuccess, apiValidationError, ApiErrors } from '@/lib/api/response'
 import { getSyncEngine } from '@/lib/sync'
 import { checkSyncRateLimit, rateLimitHeaders } from '@/lib/rate-limit'
+import { maybeSyncBigQueryMappingsFromReferenceSheetOnTabSync } from '@/lib/bigquery/reference-sheet-mappings'
+import { mapSheetsAuthError, resolveSheetsAccessToken } from '@/lib/google/sheets-auth'
 import { z } from 'zod'
 
 // Validation schema for sync options
@@ -52,8 +54,20 @@ export async function POST(
 
   // Get session for access token
   const session = await getServerSession(authOptions)
-  if (!session?.accessToken) {
-    return ApiErrors.unauthorized('No access token available. Please re-authenticate.')
+  if (!session?.user?.email) {
+    return ApiErrors.unauthorized('Not authenticated')
+  }
+
+  let accessToken: string
+  try {
+    const resolved = await resolveSheetsAccessToken(session.accessToken)
+    accessToken = resolved.accessToken
+  } catch (authError) {
+    const mapped = mapSheetsAuthError(authError)
+    if (mapped.status === 401) {
+      return ApiErrors.unauthorized(mapped.message)
+    }
+    return ApiErrors.internal(mapped.message)
   }
 
   // Check rate limit
@@ -91,12 +105,25 @@ export async function POST(
 
     // Get the sync engine and run sync
     const engine = getSyncEngine()
-    const result = await engine.syncTab(tabMappingId, session.accessToken, {
+    const result = await engine.syncTab(tabMappingId, accessToken, {
       dryRun: options.dry_run,
       forceOverwrite: options.force_overwrite,
       rowLimit: options.row_limit,
       triggeredBy: auth.user.id,
     })
+
+    // If this sync ran on the BigQuery reference sheet source, refresh BigQuery
+    // partner mappings from that sheet so newly added rows are picked up automatically.
+    if (!options.dry_run && result.success) {
+      try {
+        await maybeSyncBigQueryMappingsFromReferenceSheetOnTabSync(accessToken, {
+          triggerTabMappingId: tabMappingId,
+          dryRun: false,
+        })
+      } catch (sheetSyncError) {
+        console.error('Reference sheet BigQuery mapping sync failed:', sheetSyncError)
+      }
+    }
 
     // Transform to API response format
     return apiSuccess({

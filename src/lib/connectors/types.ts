@@ -22,6 +22,7 @@ export type ConnectorTypeId =
   | 'google_workspace'
   | 'api'
   | 'csv'
+  | 'suptask'
   // Future connectors:
   // | 'close_io'
   // | 'typeform'
@@ -119,6 +120,14 @@ export interface GoogleWorkspaceConnectorConfig {
 }
 
 /**
+ * Configuration for SupTask connector
+ * Credentials are env-only (SUPTASK_API_BASE_URL, SUPTASK_API_TOKEN) — never stored in config.
+ */
+export interface SupTaskConnectorConfig {
+  type: 'suptask'
+}
+
+/**
  * Discriminated union of all connector configurations
  * Use this when storing/retrieving connector config from the database
  */
@@ -130,6 +139,7 @@ export type ConnectorConfig =
   | GoogleWorkspaceConnectorConfig
   | ApiConnectorConfig
   | CsvConnectorConfig
+  | SupTaskConnectorConfig
 
 // =============================================================================
 // Connector Metadata
@@ -349,6 +359,15 @@ export function isGoogleWorkspaceConfig(
   config: ConnectorConfig
 ): config is GoogleWorkspaceConnectorConfig {
   return config.type === 'google_workspace'
+}
+
+/**
+ * Type guard to check if a config is for SupTask
+ */
+export function isSupTaskConfig(
+  config: ConnectorConfig
+): config is SupTaskConnectorConfig {
+  return config.type === 'suptask'
 }
 
 // =============================================================================

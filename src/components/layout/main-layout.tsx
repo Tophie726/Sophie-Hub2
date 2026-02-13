@@ -65,13 +65,7 @@ function MainLayoutContent({ children }: MainLayoutProps) {
       <main className="pl-0 md:pl-64">
         <div className="min-h-screen pt-14 md:pt-0">
           {/* Viewer context badge - visible across all pages */}
-          {userRole === 'admin' && (
-            <div className="sticky top-14 md:top-0 z-20 px-4 md:px-8">
-              <div className="flex items-center py-1.5">
-                <ViewerContextBadge userRole={userRole} />
-              </div>
-            </div>
-          )}
+          <ViewerContextBadge userRole={userRole} />
           <ErrorBoundary
             onError={(error, errorInfo) => {
               captureError(error, { componentStack: errorInfo.componentStack })

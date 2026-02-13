@@ -1,0 +1,203 @@
+name: Sync Validation
+
+on:
+  pull_request:
+    paths:
+      - "src/app/api/google-workspace/**"
+      - "src/components/google-workspace/**"
+      - "scripts/gws-sync-capture.sh"
+      - "scripts/smoke-google-workspace.sh"
+      - ".github/workflows/sync-validation.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "src/app/api/google-workspace/**"
+      - "src/components/google-workspace/**"
+      - "scripts/gws-sync-capture.sh"
+      - "scripts/smoke-google-workspace.sh"
+      - ".github/workflows/sync-validation.yml"
+  workflow_dispatch:
+    inputs:
+      run_sync:
+        description: "Run POST /api/google-workspace/sync (writes connector snapshot)."
+        required: false
+        type: boolean
+        default: false
+      base_url:
+        description: "Override base URL (blank = use repo variable GWS_SYNC_BASE_URL)."
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Lint and unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run lint
+        run: npm run lint
+
+      - name: Run unit tests
+        run: npm run test -- --runInBand --passWithNoTests
+
+  gws_capture:
+    name: Google Workspace capture
+    needs: quality
+    runs-on: ubuntu-latest
+    if: ${{ secrets.GWS_SYNC_COOKIE_HEADER != '' && (vars.GWS_SYNC_BASE_URL != '' || (github.event_name == 'workflow_dispatch' && github.event.inputs.base_url != '')) }}
+    env:
+      DEFAULT_BASE_URL: ${{ vars.GWS_SYNC_BASE_URL }}
+      OVERRIDE_BASE_URL: ${{ github.event.inputs.base_url || '' }}
+      RUN_SYNC_INPUT: ${{ github.event.inputs.run_sync || 'false' }}
+      COOKIE_HEADER: ${{ secrets.GWS_SYNC_COOKIE_HEADER }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve capture config
+        id: config
+        shell: bash
+        run: |
+          set -euo pipefail
+          base_url="${OVERRIDE_BASE_URL:-$DEFAULT_BASE_URL}"
+          if [[ -z "${base_url}" ]]; then
+            echo "Missing base URL. Set GWS_SYNC_BASE_URL or provide workflow_dispatch input." >&2
+            exit 1
+          fi
+
+          run_sync="false"
+          args="--no-sync"
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${RUN_SYNC_INPUT}" == "true" ]]; then
+            run_sync="true"
+            args=""
+          fi
+
+          out_dir="${RUNNER_TEMP}/gws-sync-capture"
+          echo "base_url=${base_url}" >> "${GITHUB_OUTPUT}"
+          echo "run_sync=${run_sync}" >> "${GITHUB_OUTPUT}"
+          echo "args=${args}" >> "${GITHUB_OUTPUT}"
+          echo "out_dir=${out_dir}" >> "${GITHUB_OUTPUT}"
+
+      - name: Run capture script
+        shell: bash
+        env:
+          BASE_URL: ${{ steps.config.outputs.base_url }}
+          OUT_DIR: ${{ steps.config.outputs.out_dir }}
+        run: |
+          set -euo pipefail
+          chmod +x ./scripts/gws-sync-capture.sh
+          ./scripts/gws-sync-capture.sh --out-dir "${OUT_DIR}" --no-zip ${{ steps.config.outputs.args }}
+
+      - name: Enforce HTTP + semantic checks
+        shell: bash
+        env:
+          OUT_DIR: ${{ steps.config.outputs.out_dir }}
+          RUN_SYNC: ${{ steps.config.outputs.run_sync }}
+        run: |
+          set -euo pipefail
+
+          status_from_headers() {
+            awk 'toupper($1) ~ /^HTTP\// { code=$2 } END { print code }' "$1"
+          }
+
+          assert_jq() {
+            local file="$1"
+            local expr="$2"
+            local message="$3"
+            if ! jq -e "$expr" "$file" >/dev/null; then
+              echo "::error::${message}"
+              jq . "$file" || cat "$file"
+              return 1
+            fi
+          }
+
+          failed=0
+          for endpoint in 01-test-connection 03-sync-status 04-users; do
+            code="$(status_from_headers "${OUT_DIR}/${endpoint}.headers.txt")"
+            echo "${endpoint}: HTTP ${code}"
+            if [[ ! "${code}" =~ ^2 ]]; then
+              echo "::error::${endpoint} returned HTTP ${code}"
+              failed=1
+            fi
+          done
+
+          if [[ -f "${OUT_DIR}/02-sync.headers.txt" ]]; then
+            code="$(status_from_headers "${OUT_DIR}/02-sync.headers.txt")"
+            echo "02-sync: HTTP ${code}"
+            if [[ ! "${code}" =~ ^2 ]]; then
+              echo "::error::02-sync returned HTTP ${code}"
+              failed=1
+            fi
+          fi
+
+          # Semantic assertions (beyond transport status)
+          if ! assert_jq "${OUT_DIR}/01-test-connection.json" '.success == true and (.data.connected == true)' "test-connection did not report connected=true"; then
+            failed=1
+          fi
+
+          if [[ "${RUN_SYNC}" == "true" && -f "${OUT_DIR}/02-sync.json" ]]; then
+            if ! assert_jq "${OUT_DIR}/02-sync.json" '.success == true and (.data.success == true)' "sync response did not report data.success=true"; then
+              failed=1
+            fi
+          fi
+
+          if ! assert_jq "${OUT_DIR}/03-sync-status.json" '.success == true and (.data.snapshot_stats | type == "object") and ((.data.has_snapshot // false) == true or (.data.setup_required // false) == true)' "sync/status missing expected snapshot semantics"; then
+            failed=1
+          fi
+
+          if ! assert_jq "${OUT_DIR}/04-users.json" '.success == true and (.data.users | type == "array") and (.data.total | type == "number")' "users response missing users array/total number"; then
+            failed=1
+          fi
+
+          if [[ "${failed}" -ne 0 ]]; then
+            exit 1
+          fi
+
+      - name: Upload capture artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gws-sync-capture-${{ github.run_number }}
+          path: ${{ steps.config.outputs.out_dir }}
+
+      - name: Notify Slack on failure
+        if: failure() && secrets.SLACK_WEBHOOK_URL != ''
+        shell: bash
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          BASE_URL: ${{ steps.config.outputs.base_url }}
+          RUN_SYNC: ${{ steps.config.outputs.run_sync }}
+        run: |
+          set -euo pipefail
+          payload=$(cat <<EOF
+          {"text":"❌ Sync Validation failed for ${{ github.repository }} on ${{ github.ref_name }}. run_sync=${RUN_SYNC}, base_url=${BASE_URL}. Run: ${RUN_URL}"}
+          EOF
+          )
+          curl -sS -X POST -H "Content-type: application/json" --data "${payload}" "${SLACK_WEBHOOK_URL}"
+
+  missing_config:
+    name: Missing sync config
+    needs: quality
+    runs-on: ubuntu-latest
+    if: ${{ !(secrets.GWS_SYNC_COOKIE_HEADER != '' && (vars.GWS_SYNC_BASE_URL != '' || (github.event_name == 'workflow_dispatch' && github.event.inputs.base_url != ''))) }}
+    steps:
+      - name: Explain missing configuration
+        run: |
+          echo "::warning::Skipped Google Workspace capture. Configure repo secret GWS_SYNC_COOKIE_HEADER and repo variable GWS_SYNC_BASE_URL."

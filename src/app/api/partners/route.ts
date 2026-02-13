@@ -77,9 +77,11 @@ export async function GET(request: Request) {
     // Search across brand_name, client_name, partner_code
     if (search) {
       const escaped = escapePostgrestValue(search)
-      query = query.or(
-        `brand_name.ilike.${escaped},client_name.ilike.${escaped},partner_code.ilike.${escaped}`
-      )
+      if (escaped) {
+        query = query.or(
+          `brand_name.ilike.${escaped},client_name.ilike.${escaped},partner_code.ilike.${escaped}`
+        )
+      }
     }
 
     // Filter by tier (DB-level filter is fine for tier)

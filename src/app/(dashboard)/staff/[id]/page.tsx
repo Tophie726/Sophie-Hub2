@@ -30,6 +30,23 @@ function formatRole(role: string | null): string {
     .replace(/\b\w/g, c => c.toUpperCase())
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function extractGoogleSnapshotDate(
+  sourceData: Record<string, unknown> | null | undefined,
+  key: 'last_login_time' | 'last_seen_at'
+): string | null {
+  if (!isRecord(sourceData)) return null
+  const googleWorkspace = sourceData.google_workspace
+  if (!isRecord(googleWorkspace)) return null
+  const snapshot = googleWorkspace.directory_snapshot
+  if (!isRecord(snapshot)) return null
+  const raw = snapshot[key]
+  return typeof raw === 'string' && raw.trim().length > 0 ? raw : null
+}
+
 export default function StaffDetailPage() {
   const { id } = useParams<{ id: string }>()
   const { data: staff, isLoading: loading, error: queryError } = useStaffDetailQuery(id) as {
@@ -38,6 +55,8 @@ export default function StaffDetailPage() {
     error: Error | null
   }
   const error = queryError?.message || null
+  const gwsLastLogin = extractGoogleSnapshotDate(staff?.source_data, 'last_login_time')
+  const gwsLastSeen = extractGoogleSnapshotDate(staff?.source_data, 'last_seen_at')
 
   if (loading) {
     return (
@@ -121,6 +140,7 @@ export default function StaffDetailPage() {
               { label: 'Role', value: staff.role, fieldKey: 'role' },
               { label: 'Department', value: staff.department, fieldKey: 'department' },
               { label: 'Status', value: staff.status, fieldKey: 'status' },
+              { label: 'Status Tags', value: staff.status_tags, type: 'array', fieldKey: 'status_tags' },
               { label: 'Services', value: staff.services, type: 'array', fieldKey: 'services' },
             ]}
           />
@@ -145,6 +165,8 @@ export default function StaffDetailPage() {
               { label: 'Hire Date', value: staff.hire_date, type: 'date', fieldKey: 'hire_date' },
               { label: 'Probation End', value: staff.probation_end_date, type: 'date', fieldKey: 'probation_end_date' },
               { label: 'Departure Date', value: staff.departure_date, type: 'date', fieldKey: 'departure_date' },
+              { label: 'Google Last Login', value: gwsLastLogin, type: 'date' },
+              { label: 'Google Last Seen (Sync)', value: gwsLastSeen, type: 'date' },
             ]}
           />
 

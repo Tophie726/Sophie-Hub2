@@ -91,7 +91,11 @@ export class SyncEngine {
       `${config.dataSource.name} → ${config.tabMapping.tab_name}`,
       options.triggeredBy,
       undefined,
-      { dry_run: options.dryRun }
+      {
+        dry_run: options.dryRun,
+        match_only_existing: options.matchOnlyExisting,
+        create_missing_as_contractor: options.createMissingAsContractor,
+      }
     )
 
     try {
@@ -159,6 +163,8 @@ export class SyncEngine {
           rows_updated: stats.rowsUpdated,
           rows_skipped: stats.rowsSkipped,
           dry_run: options.dryRun,
+          match_only_existing: options.matchOnlyExisting,
+          create_missing_as_contractor: options.createMissingAsContractor,
           duration_ms: durationMs,
         }
       )
@@ -184,6 +190,8 @@ export class SyncEngine {
         {
           error_message: errorMessage,
           dry_run: options.dryRun,
+          match_only_existing: options.matchOnlyExisting,
+          create_missing_as_contractor: options.createMissingAsContractor,
           duration_ms: Date.now() - startTime,
         }
       )
@@ -388,13 +396,83 @@ export class SyncEngine {
         // O(1) lookup from pre-fetched map instead of per-row DB query
         const existing = existingMap.get(keyValue.toLowerCase()) || null
 
+        if (options.matchOnlyExisting && !existing) {
+          changes.push({
+            entity: config.tabMapping.primary_entity,
+            keyField: keyMapping.target_field,
+            keyValue,
+            type: 'skip',
+            fields: {},
+            skipReason: `No existing ${config.tabMapping.primary_entity} record matched by key`,
+            sourceData: rawCapture,
+          })
+          continue
+        }
+
         // Apply authority rules
         const authorizedFields = options.forceOverwrite
           ? fields
           : this.filterByAuthority(fields, config.columnMappings, !!existing)
 
+        let normalizedFields = authorizedFields
+        if (
+          options.createMissingAsContractor &&
+          !existing &&
+          config.tabMapping.primary_entity === 'staff'
+        ) {
+          const candidate: Record<string, unknown> = { ...authorizedFields }
+
+          const email =
+            keyMapping.target_field === 'email'
+              ? keyValue
+              : String(candidate.email || '').trim()
+
+          if (!email) {
+            changes.push({
+              entity: config.tabMapping.primary_entity,
+              keyField: keyMapping.target_field,
+              keyValue,
+              type: 'skip',
+              fields: {},
+              skipReason: 'Cannot create contractor: missing email',
+              sourceData: rawCapture,
+            })
+            continue
+          }
+
+          candidate.email = email
+
+          const fullNameValue = String(candidate.full_name || '').trim()
+          candidate.full_name = fullNameValue || this.inferNameFromEmail(email)
+
+          if (!candidate.full_name || String(candidate.full_name).trim().length === 0) {
+            changes.push({
+              entity: config.tabMapping.primary_entity,
+              keyField: keyMapping.target_field,
+              keyValue,
+              type: 'skip',
+              fields: {},
+              skipReason: 'Cannot create contractor: missing full_name',
+              sourceData: rawCapture,
+            })
+            continue
+          }
+
+          if (!candidate.role || String(candidate.role).trim().length === 0) {
+            candidate.role = 'contractor'
+          }
+          if (!candidate.status || String(candidate.status).trim().length === 0) {
+            candidate.status = 'active'
+          }
+          if (!candidate.department || String(candidate.department).trim().length === 0) {
+            candidate.department = 'contractor'
+          }
+
+          normalizedFields = candidate
+        }
+
         // Determine change type
-        if (Object.keys(authorizedFields).length === 0) {
+        if (Object.keys(normalizedFields).length === 0) {
           changes.push({
             entity: config.tabMapping.primary_entity,
             keyField: keyMapping.target_field,
@@ -411,7 +489,7 @@ export class SyncEngine {
             keyField: keyMapping.target_field,
             keyValue,
             type: existing ? 'update' : 'create',
-            fields: authorizedFields,
+            fields: normalizedFields,
             existing: existing ?? undefined,
             sourceData: rawCapture,
           })
@@ -535,6 +613,29 @@ export class SyncEngine {
     if (keyValues.length === 0) return resultMap
 
     try {
+      // Staff auto-match relies on email bridging. Fetching staff emails once and
+      // indexing in-memory guarantees case-insensitive matching for mixed-case inputs.
+      if (entity === 'staff' && keyField === 'email') {
+        const { data, error } = await this.supabase
+          .from('staff')
+          .select('*')
+          .not('email', 'is', null)
+
+        if (error) {
+          log.error('batchFindExisting staff/email error', error.message)
+          return resultMap
+        }
+
+        for (const record of data || []) {
+          const key = String(record.email || '').trim().toLowerCase()
+          if (key) {
+            resultMap.set(key, record)
+          }
+        }
+
+        return resultMap
+      }
+
       // Supabase has a limit on query size, so batch in chunks of 500
       for (let i = 0; i < keyValues.length; i += SYNC.LOOKUP_CHUNK_SIZE) {
         const chunk = keyValues.slice(i, i + SYNC.LOOKUP_CHUNK_SIZE)
@@ -564,6 +665,16 @@ export class SyncEngine {
     }
 
     return resultMap
+  }
+
+  private inferNameFromEmail(email: string): string {
+    const localPart = email.split('@')[0] || ''
+    const cleaned = localPart.replace(/[._-]+/g, ' ').trim()
+    if (!cleaned) return ''
+    return cleaned
+      .split(' ')
+      .map((part) => (part ? part.charAt(0).toUpperCase() + part.slice(1) : ''))
+      .join(' ')
   }
 
   private async findExisting(

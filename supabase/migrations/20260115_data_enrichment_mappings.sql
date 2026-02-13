@@ -125,10 +125,12 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
+DROP TRIGGER IF EXISTS update_data_sources_updated_at ON data_sources;
 CREATE TRIGGER update_data_sources_updated_at
   BEFORE UPDATE ON data_sources
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_tab_mappings_updated_at ON tab_mappings;
 CREATE TRIGGER update_tab_mappings_updated_at
   BEFORE UPDATE ON tab_mappings
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

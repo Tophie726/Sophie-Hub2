@@ -15,6 +15,11 @@ import { checkRateLimit, rateLimitHeaders } from '@/lib/rate-limit'
 import { BIGQUERY } from '@/lib/constants'
 import { VIEW_ALIASES } from '@/types/modules'
 import { COLUMN_METADATA } from '@/lib/bigquery/column-metadata'
+import {
+  inferMarketplaceCodeFromText,
+  normalizeMarketplaceCode,
+  normalizeMarketplaceCodes,
+} from '@/lib/amazon/marketplaces'
 import { z } from 'zod'
 
 const supabase = getAdminClient()
@@ -73,7 +78,33 @@ const RequestSchema = z.object({
   format: z.enum(['summary', 'bullets', 'comparison']),
   partner_id: z.string().uuid(),
   date_range: DateRangeSchema.optional(),
+  marketplaces: z.array(z.string().min(2).max(64)).max(25).optional(),
 })
+
+function getPartnerFilterCondition(partnerField: string): string {
+  return `CAST(${partnerField} AS STRING) IN UNNEST(@clientIds)`
+}
+
+function extractMarketplaceCodeFromMapping(mapping: {
+  external_id: string
+  metadata: Record<string, unknown> | null
+}): string | null {
+  const root = mapping.metadata
+  const fromRoot = typeof root?.marketplace_code === 'string'
+    ? normalizeMarketplaceCode(root.marketplace_code)
+    : null
+  if (fromRoot) return fromRoot
+
+  const referenceSheet = root?.reference_sheet
+  if (referenceSheet && typeof referenceSheet === 'object') {
+    const fromSheet = typeof (referenceSheet as Record<string, unknown>).marketplace_code === 'string'
+      ? normalizeMarketplaceCode((referenceSheet as Record<string, unknown>).marketplace_code as string)
+      : null
+    if (fromSheet) return fromSheet
+  }
+
+  return inferMarketplaceCodeFromText(mapping.external_id)
+}
 
 function getDateFilter(dateRange: z.infer<typeof DateRangeSchema>): { startDate?: string; endDate?: string } {
   const now = new Date()
@@ -134,7 +165,7 @@ export async function POST(request: NextRequest) {
       return apiValidationError(validation.error)
     }
 
-    const { prompt, view, metrics, format, partner_id, date_range } = validation.data
+    const { prompt, view, metrics, format, partner_id, date_range, marketplaces } = validation.data
 
     // Auth: check partner access
     const canAccess = await canAccessPartner(auth.user.id, auth.user.role, partner_id)
@@ -156,24 +187,53 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Look up partner's BigQuery client identifier
-    const { data: mapping, error: mappingError } = await supabase
+    // Look up partner's BigQuery client identifiers (multi-marketplace aware)
+    const { data: mappings, error: mappingError } = await supabase
       .from('entity_external_ids')
-      .select('external_id')
+      .select('external_id, metadata')
       .eq('entity_type', 'partners')
       .eq('entity_id', partner_id)
       .eq('source', 'bigquery')
-      .maybeSingle()
+      .order('updated_at', { ascending: false })
 
     if (mappingError) return ApiErrors.database()
-    if (!mapping) {
+    if (!mappings || mappings.length === 0) {
       return apiSuccess({ summary: 'This partner is not mapped to BigQuery data.' })
     }
 
-    const clientId = mapping.external_id
+    const requestedMarketplaceCodes = normalizeMarketplaceCodes(marketplaces || [])
+    const filteredMappings = requestedMarketplaceCodes.length > 0
+      ? mappings.filter((mapping) => {
+          const mappedCode = extractMarketplaceCodeFromMapping(mapping as {
+            external_id: string
+            metadata: Record<string, unknown> | null
+          })
+          return !!mappedCode && requestedMarketplaceCodes.includes(mappedCode)
+        })
+      : mappings
+
+    const clientIds = Array.from(
+      new Set(
+        filteredMappings
+          .map(mapping => String(mapping.external_id || '').trim())
+          .filter(value => value.length > 0)
+      )
+    )
+
+    if (clientIds.length === 0) {
+      return apiSuccess({ summary: 'No mapped BigQuery identifiers were found for the selected marketplaces.' })
+    }
 
     // Check server cache
-    const cacheKey = JSON.stringify({ clientId, view, metrics, format, prompt, date_range })
+    const cacheKey = JSON.stringify({
+      clientIds: clientIds.slice().sort(),
+      marketplaces: requestedMarketplaceCodes.slice().sort(),
+      view,
+      metrics,
+      format,
+      prompt,
+      date_range,
+    })
     const cached = serverCache.get(cacheKey)
     if (cached && Date.now() - cached.timestamp < SERVER_CACHE_TTL) {
       return apiSuccess(cached.data as Record<string, unknown>, 200, rateLimitHeaders(rateLimit))
@@ -183,8 +243,8 @@ export async function POST(request: NextRequest) {
     const fullTable = `\`${BIGQUERY.PROJECT_ID}.${BIGQUERY.DATASET}.${viewName}\``
     const partnerField = PARTNER_FIELD_PER_VIEW[viewName] || 'client_id'
 
-    const params: Record<string, string | number> = { clientId }
-    const conditions: string[] = [`${partnerField} = @clientId`]
+    const params: Record<string, string | number | string[]> = { clientIds }
+    const conditions: string[] = [getPartnerFilterCondition(partnerField)]
 
     if (date_range) {
       const { startDate, endDate } = getDateFilter(date_range)

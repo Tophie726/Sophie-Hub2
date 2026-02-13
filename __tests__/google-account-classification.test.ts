@@ -26,6 +26,22 @@ describe('Google account classification', () => {
     expect(classifyGoogleAccountEmail('chris.rawlings@sophiesociety.com')).toMatchObject({
       type: 'person',
     })
+    expect(classifyGoogleAccountEmail('daniel.q@sophiesociety.com')).toMatchObject({
+      type: 'person',
+    })
+  })
+
+  it('does not downgrade strong person aliases to shared because of context hints', () => {
+    expect(
+      resolveGoogleAccountType('daniel.q@sophiesociety.com', null, {
+        fullName: 'Daniel Quesada',
+        orgUnitPath: '/shared/inbox',
+        title: 'Support Inbox',
+      })
+    ).toMatchObject({
+      type: 'person',
+      reason: 'name_like_pattern',
+    })
   })
 
   it('treats ambiguous single-token emails as shared until human-name evidence exists', () => {
@@ -78,7 +94,7 @@ describe('Google account classification', () => {
       })
     ).toMatchObject({
       type: 'shared_account',
-      reason: 'shared_name_hint',
+      reason: 'shared_keyword_match',
     })
   })
 
@@ -106,6 +122,26 @@ describe('Google account classification', () => {
 
     expect(
       resolveGoogleAccountType('podanalytics@sophiesociety.com', null, {
+        fullName: 'Richard Turner',
+        orgUnitPath: '/',
+        title: null,
+      })
+    ).toMatchObject({
+      type: 'shared_account',
+    })
+
+    expect(
+      resolveGoogleAccountType('partner.success@sophiesociety.com', null, {
+        fullName: 'Chris Rawlings',
+        orgUnitPath: '/',
+        title: null,
+      })
+    ).toMatchObject({
+      type: 'shared_account',
+    })
+
+    expect(
+      resolveGoogleAccountType('pod.analytics@sophiesociety.com', null, {
         fullName: 'Richard Turner',
         orgUnitPath: '/',
         title: null,
