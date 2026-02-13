@@ -5,6 +5,8 @@ describe('admin access allowlist', () => {
     expect(isAdminEmail('aviana@codesignery.com', '')).toBe(true)
     expect(isAdminEmail('josedalida@codesignery.com', '')).toBe(true)
     expect(isAdminEmail('mikee@codesignery.com', '')).toBe(true)
+    expect(isAdminEmail('mcrogado@codesignery.com', '')).toBe(true)
+    expect(isAdminEmail('ac@codesignery.com', '')).toBe(true)
   })
 
   it('merges ADMIN_EMAILS env values with static allowlist', () => {
