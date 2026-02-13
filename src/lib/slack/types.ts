@@ -96,6 +96,11 @@ export interface SlackMessageMeta {
   subtype?: string
 }
 
+/** Slack message payload with text (used for automation workflows) */
+export interface SlackMessageWithText extends SlackMessageMeta {
+  text?: string
+}
+
 // =============================================================================
 // Internal Types
 // =============================================================================
